@@ -23,8 +23,14 @@ Unlike traditional systems that rely on manual timestamp scrubbing, this solutio
 
 ### Core Capabilities
 
+![Dashboard Interface](assets/dashboard.png)
+*Figure 1: Real-time Monitoring Dashboard showing live camera feeds and system health.*
+
 *   **Natural Language Video Retrieval**
     Utilizes a semantic search engine (LLM + Vector Search) to translate conversational queries into structured database filters and vector similarity searches.
+    
+    ![Conversation Interface](assets/conversation_interface.png)
+    *Figure 2: Natural Language Query Interface for retrieving video footage.*
 
 *   **Real-Time Analysis Pipeline**
     *   **Object Detection & Segmentation:** Powered by **YOLOv11-seg** for high-accuracy detection.
@@ -39,6 +45,9 @@ Unlike traditional systems that rely on manual timestamp scrubbing, this solutio
 
 *   **Proactive Alerting**
     Configurable rule-based engine for detecting anomalies, intrusions, and crowd density violations in real-time.
+
+    ![Alerts Dashboard](assets/alerts_dashboard.png)
+    *Figure 3: Alerts Management Dashboard for configuring and monitoring system alerts.*
 
 ---
 
