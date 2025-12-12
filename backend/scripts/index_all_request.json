@@ -1,0 +1,4 @@
+{
+    "glob": "data/clips/camera_0/*.mp4",
+    "every_sec": 1.0
+}

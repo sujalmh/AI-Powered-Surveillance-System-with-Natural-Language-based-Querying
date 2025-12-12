@@ -1,0 +1,32 @@
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+pymongo>=4.6.0
+pydantic>=2.7.0
+python-dotenv>=1.0.0
+# ML/vision stack for detection pipeline
+numpy>=1.26.0
+opencv-python>=4.9.0.80
+scikit-learn>=1.4.0
+ultralytics>=8.2.0
+openvino>=2024.1.0
+# LLM parsing (LangChain structured output)
+langchain-core>=0.2.0
+langchain-openai>=0.1.0
+langchain-community>=0.2.0
+openai>=1.30.0
+# Semantic (VLM) indexing/search
+torch>=2.3.0
+torchvision>=0.18.0
+pillow>=10.3.0
+open-clip-torch>=2.24.0
+faiss-cpu>=1.8.0
+imagehash>=4.3.1
+# Captions (BLIP-2 via Transformers)
+transformers>=4.44.0
+accelerate>=0.34.0
+sentencepiece>=0.2.0
+# Tracking (BoT-SORT via BoxMOT)
+boxmot>=0.10.0
+lapx>=0.5.5
+# Text embeddings for attribute encoder
+sentence-transformers>=2.7.0
