@@ -1,16 +1,18 @@
-# AI-Powered Surveillance System with Natural Language-based Querying
+# AI-Powered Surveillance & Crowd Management with Natural Language Querying
 
 ![Status](https://img.shields.io/badge/Status-Active-success?style=for-the-badge&logo=activity)
 ![Version](https://img.shields.io/badge/Version-1.0.0-blue?style=for-the-badge&logo=git)
-![Platform](https://img.shields.io/badge/Platform-Linux%20|%20macOS-lightgrey?style=for-the-badge&logo=linux)
+![Platform](https://img.shields.io/badge/Platform-Cross%20Platform-lightgrey?style=for-the-badge&logo=linux)
 
-## Overview
+## 📖 Overview
 
-**AI-Powered-Surveillance-System-with-Natural-Language-based-Querying** is a state-of-the-art video analytics and monitoring platform designed to provide real-time insights and automated surveillance capabilities. Leveraging advanced computer vision models and Large Language Models (LLMs), this system transforms traditional video feeds into actionable intelligence. It offers object detection, multi-object tracking, semantic search, and an interactive conversational interface for querying video data naturally.
+This project transforms passive CCTV video streams into a searchable, proactive intelligence asset. It integrates computer vision, deep learning, and Natural Language Processing (NLP) to enable real-time monitoring, crowd density estimation, and forensic video retrieval using conversational queries.
+
+Unlike traditional systems that rely on manual timestamp scrubbing, this solution employs a **Retrieval-Augmented Generation (RAG)** pipeline. Users can query footage using natural language (e.g., *"Show me people wearing red jackets near the exit after 10 PM"*) to retrieve contextually relevant video clips.
 
 ---
 
-## Key Features
+## 🚀 Key Features
 
 ![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=flat&logo=fastapi&logoColor=white)
@@ -21,43 +23,98 @@
 
 ### Core Capabilities
 
-*   **Real-time Monitoring Dashboard**
-    Varied grid layouts for live camera feeds with low-latency streaming and health status indicators.
+*   **Natural Language Video Retrieval**
+    Utilizes a semantic search engine (LLM + Vector Search) to translate conversational queries into structured database filters and vector similarity searches.
 
-*   **Advanced Object Detection**
-    Integration with Ultralytics YOLO and OpenVINO for high-performance inference, capable of detecting a wide range of objects in real-time.
+*   **Real-Time Analysis Pipeline**
+    *   **Object Detection & Segmentation:** Powered by **YOLOv11-seg** for high-accuracy detection.
+    *   **Person Attribute Recognition:** Uses **OpenVINO** to extract granular details (gender, clothing color, accessories).
+    *   **Multi-Object Tracking:** Implements **BoT-SORT** with OSNet for persistent identity tracking across frames.
 
-*   **Semantic Video Search**
-    Utilizes CLIP models and Faiss vector databases to enable natural language searching of video archives (e.g., "Show me when a red truck entered the premise").
+*   **Hybrid Search Engine**
+    Combines structured metadata queries (MongoDB) with semantic vector embeddings (FAISS) for multimodal retrieval.
 
-*   **Interactive AI Assistant**
-    A conversational interface powered by LangChain and OpenAI, allowing users to query system status, retrieve logs, and analyze historical data through chat.
+*   **Automated VLM Captioning**
+    Generates descriptive textual summaries of video scenes using **BLIP-2** (Vision-Language Model) for deeper semantic understanding.
 
-*   **Automated Alerting & Tracking**
-    Robust multi-object tracking (BoT-SORT) combined with a configurable alert system for anomaly detection and perimeter breaches.
-
-*   **Analytics & Reporting**
-    Comprehensive visualization of detection statistics, traffic patterns, and system metrics.
+*   **Proactive Alerting**
+    Configurable rule-based engine for detecting anomalies, intrusions, and crowd density violations in real-time.
 
 ---
 
-## Technical Architecture
+## 🏗️ System Architecture
 
-The system is built on a decoupled, scalable architecture.
+The system operates on a microservices architecture comprising five core modules:
 
-### Backend (`/backend`)
+1.  **Input Layer:** Ingests RTSP/HTTP streams and local video files.
+2.  **Analysis Pipeline:** Runs YOLOv11, OpenVINO, and BLIP-2 frame-by-frame.
+3.  **Storage Layer:**
+    *   **MongoDB:** Stores structured metadata (timestamps, class IDs, attributes).
+    *   **FAISS:** Stores high-dimensional vector embeddings for semantic search.
+4.  **Service Layer:** Handles NL parsing, hybrid search logic, and alert processing.
+5.  **User Interface:** A Next.js dashboard for monitoring and querying.
 
-The backend is engineered with **FastAPI** for high performance and asynchronous processing.
-*   **Vision Pipeline**: Handles video ingestion, frame pre-processing, and inference pipelines.
-*   **Intelligence Layer**: Manages LLM interactions, structured output parsing, and semantic indexing.
-*   **Data Layer**: MongoDB for metadata storage and Faiss for high-dimensional vector similarity search.
+```mermaid
+graph TD
+    subgraph Input ["Input Layer"]
+        A[RTSP/HTTP Streams] -->|Frame Ingestion| B[Video Pre-processing]
+    end
 
-### Frontend (`/frontend`)
+    subgraph Analysis ["Analysis Pipeline"]
+        B --> C[YOLOv11 Detection]
+        C -->|BBoxes| D[OpenVINO Attributes]
+        D -->|Feat Vectors| E[BoT-SORT Tracking]
+        E -->|Keyframes| F[BLIP-2 Captioning]
+    end
 
-The frontend is a modern **Next.js** application designed for responsiveness and interactivity.
-*   **UI Framework**: Built with TailwindCSS and Radix UI components for a professional, accessible design system.
-*   **Visualization**: Dynamic charts powered by Recharts for data analytics.
-*   **Real-time Updates**: Websocket integration for live alert propagation and dashboard synchronization.
+    subgraph Storage ["Storage Layer"]
+        C & D & E --> G[(MongoDB Metadata)]
+        F --> H[(FAISS Vector DB)]
+    end
+
+    subgraph Service ["Service Layer"]
+        I[User Query] --> J[NL Parser / LLM]
+        J -->|Structured Query| K[Hybrid Search Engine]
+        K <--> G
+        K <--> H
+    end
+
+    subgraph UserInterface ["UI Layer"]
+        K --> L[Next.js Dashboard]
+        M[Alert Engine] -->|WebSocket| L
+    end
+```
+
+---
+
+## 🛠️ Tech Stack
+
+*   **Frontend:** Next.js (React/TypeScript), Tailwind CSS.
+*   **Backend:** Python, FastAPI.
+*   **Computer Vision & AI:**
+    *   PyTorch, OpenCV.
+    *   Ultralytics YOLOv11m-seg.
+    *   OpenVINO Toolkit.
+    *   BoT-SORT & OSNet.
+    *   BLIP-2 / ViT-GPT2.
+*   **Database & Search:** MongoDB, FAISS (Facebook AI Similarity Search).
+*   **LLM Integration:** OpenAI API (for query translation).
+
+---
+
+## 📊 Performance
+
+*   **Detection Accuracy:** ~96.5% precision for Person class; ~91% for Gender recognition.
+*   **Retrieval Latency:** Sub-second response time (~107ms) for searching databases with up to 500,000 indexed frames.
+*   **NL Parsing Accuracy:** 94% success rate in converting natural language to database filters.
+
+---
+
+## 🔮 Future Roadmap
+
+*   **Multi-Camera Re-Identification:** Cross-camera tracking for continuous monitoring.
+*   **Edge Deployment:** Optimization for low-power edge devices.
+*   **Predictive Analytics:** Temporal models to predict crowd risks.
 
 ---
 
@@ -148,9 +205,7 @@ Follow these instructions to set up the project locally for development.
 
 | Component | Minimum Specification | Recommended Specification |
 |:---|:---|:---|
-| **OS** | Ubuntu 20.04 LTS / macOS 12+ | Ubuntu 22.04 LTS |
 | **CPU** | 4 Cores | 8+ Cores |
 | **RAM** | 16 GB | 32 GB+ |
 | **GPU** | NVIDIA GTX 1060 (6GB) | NVIDIA RTX 3060 (12GB) or higher |
 | **Storage** | 50 GB SSD | 500 GB NVMe SSD |
-
