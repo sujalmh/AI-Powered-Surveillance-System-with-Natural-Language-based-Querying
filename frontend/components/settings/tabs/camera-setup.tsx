@@ -29,6 +29,9 @@ export function CameraSetup() {
   const [startingId, setStartingId] = useState<number | null>(null);
   const [stoppingId, setStoppingId] = useState<number | null>(null);
   const [probingId, setProbingId] = useState<number | "new" | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [cameraToDelete, setCameraToDelete] = useState<number | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -176,6 +179,29 @@ export function CameraSetup() {
     }
   };
 
+  const onDeleteClick = (id: number) => {
+    setCameraToDelete(id);
+    setShowDeleteModal(true);
+  };
+
+  const onDeleteConfirm = async () => {
+    if (cameraToDelete === null) return;
+    setDeletingId(cameraToDelete);
+    setErr(null);
+    setInfo(null);
+    setShowDeleteModal(false);
+    try {
+      await api.deleteCamera(cameraToDelete);
+      await load();
+      setInfo(`Camera #${cameraToDelete} deleted successfully.`);
+    } catch (e: any) {
+      setErr(e?.message || "Failed to delete camera");
+    } finally {
+      setDeletingId(null);
+      setCameraToDelete(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6">
@@ -317,11 +343,13 @@ export function CameraSetup() {
                       </button>
                     )}
                     <button
-                      className="p-2 hover:bg-red-500/10 rounded transition-colors"
-                      title="Delete (not implemented)"
-                      disabled
+                      onClick={() => onDeleteClick(camera.camera_id)}
+                      disabled={deletingId === camera.camera_id}
+                      className="p-2 hover:bg-red-500/10 rounded transition-colors disabled:opacity-60 flex items-center gap-1"
+                      title="Delete camera"
                     >
                       <Trash2 className="w-4 h-4 text-red-400" />
+                      {deletingId === camera.camera_id ? "Deleting..." : ""}
                     </button>
                   </div>
                 </div>
@@ -333,6 +361,35 @@ export function CameraSetup() {
           )}
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/60 backdrop-blur-sm">
+          <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-900/95 dark:to-black/95 backdrop-blur-xl border border-gray-300 dark:border-white/20 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Delete Camera</h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              Are you sure you want to delete Camera #{cameraToDelete}? This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setCameraToDelete(null);
+                }}
+                className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-white/10 border border-gray-300 dark:border-white/20 text-gray-700 dark:text-white hover:bg-gray-300 dark:hover:bg-white/15 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={onDeleteConfirm}
+                className="px-4 py-2 rounded-lg bg-red-100 dark:bg-red-500/20 border border-red-300 dark:border-red-500/50 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-500/30 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

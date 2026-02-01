@@ -246,7 +246,88 @@ class UnifiedRetrieval:
                 mongo_filter,
                 {"_id": 0}
             ).sort("timestamp", -1).limit(query_limit)
-            return list(cursor)
+            results = list(cursor)
+            
+            # FALLBACK: If detections are empty or insufficient, query vlm_frames
+            # This handles uploaded videos that are indexed into vlm_frames but not detections
+            if len(results) < 5:  # Threshold for fallback
+                print(f"[UnifiedRetrieval] Few/no detections found ({len(results)}), checking vlm_frames...")
+                logger.info(f"Checking vlm_frames as fallback, detections count: {len(results)}")
+                
+                # Build vlm_frames filter (use same camera_id and timestamp if provided)
+                vlm_filter = {}
+                if "camera_id" in mongo_filter:
+                    vlm_filter["camera_id"] = mongo_filter["camera_id"]
+                
+                # Time range filter for vlm_frames uses frame_ts instead of timestamp
+                if "timestamp" in mongo_filter:
+                    ts_filter = mongo_filter["timestamp"]
+                    if isinstance(ts_filter, dict):
+                        vlm_filter["frame_ts"] = {}
+                        if "$gte" in ts_filter:
+                            vlm_filter["frame_ts"]["$gte"] = ts_filter["$gte"]
+                        if "$lte" in ts_filter:
+                            vlm_filter["frame_ts"]["$lte"] = ts_filter["$lte"]
+                    else:
+                        vlm_filter["frame_ts"] = ts_filter
+                
+                try:
+                    # Aggregate vlm_frames by clip_path to get clip-level results
+                    pipeline = [
+                        {"$match": vlm_filter},
+                        {"$sort": {"frame_ts": -1}},
+                        {"$group": {
+                            "_id": "$clip_path",
+                            "camera_id": {"$first": "$camera_id"},
+                            "clip_path": {"$first": "$clip_path"},
+                            "clip_url": {"$first": "$clip_url"},
+                            "first_frame_ts": {"$first": "$frame_ts"},
+                            "last_frame_ts": {"$last": "$frame_ts"},
+                            "frame_count": {"$sum": 1},
+                            "captions": {"$push": "$caption"},
+                            "object_captions": {"$push": "$object_captions"},
+                        }},
+                        {"$limit": query_limit}
+                    ]
+                    
+                    vlm_results = list(vlm_frames_col.aggregate(pipeline))
+                    
+                    # Transform vlm results to match detections schema
+                    for vlm_doc in vlm_results:
+                        # Extract objects from object_captions arrays
+                        objects_set = set()
+                        for obj_caps in vlm_doc.get("object_captions", []):
+                            if isinstance(obj_caps, list):
+                                for cap in obj_caps:
+                                    if isinstance(cap, str):
+                                        objects_set.add(cap.lower().strip())
+                        
+                        # Create detection-like document
+                        detection_doc = {
+                            "camera_id": vlm_doc.get("camera_id"),
+                            "clip_path": vlm_doc.get("clip_path"),
+                            "clip_url": vlm_doc.get("clip_url"),
+                            "timestamp": vlm_doc.get("first_frame_ts"),  # Use first frame timestamp
+                            "objects": [
+                                {
+                                    "object_name": obj_name,
+                                    "track_id": -1,  # No track ID for uploaded videos
+                                    "color": None,
+                                }
+                                for obj_name in sorted(objects_set)
+                            ],
+                            "source": "vlm_frames",  # Mark source for debugging
+                        }
+                        results.append(detection_doc)
+                    
+                    print(f"[UnifiedRetrieval] Added {len(vlm_results)} results from vlm_frames")
+                    logger.info(f"Added {len(vlm_results)} results from vlm_frames")
+                    
+                except Exception as vlm_err:
+                    print(f"[UnifiedRetrieval] vlm_frames fallback error: {vlm_err}")
+                    logger.error(f"vlm_frames fallback error: {vlm_err}")
+            
+            return results
         except Exception as e:
             print(f"Structured query error: {e}")
             return []

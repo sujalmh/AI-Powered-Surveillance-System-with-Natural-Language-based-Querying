@@ -1,6 +1,8 @@
 "use client"
 
-import { Play } from "lucide-react"
+import { useState, useEffect } from "react"
+import { createPortal } from "react-dom"
+import { Play, X } from "lucide-react"
 import { API_BASE, type ChatSendResponse } from "@/lib/api"
 
 interface QueryResultsProps {
@@ -9,6 +11,10 @@ interface QueryResultsProps {
 }
 
 export function QueryResults({ onShowSteps, response }: QueryResultsProps) {
+  const [selectedVideoUrl, setSelectedVideoUrl] = useState<string | null>(null)
+  const [showVideoModal, setShowVideoModal] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
   const combined = (response?.combined_tracks as any[]) || []
   const merged = (response?.merged_tracks as any[]) || []
   const raw = (response?.results as any[]) || []
@@ -25,6 +31,33 @@ export function QueryResults({ onShowSteps, response }: QueryResultsProps) {
   }
   const count = view.length
 
+  // Set mounted state for portal
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Close modal on ESC key
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && showVideoModal) {
+        setShowVideoModal(false)
+        setSelectedVideoUrl(null)
+      }
+    }
+    window.addEventListener("keydown", handleEsc)
+    return () => window.removeEventListener("keydown", handleEsc)
+  }, [showVideoModal])
+
+  const handleVideoClick = (clipUrl: string) => {
+    setSelectedVideoUrl(`${API_BASE}${clipUrl}`)
+    setShowVideoModal(true)
+  }
+
+  const closeModal = () => {
+    setShowVideoModal(false)
+    setSelectedVideoUrl(null)
+  }
+
   return (
     <div className="glass-card glass-noise rounded-2xl p-4 space-y-4">
       <div className="flex items-center justify-between">
@@ -39,14 +72,13 @@ export function QueryResults({ onShowSteps, response }: QueryResultsProps) {
           <div
             key={i}
             className="group relative overflow-hidden rounded-lg aspect-video cursor-pointer border border-[color:var(--border)] bg-[color-mix(in oklab,var(--foreground) 6%,transparent)]"
+            onClick={() => (item as any).clip_url && handleVideoClick((item as any).clip_url)}
           >
             {(item as any).clip_url ? (
               <video
                 key={(item as any).clip_url}
                 src={`${API_BASE}${(item as any).clip_url}`}
                 className="absolute inset-0 w-full h-full object-cover"
-                controls
-                autoPlay
                 muted
                 loop
                 playsInline
@@ -76,7 +108,7 @@ export function QueryResults({ onShowSteps, response }: QueryResultsProps) {
               </div>
             )}
 
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
 
             <div className="absolute bottom-0 left-0 right-0 p-2 translate-y-full group-hover:translate-y-0 transition-transform">
               <p className="text-xs font-semibold text-white">
@@ -111,6 +143,39 @@ export function QueryResults({ onShowSteps, response }: QueryResultsProps) {
       <button className="w-full rounded-2xl py-2 text-sm bg-[var(--btn-primary)] text-white hover:bg-[var(--btn-primary-hover)] transition-colors">
         View All / Download
       </button>
+
+      {/* Video Modal - rendered as portal to escape stacking context */}
+      {mounted && showVideoModal && selectedVideoUrl && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 dark:bg-black/90 backdrop-blur-sm"
+          onClick={closeModal}
+        >
+          <div 
+            className="relative w-[90vw] max-w-5xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <button
+              onClick={closeModal}
+              className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/50 dark:bg-white/10 hover:bg-black/70 dark:hover:bg-white/20 text-white transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-6 h-6" />
+            </button>
+
+            {/* Video player */}
+            <video
+              src={selectedVideoUrl}
+              className="w-full max-h-[85vh] bg-black"
+              controls
+              autoPlay
+              playsInline
+              crossOrigin="anonymous"
+            />
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
