@@ -441,7 +441,8 @@ def process_live_stream(
                     pass
                 break
             # brief delay before next read attempt; helps some drivers/RTSP warm-up
-            cv2.waitKey(1)
+            import time
+            time.sleep(0.001)  # 1ms delay, equivalent to cv2.waitKey(1)
             continue
         else:
             read_failures = 0
@@ -729,10 +730,9 @@ def process_live_stream(
 
         frame_count += 1
         
-        if show_window:
-            cv2.imshow(f"Camera {camera_id} - {location}", frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+        # Note: show_window requires GUI-enabled OpenCV build
+        # Removed cv2.imshow/waitKey to prevent crashes with opencv-python-headless
+
     
     cameras_collection.update_one(
         {"camera_id": camera_id},
@@ -740,8 +740,7 @@ def process_live_stream(
     )
     
     cap.release()
-    if show_window:
-        cv2.destroyAllWindows()
+    # Removed cv2.destroyAllWindows - requires GUI-enabled OpenCV
     print(f"✅ Camera {camera_id} processing completed.")
 
 # =========================================

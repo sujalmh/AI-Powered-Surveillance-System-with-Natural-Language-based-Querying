@@ -109,30 +109,27 @@ def build_clip_from_snapshots(
     writer = None
     out_path = None
 
-    # Initialize writer with a set of browser-friendly codecs, preferring H.264 if available
+    # Initialize writer with browser-compatible codec
     _fourcc_fn = getattr(cv2, "VideoWriter_fourcc", None)
     if _fourcc_fn is None:
         raise RuntimeError("OpenCV build missing VideoWriter_fourcc")
 
-    # Try a sequence of codecs and containers for best browser compatibility
-    # Note: H.264 requires an FFmpeg-enabled OpenCV build with libx264 support.
+    # Use MP4V codec which has universal browser support
+    # MP4V (MPEG-4 Part 2) works in all major browsers and doesn't require external libraries
     candidates = [
-        ("mp4", "avc1"),  # H.264
-        ("mp4", "H264"),  # H.264 alias
-        ("mp4", "X264"),  # H.264 alias
-        ("mp4", "mp4v"),  # MPEG-4 Part 2 (may not play in some browsers)
-        ("avi", "MJPG"),  # MJPEG fallback (may not play inline; download should work)
+        ("mp4", "mp4v"),  # MPEG-4 Part 2 - universal browser support
+        ("mp4", "XVID"),  # Xvid fallback
+        ("avi", "MJPG"),  # Last resort
     ]
+
+    # Ensure even dimensions for codec compatibility
+    width = width - (width % 2) if width % 2 != 0 else width
+    height = height - (height % 2) if height % 2 != 0 else height
 
     target_size = (width, height)
     for ext, codec in candidates:
-        # H.264 typically requires even dimensions
-        if ext == "mp4" and codec in ("avc1", "H264", "X264"):
-            w = width - (width % 2)
-            h = height - (height % 2)
-            target_size = (max(2, w), max(2, h))
-        else:
-            target_size = (width, height)
+        # Only adjust dimensions if needed (MJPEG doesn't require even dimensions)
+        target_size = (width, height)
 
         fourcc = _fourcc_fn(*codec)
         test_path = out_dir / f"{base_name}.{ext}"
@@ -140,7 +137,7 @@ def build_clip_from_snapshots(
         if wtr is not None and wtr.isOpened():
             writer = wtr
             out_path = test_path
-            width, height = target_size  # update if adjusted for H.264
+            width, height = target_size
             break
 
     if writer is None or out_path is None:
@@ -168,12 +165,76 @@ def build_clip_from_snapshots(
             pass
         raise RuntimeError("No valid frames written to clip")
 
+    # ==========================================
+    # CRITICAL: Convert to H.264 using FFmpeg
+    # ==========================================
+    # OpenCV's codecs don't work reliably in browsers.
+    # Use imageio-ffmpeg (bundles FFmpeg) to convert to H.264.
+    final_path = out_path
+    try:
+        from imageio_ffmpeg import get_ffmpeg_exe
+        import subprocess
+        
+        # Get bundled ffmpeg executable
+        ffmpeg_exe = get_ffmpeg_exe()
+        
+        # Create H.264 output path
+        h264_path = out_path.with_suffix('.mp4') if out_path.suffix != '.mp4' else out_path.parent / f"{out_path.stem}_h264.mp4"
+        
+        # FFmpeg command for browser-compatible H.264
+        cmd = [
+            ffmpeg_exe,
+            "-y",  # overwrite
+            "-i", str(out_path),  # input
+            "-c:v", "libx264",  # H.264 codec
+            "-preset", "fast",  # encoding speed
+            "-crf", "23",  # quality
+            "-pix_fmt", "yuv420p",  # browser compatibility
+            "-movflags", "+faststart",  # web optimization
+            "-loglevel", "error",  # suppress verbose output
+            str(h264_path)
+        ]
+        
+        # Run FFmpeg conversion
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=60
+        )
+        
+        if result.returncode == 0 and h264_path.exists():
+            # Success! Replace original with H.264 version
+            if h264_path != out_path:
+                try:
+                    out_path.unlink()  # Delete original
+                except Exception:
+                    pass
+                # Rename H.264 to original name
+                final_out_path = out_path.parent / f"{base_name}.mp4"
+                h264_path.rename(final_out_path)
+                final_path = final_out_path
+            else:
+                final_path = h264_path
+            print(f"✅ Converted to H.264 using FFmpeg: {final_path.name}")
+        else:
+            err_msg = result.stderr.decode()[:200] if result.stderr else "Unknown error"
+            print(f"⚠️ FFmpeg conversion failed: {err_msg}")
+            final_path = out_path
+            
+    except ImportError:
+        print("⚠️ imageio-ffmpeg not installed. Run: pip install imageio-ffmpeg")
+        final_path = out_path
+    except Exception as e:
+        print(f"⚠️ FFmpeg conversion error: {e}. Using original video.")
+        final_path = out_path
+
     # Public URL (served by static /media/clips)
-    rel = out_path.relative_to(settings.CLIPS_DIR).as_posix()
+    rel = final_path.relative_to(settings.CLIPS_DIR).as_posix()
     url = f"/media/clips/{rel}"
     return BuiltClip(
         camera_id=camera_id,
-        path=str(out_path),
+        path=str(final_path),
         url=url,
         frame_count=frame_count,
         fps=fps,

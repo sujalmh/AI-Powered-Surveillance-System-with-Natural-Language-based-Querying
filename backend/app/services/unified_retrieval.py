@@ -292,7 +292,8 @@ class UnifiedRetrieval:
                     
                     vlm_results = list(vlm_frames_col.aggregate(pipeline))
                     
-                    # Transform vlm results to match detections schema
+                    # Transform vlm results to return existing clips directly
+                    # These already have clip_url from the uploaded video, no need to build new clips
                     for vlm_doc in vlm_results:
                         # Extract objects from object_captions arrays
                         objects_set = set()
@@ -302,26 +303,26 @@ class UnifiedRetrieval:
                                     if isinstance(cap, str):
                                         objects_set.add(cap.lower().strip())
                         
-                        # Create detection-like document
-                        detection_doc = {
+                        # Create result that will bypass clip building
+                        # Since clip_url already exists, _build_clips will skip it
+                        result_doc = {
                             "camera_id": vlm_doc.get("camera_id"),
                             "clip_path": vlm_doc.get("clip_path"),
-                            "clip_url": vlm_doc.get("clip_url"),
-                            "timestamp": vlm_doc.get("first_frame_ts"),  # Use first frame timestamp
-                            "objects": [
-                                {
-                                    "object_name": obj_name,
-                                    "track_id": -1,  # No track ID for uploaded videos
-                                    "color": None,
-                                }
-                                for obj_name in sorted(objects_set)
-                            ],
-                            "source": "vlm_frames",  # Mark source for debugging
+                            "clip_url": vlm_doc.get("clip_url"),  # Existing clip URL
+                            "timestamp": vlm_doc.get("first_frame_ts"),
+                            "start": vlm_doc.get("first_frame_ts"),
+                            "end": vlm_doc.get("last_frame_ts"),
+                            "duration_seconds": vlm_doc.get("frame_count", 0),
+                            "object_name": ", ".join(sorted(objects_set)) if objects_set else "unknown",
+                            "objects": [{"object_name": obj} for obj in sorted(objects_set)],
+                            "source": "vlm_frames",
+                            "score_struct": 1.0,  # High score since it's an exact match
+                            "score_semantic": 0.0,
                         }
-                        results.append(detection_doc)
+                        results.append(result_doc)
                     
-                    print(f"[UnifiedRetrieval] Added {len(vlm_results)} results from vlm_frames")
-                    logger.info(f"Added {len(vlm_results)} results from vlm_frames")
+                    print(f"[UnifiedRetrieval] Added {len(vlm_results)} clips from vlm_frames")
+                    logger.info(f"Added {len(vlm_results)} clips from vlm_frames")
                     
                 except Exception as vlm_err:
                     print(f"[UnifiedRetrieval] vlm_frames fallback error: {vlm_err}")
