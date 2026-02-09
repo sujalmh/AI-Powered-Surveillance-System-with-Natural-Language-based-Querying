@@ -110,6 +110,27 @@ export function QueryResults({ onShowSteps, response }: QueryResultsProps) {
 
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
 
+            {/* Object Badges - Always visible at top */}
+            {(item as any).objects && (item as any).objects.length > 0 && (
+              <div className="absolute top-2 left-2 right-2 flex flex-wrap gap-1 pointer-events-none z-10">
+                {(item as any).objects.slice(0, 2).map((obj: any, idx: number) => (
+                  <span
+                    key={idx}
+                    className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-cyan-500/90 text-white shadow-lg backdrop-blur-sm"
+                  >
+                    {obj.object_name}
+                    {obj.color && ` • ${obj.color}`}
+                    {obj.confidence != null && ` • ${Math.round(obj.confidence * 100)}%`}
+                  </span>
+                ))}
+                {(item as any).objects.length > 2 && (
+                  <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-purple-500/90 text-white shadow-lg">
+                    +{(item as any).objects.length - 2} more
+                  </span>
+                )}
+              </div>
+            )}
+
             <div className="absolute bottom-0 left-0 right-0 p-2 translate-y-full group-hover:translate-y-0 transition-transform">
               <p className="text-xs font-semibold text-white">
                 {/* Prefer semantic frame timestamp if present */}
@@ -128,6 +149,24 @@ export function QueryResults({ onShowSteps, response }: QueryResultsProps) {
               {/* Structured durations */}
               {(item as any).duration_seconds != null && (
                 <p className="text-xs text-cyan-400">{(item as any).duration_seconds}s span</p>
+              )}
+              {/* All detected objects details */}
+              {(item as any).objects && (item as any).objects.length > 0 && (
+                <div className="mt-1 space-y-0.5">
+                  <p className="text-[10px] text-white/70 font-medium">Detected Objects:</p>
+                  {(item as any).objects.map((obj: any, idx: number) => (
+                    <div key={idx} className="text-[10px] text-white/90 flex items-center gap-1">
+                      <span className="font-medium">{obj.object_name}</span>
+                      {obj.color && <span className="text-cyan-300">• {obj.color}</span>}
+                      {obj.confidence != null && (
+                        <span className="text-green-300">• {Math.round(obj.confidence * 100)}%</span>
+                      )}
+                      {obj.track_id != null && (
+                        <span className="text-purple-300">• ID:{obj.track_id}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
               {/* Raw detection confidence fallback */}
               {!(item as any).duration_seconds && (item as any).objects && (

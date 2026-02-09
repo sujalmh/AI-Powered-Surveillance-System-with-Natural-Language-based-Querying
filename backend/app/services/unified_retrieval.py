@@ -477,6 +477,7 @@ class UnifiedRetrieval:
         """
         per_track: Dict[Tuple, List[datetime]] = {}
         meta: Dict[Tuple, Dict[str, Any]] = {}
+        objects_by_track: Dict[Tuple, List[Dict[str, Any]]] = {}  # Store all object instances
         
         for doc in results:
             cam = doc.get("camera_id")
@@ -492,6 +493,9 @@ class UnifiedRetrieval:
                 
                 key = (cam, tid)
                 per_track.setdefault(key, []).append(ts)
+                
+                # Store full object information for later aggregation
+                objects_by_track.setdefault(key, []).append(obj)
                 
                 if key not in meta:
                     meta[key] = {
@@ -510,6 +514,11 @@ class UnifiedRetrieval:
             start = times[0]
             prev = times[0]
             
+            # Aggregate object details for this track
+            track_objects = objects_by_track.get(key, [])
+            # Create a representative object with aggregated attributes
+            aggregated_objects = self._aggregate_objects(track_objects)
+            
             for t in times[1:]:
                 gap = (t - prev).total_seconds()
                 if gap <= self.max_gap_seconds:
@@ -520,6 +529,7 @@ class UnifiedRetrieval:
                     m["start"] = start.isoformat()
                     m["end"] = prev.isoformat()
                     m["duration_seconds"] = max(0, int((prev - start).total_seconds()))
+                    m["objects"] = aggregated_objects  # Attach full object details
                     merged.append(m)
                     start = t
                     prev = t
@@ -529,6 +539,7 @@ class UnifiedRetrieval:
             m["start"] = start.isoformat()
             m["end"] = prev.isoformat()
             m["duration_seconds"] = max(0, int((prev - start).total_seconds()))
+            m["objects"] = aggregated_objects  # Attach full object details
             merged.append(m)
         
         merged.sort(key=lambda x: x.get("start", ""), reverse=True)
@@ -562,6 +573,12 @@ class UnifiedRetrieval:
             cur_end = self._parse_ts(segs_sorted[0]["end"])
             cam, obj, col = key
             
+            # Collect all objects from segments
+            all_segment_objects = []
+            for seg in segs_sorted:
+                if seg.get("objects"):
+                    all_segment_objects.extend(seg["objects"])
+            
             for seg in segs_sorted[1:]:
                 s = self._parse_ts(seg["start"])
                 e = self._parse_ts(seg["end"])
@@ -572,6 +589,7 @@ class UnifiedRetrieval:
                         cur_end = e
                 else:
                     # Emit current
+                    aggregated_objects = self._aggregate_objects(all_segment_objects)
                     output.append({
                         "camera_id": cam,
                         "object_name": obj,
@@ -579,10 +597,14 @@ class UnifiedRetrieval:
                         "start": cur_start.isoformat(),
                         "end": cur_end.isoformat(),
                         "duration_seconds": max(0, int((cur_end - cur_start).total_seconds())),
+                        "objects": aggregated_objects,
                     })
                     cur_start, cur_end = s, e
+                    # Reset for next segment group
+                    all_segment_objects = seg.get("objects", []).copy() if seg.get("objects") else []
             
             # Emit final
+            aggregated_objects = self._aggregate_objects(all_segment_objects)
             output.append({
                 "camera_id": cam,
                 "object_name": obj,
@@ -590,6 +612,7 @@ class UnifiedRetrieval:
                 "start": cur_start.isoformat(),
                 "end": cur_end.isoformat(),
                 "duration_seconds": max(0, int((cur_end - cur_start).total_seconds())),
+                "objects": aggregated_objects,
             })
         
         output.sort(key=lambda x: x.get("start", ""), reverse=True)
@@ -798,11 +821,49 @@ class UnifiedRetrieval:
         """Normalize scores to 0-1 range."""
         if not scores:
             return []
+        max_score = max(scores)
+        if max_score == 0:
+            return [0.0] * len(scores)
+        return [s / max_score for s in scores]
+    
+    def _aggregate_objects(self, objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Aggregate multiple object instances into a representative list.
+        Calculates average confidence and collects unique colors and attributes.
         
-        mn = min(scores)
-        mx = max(scores)
+        Args:
+            objects: List of object dictionaries from detections
+            
+        Returns:
+            List with aggregated object information
+        """
+        if not objects:
+            return []
         
-        if mx - mn < 1e-9:
-            return [1.0 for _ in scores]
+        # Group by object_name
+        by_name: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        for obj in objects:
+            name = obj.get("object_name", "unknown")
+            by_name[name].append(obj)
         
-        return [(s - mn) / (mx - mn) for s in scores]
+        aggregated = []
+        for obj_name, obj_instances in by_name.items():
+            # Calculate average confidence
+            confidences = [o.get("confidence", 0) for o in obj_instances if o.get("confidence")]
+            avg_confidence = sum(confidences) / len(confidences) if confidences else 0
+            
+            # Collect unique colors
+            colors = list(set(o.get("color") for o in obj_instances if o.get("color")))
+            
+            # Use first instance as template
+            representative = obj_instances[0].copy()
+            representative["confidence"] = avg_confidence
+            
+            # Add color information
+            if colors:
+                representative["color"] = colors[0] if len(colors) == 1 else ", ".join(colors)
+                representative["colors"] = colors  # All detected colors
+            
+            aggregated.append(representative)
+        
+        return aggregated
