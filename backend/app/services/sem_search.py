@@ -53,6 +53,9 @@ def search_unstructured(
         # Time window filter if available
         try:
             ts = meta.get("frame_ts")
+            if (from_iso or to_iso) and not ts:
+                # Strict time-bounded queries should not accept rows without timestamps
+                return False
             if ts and (from_iso or to_iso):
                 dt = datetime.fromisoformat(ts)
                 if from_iso and dt < datetime.fromisoformat(from_iso):
