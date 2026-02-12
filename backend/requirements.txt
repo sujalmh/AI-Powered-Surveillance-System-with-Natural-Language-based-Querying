@@ -30,3 +30,5 @@ boxmot>=0.10.0
 lapx>=0.5.5
 # Text embeddings for attribute encoder
 sentence-transformers>=2.7.0
+# FFmpeg bundled for H.264 video conversion
+imageio-ffmpeg>=0.4.9

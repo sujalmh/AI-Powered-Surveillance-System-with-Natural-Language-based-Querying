@@ -127,6 +127,30 @@ def stop_camera(camera_id: int) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Failed to stop camera: {e}") from e
 
 
+@router.delete("/{camera_id}", response_model=Dict[str, Any])
+def delete_camera(camera_id: int) -> Dict[str, Any]:
+    """
+    Delete a camera from the database.
+    If the camera is currently running, it will be stopped first.
+    """
+    try:
+        # Stop camera if running
+        if runner.is_running(camera_id):
+            runner.stop_camera(camera_id)
+        
+        # Delete from database
+        result = cameras_col.delete_one({"camera_id": camera_id})
+        
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail=f"Camera {camera_id} not found")
+        
+        return {"ok": True, "camera_id": camera_id, "message": "Camera deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete camera: {e}") from e
+
+
 @router.get("/probe", response_model=Dict[str, Any])
 def probe_source(
     source: str = Query(..., description="RTSP/HTTP URL or integer index (as string)"),

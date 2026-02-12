@@ -20,6 +20,33 @@ export type ChatSendResponse = {
     answer: string;
     metadata?: Record<string, any>;
     alert_created?: Record<string, any>;
+    // Additional fields for hybrid/semantic search
+    semantic_results?: Array<{
+        camera_id: number;
+        timestamp?: string;
+        start?: string;
+        end?: string;
+        clip_url?: string;
+        score?: number;
+        score_norm?: number;
+        source?: string;
+        frames?: Array<{
+            frame_ts?: string;
+            [key: string]: any;
+        }>;
+        duration_seconds?: number;
+        objects?: Array<{
+            object_name: string;
+            track_id: number;
+            confidence: number;
+            color?: string;
+            person_attributes?: Record<string, any>;
+        }>;
+        [key: string]: any;
+    }>;
+    mode?: string; // "structured" | "unstructured" | "hybrid"
+    combined_tracks?: Array<Record<string, any>>;
+    merged_tracks?: Array<Record<string, any>>;
 };
 
 export const API_BASE =
@@ -79,6 +106,10 @@ export const api = {
     stopCamera: (cameraId: number) =>
         http<{ ok: boolean; camera_id: number; running: boolean }>(`/api/cameras/${cameraId}/stop`, {
             method: "POST",
+        }),
+    deleteCamera: (cameraId: number) =>
+        http<{ ok: boolean; camera_id: number; message: string }>(`/api/cameras/${cameraId}`, {
+            method: "DELETE",
         }),
     probeCamera: (source: string | number, timeout = 3) => {
         const src = typeof source === "number" ? String(source) : source;

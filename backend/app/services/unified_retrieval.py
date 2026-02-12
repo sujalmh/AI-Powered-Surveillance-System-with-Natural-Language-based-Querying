@@ -246,7 +246,89 @@ class UnifiedRetrieval:
                 mongo_filter,
                 {"_id": 0}
             ).sort("timestamp", -1).limit(query_limit)
-            return list(cursor)
+            results = list(cursor)
+            
+            # FALLBACK: If detections are empty or insufficient, query vlm_frames
+            # This handles uploaded videos that are indexed into vlm_frames but not detections
+            if len(results) < 5:  # Threshold for fallback
+                print(f"[UnifiedRetrieval] Few/no detections found ({len(results)}), checking vlm_frames...")
+                logger.info(f"Checking vlm_frames as fallback, detections count: {len(results)}")
+                
+                # Build vlm_frames filter (use same camera_id and timestamp if provided)
+                vlm_filter = {}
+                if "camera_id" in mongo_filter:
+                    vlm_filter["camera_id"] = mongo_filter["camera_id"]
+                
+                # Time range filter for vlm_frames uses frame_ts instead of timestamp
+                if "timestamp" in mongo_filter:
+                    ts_filter = mongo_filter["timestamp"]
+                    if isinstance(ts_filter, dict):
+                        vlm_filter["frame_ts"] = {}
+                        if "$gte" in ts_filter:
+                            vlm_filter["frame_ts"]["$gte"] = ts_filter["$gte"]
+                        if "$lte" in ts_filter:
+                            vlm_filter["frame_ts"]["$lte"] = ts_filter["$lte"]
+                    else:
+                        vlm_filter["frame_ts"] = ts_filter
+                
+                try:
+                    # Aggregate vlm_frames by clip_path to get clip-level results
+                    pipeline = [
+                        {"$match": vlm_filter},
+                        {"$sort": {"frame_ts": -1}},
+                        {"$group": {
+                            "_id": "$clip_path",
+                            "camera_id": {"$first": "$camera_id"},
+                            "clip_path": {"$first": "$clip_path"},
+                            "clip_url": {"$first": "$clip_url"},
+                            "first_frame_ts": {"$first": "$frame_ts"},
+                            "last_frame_ts": {"$last": "$frame_ts"},
+                            "frame_count": {"$sum": 1},
+                            "captions": {"$push": "$caption"},
+                            "object_captions": {"$push": "$object_captions"},
+                        }},
+                        {"$limit": query_limit}
+                    ]
+                    
+                    vlm_results = list(vlm_frames_col.aggregate(pipeline))
+                    
+                    # Transform vlm results to return existing clips directly
+                    # These already have clip_url from the uploaded video, no need to build new clips
+                    for vlm_doc in vlm_results:
+                        # Extract objects from object_captions arrays
+                        objects_set = set()
+                        for obj_caps in vlm_doc.get("object_captions", []):
+                            if isinstance(obj_caps, list):
+                                for cap in obj_caps:
+                                    if isinstance(cap, str):
+                                        objects_set.add(cap.lower().strip())
+                        
+                        # Create result that will bypass clip building
+                        # Since clip_url already exists, _build_clips will skip it
+                        result_doc = {
+                            "camera_id": vlm_doc.get("camera_id"),
+                            "clip_path": vlm_doc.get("clip_path"),
+                            "clip_url": vlm_doc.get("clip_url"),  # Existing clip URL
+                            "timestamp": vlm_doc.get("first_frame_ts"),
+                            "start": vlm_doc.get("first_frame_ts"),
+                            "end": vlm_doc.get("last_frame_ts"),
+                            "duration_seconds": vlm_doc.get("frame_count", 0),
+                            "object_name": ", ".join(sorted(objects_set)) if objects_set else "unknown",
+                            "objects": [{"object_name": obj} for obj in sorted(objects_set)],
+                            "source": "vlm_frames",
+                            "score_struct": 1.0,  # High score since it's an exact match
+                            "score_semantic": 0.0,
+                        }
+                        results.append(result_doc)
+                    
+                    print(f"[UnifiedRetrieval] Added {len(vlm_results)} clips from vlm_frames")
+                    logger.info(f"Added {len(vlm_results)} clips from vlm_frames")
+                    
+                except Exception as vlm_err:
+                    print(f"[UnifiedRetrieval] vlm_frames fallback error: {vlm_err}")
+                    logger.error(f"vlm_frames fallback error: {vlm_err}")
+            
+            return results
         except Exception as e:
             print(f"Structured query error: {e}")
             return []
@@ -395,6 +477,7 @@ class UnifiedRetrieval:
         """
         per_track: Dict[Tuple, List[datetime]] = {}
         meta: Dict[Tuple, Dict[str, Any]] = {}
+        objects_by_track: Dict[Tuple, List[Dict[str, Any]]] = {}  # Store all object instances
         
         for doc in results:
             cam = doc.get("camera_id")
@@ -410,6 +493,9 @@ class UnifiedRetrieval:
                 
                 key = (cam, tid)
                 per_track.setdefault(key, []).append(ts)
+                
+                # Store full object information for later aggregation
+                objects_by_track.setdefault(key, []).append(obj)
                 
                 if key not in meta:
                     meta[key] = {
@@ -428,6 +514,11 @@ class UnifiedRetrieval:
             start = times[0]
             prev = times[0]
             
+            # Aggregate object details for this track
+            track_objects = objects_by_track.get(key, [])
+            # Create a representative object with aggregated attributes
+            aggregated_objects = self._aggregate_objects(track_objects)
+            
             for t in times[1:]:
                 gap = (t - prev).total_seconds()
                 if gap <= self.max_gap_seconds:
@@ -438,6 +529,7 @@ class UnifiedRetrieval:
                     m["start"] = start.isoformat()
                     m["end"] = prev.isoformat()
                     m["duration_seconds"] = max(0, int((prev - start).total_seconds()))
+                    m["objects"] = aggregated_objects  # Attach full object details
                     merged.append(m)
                     start = t
                     prev = t
@@ -447,6 +539,7 @@ class UnifiedRetrieval:
             m["start"] = start.isoformat()
             m["end"] = prev.isoformat()
             m["duration_seconds"] = max(0, int((prev - start).total_seconds()))
+            m["objects"] = aggregated_objects  # Attach full object details
             merged.append(m)
         
         merged.sort(key=lambda x: x.get("start", ""), reverse=True)
@@ -480,6 +573,12 @@ class UnifiedRetrieval:
             cur_end = self._parse_ts(segs_sorted[0]["end"])
             cam, obj, col = key
             
+            # Collect all objects from segments
+            all_segment_objects = []
+            for seg in segs_sorted:
+                if seg.get("objects"):
+                    all_segment_objects.extend(seg["objects"])
+            
             for seg in segs_sorted[1:]:
                 s = self._parse_ts(seg["start"])
                 e = self._parse_ts(seg["end"])
@@ -490,6 +589,7 @@ class UnifiedRetrieval:
                         cur_end = e
                 else:
                     # Emit current
+                    aggregated_objects = self._aggregate_objects(all_segment_objects)
                     output.append({
                         "camera_id": cam,
                         "object_name": obj,
@@ -497,10 +597,14 @@ class UnifiedRetrieval:
                         "start": cur_start.isoformat(),
                         "end": cur_end.isoformat(),
                         "duration_seconds": max(0, int((cur_end - cur_start).total_seconds())),
+                        "objects": aggregated_objects,
                     })
                     cur_start, cur_end = s, e
+                    # Reset for next segment group
+                    all_segment_objects = seg.get("objects", []).copy() if seg.get("objects") else []
             
             # Emit final
+            aggregated_objects = self._aggregate_objects(all_segment_objects)
             output.append({
                 "camera_id": cam,
                 "object_name": obj,
@@ -508,6 +612,7 @@ class UnifiedRetrieval:
                 "start": cur_start.isoformat(),
                 "end": cur_end.isoformat(),
                 "duration_seconds": max(0, int((cur_end - cur_start).total_seconds())),
+                "objects": aggregated_objects,
             })
         
         output.sort(key=lambda x: x.get("start", ""), reverse=True)
@@ -716,11 +821,49 @@ class UnifiedRetrieval:
         """Normalize scores to 0-1 range."""
         if not scores:
             return []
+        max_score = max(scores)
+        if max_score == 0:
+            return [0.0] * len(scores)
+        return [s / max_score for s in scores]
+    
+    def _aggregate_objects(self, objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Aggregate multiple object instances into a representative list.
+        Calculates average confidence and collects unique colors and attributes.
         
-        mn = min(scores)
-        mx = max(scores)
+        Args:
+            objects: List of object dictionaries from detections
+            
+        Returns:
+            List with aggregated object information
+        """
+        if not objects:
+            return []
         
-        if mx - mn < 1e-9:
-            return [1.0 for _ in scores]
+        # Group by object_name
+        by_name: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        for obj in objects:
+            name = obj.get("object_name", "unknown")
+            by_name[name].append(obj)
         
-        return [(s - mn) / (mx - mn) for s in scores]
+        aggregated = []
+        for obj_name, obj_instances in by_name.items():
+            # Calculate average confidence
+            confidences = [o.get("confidence", 0) for o in obj_instances if o.get("confidence")]
+            avg_confidence = sum(confidences) / len(confidences) if confidences else 0
+            
+            # Collect unique colors
+            colors = list(set(o.get("color") for o in obj_instances if o.get("color")))
+            
+            # Use first instance as template
+            representative = obj_instances[0].copy()
+            representative["confidence"] = avg_confidence
+            
+            # Add color information
+            if colors:
+                representative["color"] = colors[0] if len(colors) == 1 else ", ".join(colors)
+                representative["colors"] = colors  # All detected colors
+            
+            aggregated.append(representative)
+        
+        return aggregated
