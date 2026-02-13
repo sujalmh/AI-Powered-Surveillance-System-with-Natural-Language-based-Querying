@@ -63,7 +63,6 @@ def _collect_snapshots(
     if not cam_dir.exists():
         return []
     files: List[Tuple[datetime, Path]] = []
-    tolerance = timedelta(seconds=whitelist_tolerance_sec)
     for p in cam_dir.glob("*.jpg"):
         ts = _parse_ts_from_filename(p.name)
         if ts is None:
