@@ -34,39 +34,41 @@ CACHE_TTL_MINUTES = 10
 
 # ──────────────────────────────── Helpers ──────────────────────────────────
 
+def _coerce_to_date(field_ref: str) -> dict:
+    """
+    Return a MongoDB expression that resolves *field_ref* to a Date.
+
+    If the field is already a native BSON Date, use it directly.
+    Otherwise treat it as a string and parse via $dateFromString.
+    """
+    return {
+        "$cond": {
+            "if": {"$eq": [{"$type": field_ref}, "date"]},
+            "then": field_ref,
+            "else": {
+                "$dateFromString": {
+                    "dateString": field_ref,
+                    "onError": None,
+                }
+            },
+        }
+    }
+
+
 def _ts_match_expr(field: str, gte: datetime, lt: datetime) -> dict:
     """
     Build a $match expression that works regardless of whether the stored
     *field* is an ISO-8601 string or a native BSON Date.
 
-    Strategy: use $expr with $dateFromString (with onError fallback) so the
-    comparison is always performed on Date objects.
+    Uses $cond + $type to branch: if already a Date, use directly;
+    otherwise parse via $dateFromString.
     """
+    coerced = _coerce_to_date(f"${field}")
     return {
         "$expr": {
             "$and": [
-                {
-                    "$gte": [
-                        {
-                            "$dateFromString": {
-                                "dateString": f"${field}",
-                                "onError": None,
-                            }
-                        },
-                        gte,
-                    ]
-                },
-                {
-                    "$lt": [
-                        {
-                            "$dateFromString": {
-                                "dateString": f"${field}",
-                                "onError": None,
-                            }
-                        },
-                        lt,
-                    ]
-                },
+                {"$gte": [coerced, gte]},
+                {"$lt": [coerced, lt]},
             ]
         }
     }
@@ -205,10 +207,10 @@ class AnomalyDetector:
             # Match using $dateFromString so comparison is on Date objects
             # regardless of whether "timestamp" is stored as String or Date
             {"$match": _ts_match_expr("timestamp", baseline_start, day_start)},
-            # Parse hour from timestamp
+            # Coerce timestamp to Date — handles both BSON Date and ISO string
             {
                 "$addFields": {
-                    "ts_date": {"$dateFromString": {"dateString": "$timestamp", "onError": None}},
+                    "ts_date": _coerce_to_date("$timestamp"),
                 }
             },
             # Filter out docs where timestamp couldn't be parsed
@@ -274,7 +276,7 @@ class AnomalyDetector:
             {"$match": _ts_match_expr("timestamp", day_start, day_end)},
             {
                 "$addFields": {
-                    "ts_date": {"$dateFromString": {"dateString": "$timestamp", "onError": None}},
+                    "ts_date": _coerce_to_date("$timestamp"),
                 }
             },
             {"$match": {"ts_date": {"$ne": None}}},

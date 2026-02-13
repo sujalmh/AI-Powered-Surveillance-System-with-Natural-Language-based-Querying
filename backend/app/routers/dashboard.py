@@ -18,8 +18,8 @@ router = APIRouter()
 @router.get("/anomalies")
 def get_anomalies(
     date: Optional[str] = Query(None, description="ISO date (YYYY-MM-DD), defaults to today"),
-    threshold: float = Query(2.0, description="Z-score threshold for anomaly flagging"),
-    baseline_days: int = Query(7, description="Number of historical days for baseline"),
+    threshold: float = Query(2.0, gt=0, description="Z-score threshold for anomaly flagging"),
+    baseline_days: int = Query(7, ge=1, description="Number of historical days for baseline"),
 ) -> Dict[str, Any]:
     """
     Compute or retrieve anomalies for a given date.
