@@ -14,6 +14,7 @@ from backend.app.services.sem_search import search_unstructured
 from backend.app.services.answer_generator import AnswerGenerator
 from backend.app.config import settings
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -306,8 +307,8 @@ class UnifiedRetrieval:
             if isinstance(ts_f, dict):
                 for op in ("$gte", "$lte", "$gt", "$lt"):
                     if op in ts_f and isinstance(ts_f[op], str):
-                        # Normalize: strip trailing Z, remove timezone offset for local comparison
-                        ts_f[op] = ts_f[op].replace("Z", "").split("+")[0]
+                        # Normalize: strip trailing Z or +/-HH:MM timezone offset
+                        ts_f[op] = re.sub(r"(Z|[+-]\d{2}:\d{2})$", "", ts_f[op])
         
         # Increase limit for color queries to get better distribution
         query_limit = limit
