@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional, Set, Tuple
 
@@ -87,8 +87,13 @@ def _parse_whitelist(stamps: List[str]) -> Set[datetime]:
     for s in stamps:
         try:
             # Handle possible variations in ISO format
-            safe = s.replace("Z", "").split("+")[0]
-            out.add(datetime.fromisoformat(safe))
+            # Replace Z with +00:00 to handle UTC explicitly
+            safe = s.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(safe)
+            if dt.tzinfo is not None:
+                # Convert to UTC and strip timezone info to match naive file timestamps (which are UTC)
+                dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+            out.add(dt)
         except Exception:
             pass
     return out
