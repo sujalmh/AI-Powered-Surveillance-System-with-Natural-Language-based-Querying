@@ -31,7 +31,7 @@ class NLFilter(BaseModel):
     color: Optional[str] = Field(default=None, description="Requested dominant color if applicable (e.g., Red)")
     action: Optional[str] = Field(default=None, description="Action being performed (running, walking, fighting, etc.)")
     zone: Optional[str] = Field(default=None, description="Specific zone or area mentioned (entrance, exit, hallway, etc.)")
-    count_constraint: Optional[Dict[str, int]] = Field(default=None, description="Count constraints like {'gte': 3} for 'more than 3 people'")
+    count_constraint: Optional[Dict[str, int]] = Field(default=None, description="Count constraints: {'gt': 3} for 'more than 3', {'gte': 3} for 'at least 3', {'eq': 2} for 'exactly 2'")
     result_limit: Optional[int] = Field(default=None, description="Maximum number of results to return, e.g. 1 for 'show me the latest clip'")
     ask_color: Optional[bool] = Field(default=None, description="True if the user is asking about clothing color")
     location_hint: Optional[str] = Field(default=None, description="If user refers to a location name in NL")
@@ -171,11 +171,11 @@ CRITICAL INSTRUCTIONS:
 2. STRUCTURED FILTERS (extract if present):
    - time: Relative (last X minutes) or absolute timestamps
    - camera_id: Specific camera number (ONLY if numeric ID explicitly mentioned like "camera 5")
-   - objects: Person, car, bag, etc.
-   - color: Clothing/object color (Red, Blue, etc.)
+   - objects: Person, car, bag, etc. (IMPORTANT: use lowercase names like 'person', 'car', 'dog' etc.)
+   - color: Clothing/object color (use title case: Red, Blue, Green, etc.)
    - action: Running, walking, fighting, carrying, falling, etc.
    - zone: entrance, exit, hallway, parking, gate, etc.
-   - count_constraint: For "more than 3 people" use key "gte" with value 3, for "exactly 2" use key "eq" with value 2
+   - count_constraint: For "more than 3 people" use key "gt" with value 3, for "at least 3" use key "gte" with value 3, for "exactly 2" use key "eq" with value 2
    - result_limit: Maximum results to return. For "only one clip" use 1, for "top 5 results" use 5, for "the latest clip" use 1
    - location_hint: Camera location references or named areas. Examples:
      * "Lab camera" → location_hint: "Lab"
@@ -311,10 +311,10 @@ def parse_nl_with_llm(nl: str) -> Dict[str, Any]:
         # Use first object as main filter for compatibility with existing queries
         main = result.objects[0]
         if main and main.name:
-            f["objects.object_name"] = main.name
+            f["objects.object_name"] = main.name.lower()  # YOLO stores lowercase names
     # color
     if result.color:
-        f["objects.color"] = result.color
+        f["objects.color"] = result.color.strip().title()  # Normalize to title case (e.g., "Red")
         f["__ask_color"] = True
     # ask_color flag
     if result.ask_color:
@@ -365,11 +365,19 @@ def parse_nl_with_llm(nl: str) -> Dict[str, Any]:
     f["__semantic_query"] = semantic_query
     
     # Legacy fields for backwards compatibility
+    # Also build a more descriptive semantic query for CLIP when color+object are present
     obj = f.get("objects.object_name") or "person"
     col = f.get("objects.color")
-    if col:
+    action = f.get("action")
+    if col and action:
+        f["__embedding_text"] = f"{obj} wearing {str(col).lower()} clothing {action}"
+        f["__colors_norm"] = [str(col)]
+    elif col:
         f["__embedding_text"] = f"{obj} wearing {str(col).lower()} clothing"
         f["__colors_norm"] = [str(col)]
+    elif action:
+        f["__embedding_text"] = f"{obj} {action}"
+        f["__colors_norm"] = []
     else:
         f["__embedding_text"] = semantic_query
         f["__colors_norm"] = []
