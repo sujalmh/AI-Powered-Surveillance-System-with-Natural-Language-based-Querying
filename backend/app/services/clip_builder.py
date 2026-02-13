@@ -3,9 +3,9 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Set, Tuple
 
 import cv2
 
@@ -52,11 +52,18 @@ def _parse_ts_from_filename(name: str) -> Optional[datetime]:
     return None
 
 
-def _collect_snapshots(camera_id: int, start_dt: datetime, end_dt: datetime) -> List[Tuple[datetime, Path]]:
+def _collect_snapshots(
+    camera_id: int,
+    start_dt: datetime,
+    end_dt: datetime,
+    whitelist_dts: Optional[Set[datetime]] = None,
+    whitelist_tolerance_sec: float = 5.0,
+) -> List[Tuple[datetime, Path]]:
     cam_dir = settings.SNAPSHOTS_DIR / f"camera_{camera_id}"
     if not cam_dir.exists():
         return []
     files: List[Tuple[datetime, Path]] = []
+    tolerance = timedelta(seconds=whitelist_tolerance_sec)
     for p in cam_dir.glob("*.jpg"):
         ts = _parse_ts_from_filename(p.name)
         if ts is None:
@@ -66,9 +73,25 @@ def _collect_snapshots(camera_id: int, start_dt: datetime, end_dt: datetime) -> 
             except Exception:
                 continue
         if start_dt <= ts <= end_dt:
+            # If whitelist is provided, only include snapshots near a whitelisted timestamp
+            if whitelist_dts is not None:
+                if not any(abs((ts - wt).total_seconds()) <= whitelist_tolerance_sec for wt in whitelist_dts):
+                    continue
             files.append((ts, p))
     files.sort(key=lambda x: x[0])
     return files
+
+
+def _parse_whitelist(stamps: List[str]) -> Set[datetime]:
+    out = set()
+    for s in stamps:
+        try:
+            # Handle possible variations in ISO format
+            safe = s.replace("Z", "").split("+")[0]
+            out.add(datetime.fromisoformat(safe))
+        except Exception:
+            pass
+    return out
 
 
 def build_clip_from_snapshots(
@@ -76,6 +99,7 @@ def build_clip_from_snapshots(
     start_iso: str,
     end_iso: str,
     fps: float = 5.0,
+    allowed_timestamps: Optional[List[str]] = None,
 ) -> BuiltClip:
     """
     Build an MP4 clip by stitching snapshots between [start_iso, end_iso] for a camera.
@@ -90,7 +114,12 @@ def build_clip_from_snapshots(
     if end_dt < start_dt:
         raise ValueError("end must be >= start")
 
-    items = _collect_snapshots(camera_id, start_dt, end_dt)
+    items = _collect_snapshots(
+        camera_id,
+        start_dt,
+        end_dt,
+        whitelist_dts=_parse_whitelist(allowed_timestamps) if allowed_timestamps else None,
+    )
     if not items:
         raise FileNotFoundError("No snapshots found in the requested interval")
 

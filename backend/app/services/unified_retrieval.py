@@ -56,7 +56,9 @@ class UnifiedRetrieval:
         intent = parsed_filter.get("__intent", "find")
         ask_color = parsed_filter.get("__ask_color", False)
         has_action = parsed_filter.get("action") is not None
-        has_count_constraint = self._normalize_count_constraint(parsed_filter.get("count_constraint")) is not None
+        count_constraint_norm = self._normalize_count_constraint(parsed_filter.get("count_constraint"))
+        has_count_constraint = count_constraint_norm is not None
+        is_zero_count = bool(has_count_constraint and count_constraint_norm.get("eq") == 0)
 
         # Respect both API limit and optional NL result-limit hint (e.g., "only one clip")
         effective_limit = max(1, int(limit))
@@ -85,10 +87,6 @@ class UnifiedRetrieval:
         # For zero-count queries (e.g. "no person"), semantic retrieval would introduce
         # false positives. For non-zero count queries, semantic can still help when structured
         # returns nothing.
-        is_zero_count = bool(
-            has_count_constraint
-            and (self._normalize_count_constraint(parsed_filter.get("count_constraint")) or {}).get("eq") == 0
-        )
         should_run_semantic = bool(settings.ENABLE_SEMANTIC and semantic_query and (not is_zero_count or has_action))
         if should_run_semantic:
             print(f"[UnifiedRetrieval] Step 2: Executing semantic search for: {semantic_query}")
@@ -148,8 +146,18 @@ class UnifiedRetrieval:
         logger.info(f"Step 3: Merged results count: {len(merged_results)}")
         
         # 4. CONDITIONAL clip generation based on query_type
+        # Zero-count queries ("no person") should NOT generate clips:
+        # - Clips of empty scenes have no visual value
+        # - The clip builder grabs ALL snapshots in a time range, including ones with persons
+        # - A text answer ("No persons detected between X and Y") is the correct response
         clips = []
-        if query_type == "visual":
+        if is_zero_count:
+            # Treat as informational — return structured segments as metadata without clips
+            print("[UnifiedRetrieval] Step 4: Skipping clip generation for zero-count query (informational answer)")
+            logger.info("Step 4: Zero-count query — returning informational answer, no clips")
+            query_type = "informational"  # Override for answer generator
+            clips = []  # Ensure no clips
+        elif query_type == "visual":
             # Visual query: build video clips for top results
             print("[UnifiedRetrieval] Step 4: Building video clips for visual query")
             logger.info("Step 4: Building video clips for visual query")
@@ -164,13 +172,17 @@ class UnifiedRetrieval:
         
         # 5. LLM-generated answer using AnswerGenerator
         answer_gen = AnswerGenerator()
+        # For zero-count queries, pass merged segments as context so the LLM can describe
+        # WHEN and WHERE no persons were found, rather than trying to describe clips
+        answer_context = clips if clips else merged_results[:10]
         answer = answer_gen.generate(
             query=parsed_filter.get("__raw", ""),
             query_type=query_type,
-            results=clips if clips else structured_results[:10],
+            results=answer_context,
             parsed_filter=parsed_filter,
             metadata={
                 "intent": intent,
+                "is_zero_count": is_zero_count,
                 "structured_count": len(structured_results),
                 "semantic_count": len(semantic_results),
                 "final_count": len(clips) if clips else len(merged_results),
@@ -283,6 +295,19 @@ class UnifiedRetrieval:
         
         print(f"[UnifiedRetrieval] MongoDB filter: {mongo_filter}")
         logger.debug(f"MongoDB filter: {mongo_filter}")
+
+        # Normalize object name to lowercase (YOLO stores lowercase names)
+        if "objects.object_name" in mongo_filter:
+            mongo_filter["objects.object_name"] = str(mongo_filter["objects.object_name"]).lower()
+
+        # Ensure timestamp filter values are consistent ISO strings
+        if "timestamp" in mongo_filter:
+            ts_f = mongo_filter["timestamp"]
+            if isinstance(ts_f, dict):
+                for op in ("$gte", "$lte", "$gt", "$lt"):
+                    if op in ts_f and isinstance(ts_f[op], str):
+                        # Normalize: strip trailing Z, remove timezone offset for local comparison
+                        ts_f[op] = ts_f[op].replace("Z", "").split("+")[0]
         
         # Increase limit for color queries to get better distribution
         query_limit = limit
@@ -409,7 +434,7 @@ class UnifiedRetrieval:
         
         # Lower confidence threshold for action queries (they need more lenient matching)
         has_action = parsed_filter.get("action") is not None
-        min_confidence = 0.15 if has_action else 0.25
+        min_confidence = 0.10 if has_action else 0.15
         
         try:
             result = search_unstructured(
@@ -556,8 +581,9 @@ class UnifiedRetrieval:
                     continue
                 
                 tid = obj.get("track_id", -1)
-                if tid is None or tid < 0:
-                    continue
+                # Use a synthetic track key for trackless detections instead of dropping them
+                if tid is None or (isinstance(tid, (int, float)) and tid < 0):
+                    tid = f"notrak_{cam}_{ts.isoformat()}_{id(obj)}"  # synthetic unique key
                 
                 key = (cam, tid)
                 per_track.setdefault(key, []).append(ts)
@@ -598,6 +624,8 @@ class UnifiedRetrieval:
                     m["end"] = prev.isoformat()
                     m["duration_seconds"] = max(0, int((prev - start).total_seconds()))
                     m["objects"] = aggregated_objects  # Attach full object details
+                    # Collect timestamps for this segment to whitelist frames in clip builder
+                    m["matched_timestamps"] = [t.isoformat() for t in times[times.index(start):times.index(prev)+1]]
                     merged.append(m)
                     start = t
                     prev = t
@@ -608,6 +636,7 @@ class UnifiedRetrieval:
             m["end"] = prev.isoformat()
             m["duration_seconds"] = max(0, int((prev - start).total_seconds()))
             m["objects"] = aggregated_objects  # Attach full object details
+            m["matched_timestamps"] = [t.isoformat() for t in times[times.index(start):times.index(prev)+1]]
             merged.append(m)
         
         merged.sort(key=lambda x: x.get("start", ""), reverse=True)
@@ -641,8 +670,9 @@ class UnifiedRetrieval:
             cur_end = self._parse_ts(segs_sorted[0]["end"])
             cam, obj, col = key
             
-            # Start with first segment's objects only (not all segments)
+            # Start with first segment's objects and timestamps only (not all segments)
             all_segment_objects = list(segs_sorted[0].get("objects", []))
+            all_segment_timestamps = list(segs_sorted[0].get("matched_timestamps", []))
             
             for seg in segs_sorted[1:]:
                 s = self._parse_ts(seg["start"])
@@ -652,9 +682,11 @@ class UnifiedRetrieval:
                 if gap <= self.join_gap_seconds:
                     if e > cur_end:
                         cur_end = e
-                    # Accumulate objects from this merged segment
+                    # Accumulate objects and timestamps from this merged segment
                     if seg.get("objects"):
                         all_segment_objects.extend(seg["objects"])
+                    if seg.get("matched_timestamps"):
+                        all_segment_timestamps.extend(seg["matched_timestamps"])
                 else:
                     # Emit current
                     aggregated_objects = self._aggregate_objects(all_segment_objects)
@@ -666,10 +698,12 @@ class UnifiedRetrieval:
                         "end": cur_end.isoformat(),
                         "duration_seconds": max(0, int((cur_end - cur_start).total_seconds())),
                         "objects": aggregated_objects,
+                        "matched_timestamps": all_segment_timestamps,
                     })
                     cur_start, cur_end = s, e
                     # Reset for next segment group
                     all_segment_objects = list(seg.get("objects", []))
+                    all_segment_timestamps = list(seg.get("matched_timestamps", []))
             
             # Emit final
             aggregated_objects = self._aggregate_objects(all_segment_objects)
@@ -681,6 +715,7 @@ class UnifiedRetrieval:
                 "end": cur_end.isoformat(),
                 "duration_seconds": max(0, int((cur_end - cur_start).total_seconds())),
                 "objects": aggregated_objects,
+                "matched_timestamps": all_segment_timestamps,
             })
         
         output.sort(key=lambda x: x.get("start", ""), reverse=True)
@@ -832,11 +867,25 @@ class UnifiedRetrieval:
                 end = result_copy.get("end")
                 
                 if cam is not None and start and end:
+                    allowed_ts = result_copy.get("matched_timestamps")
+                    
+                    # Add 3s context padding (buffer) to ensure smooth lead-in/lead-out
+                    # This also ensures single-frame detections yield meaningful clips (~6s)
+                    try:
+                        s_dt = self._parse_ts(start) - timedelta(seconds=3)
+                        e_dt = self._parse_ts(end) + timedelta(seconds=3)
+                        start_iso = s_dt.isoformat()
+                        end_iso = e_dt.isoformat()
+                    except Exception:
+                        start_iso = start
+                        end_iso = end
+
                     clip = build_clip_from_snapshots(
                         int(cam),
-                        start,
-                        end,
-                        fps=5.0
+                        start_iso,
+                        end_iso,
+                        fps=5.0,
+                        allowed_timestamps=allowed_ts
                     )
                     result_copy["clip_url"] = clip.url
                     result_copy["clip_frames"] = clip.frame_count
@@ -975,9 +1024,10 @@ class UnifiedRetrieval:
             seg_end: Optional[datetime] = None
             seg_peak_count = 0
             seg_objects: List[Dict[str, Any]] = []
+            seg_timestamps: List[str] = []
 
             def _emit_segment() -> None:
-                nonlocal seg_start, seg_end, seg_peak_count, seg_objects
+                nonlocal seg_start, seg_end, seg_peak_count, seg_objects, seg_timestamps
                 if seg_start is None or seg_end is None:
                     return
                 segments.append(
@@ -991,6 +1041,7 @@ class UnifiedRetrieval:
                         "objects": self._aggregate_objects(seg_objects),
                         "match_count_peak": int(seg_peak_count),
                         "count_constraint": constraint,
+                        "matched_timestamps": list(seg_timestamps),
                     }
                 )
 
@@ -1006,6 +1057,7 @@ class UnifiedRetrieval:
                     seg_end = ts
                     seg_peak_count = cnt
                     seg_objects = matched_objs.copy()
+                    seg_timestamps = [ts.isoformat()]
                     continue
 
                 gap = (ts - seg_end).total_seconds() if seg_end is not None else 0
@@ -1014,12 +1066,14 @@ class UnifiedRetrieval:
                     if cnt > seg_peak_count:
                         seg_peak_count = cnt
                     seg_objects.extend(matched_objs)
+                    seg_timestamps.append(ts.isoformat())
                 else:
                     _emit_segment()
                     seg_start = ts
                     seg_end = ts
                     seg_peak_count = cnt
                     seg_objects = matched_objs.copy()
+                    seg_timestamps = [ts.isoformat()]
 
             _emit_segment()
 
@@ -1080,7 +1134,9 @@ class UnifiedRetrieval:
     def _parse_ts(self, ts: str) -> datetime:
         """Parse timestamp string to datetime."""
         try:
-            return datetime.fromisoformat(ts)
+            # Robust parsing: handle Z and offsets
+            safe = ts.replace("Z", "").split("+")[0]
+            return datetime.fromisoformat(safe)
         except Exception:
             try:
                 return datetime.strptime(ts.split(".")[0], "%Y-%m-%dT%H:%M:%S")
@@ -1091,9 +1147,11 @@ class UnifiedRetrieval:
         """Normalize scores to 0-1 range."""
         if not scores:
             return []
+        if len(scores) == 1:
+            return [1.0]  # Single result gets full score
         max_score = max(scores)
         if max_score == 0:
-            return [0.0] * len(scores)
+            return [1.0] * len(scores)  # All equal = all get full score
         return [s / max_score for s in scores]
     
     def _aggregate_objects(self, objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
