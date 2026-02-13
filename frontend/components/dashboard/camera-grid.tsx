@@ -1,7 +1,6 @@
 "use client";
 
-import { Play } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, API_BASE } from "@/lib/api";
 
 type CameraDoc = {
@@ -20,28 +19,61 @@ type Card = {
   people: number;
 };
 
+/* ────────────────────────────────── CameraTile ────────────────────────────────── */
+
 type CameraTileProps = { id: number; name: string; status: "live" | "recording" | "stopped"; people: number };
+
 function CameraTile({ id, name, status, people }: CameraTileProps) {
-  const [fallback, setFallback] = useState(false);
-  const [tick, setTick] = useState(0);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [streamOk, setStreamOk] = useState(true);
+  const retryTimer = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    if (!fallback) return;
-    const iv = setInterval(() => setTick(Date.now()), 1000);
-    return () => clearInterval(iv);
-  }, [fallback]);
-
+  // The MJPEG multipart stream URL — browsers render this natively in an <img> tag.
+  // Each frame is pushed by the server; no polling needed.
   const streamUrl = `${API_BASE}/api/videos/stream/${id}`;
-  const latestUrl = `${API_BASE}/api/videos/latest/${id}?t=${tick}`;
+
+  // On error: wait 3 seconds then retry the stream (don't fall back to polling)
+  const handleError = () => {
+    setStreamOk(false);
+    if (retryTimer.current) clearTimeout(retryTimer.current);
+    retryTimer.current = setTimeout(() => {
+      setStreamOk(true);
+    }, 3000);
+  };
+
+  // When streamOk flips back to true, force the img src to reload the stream
+  useEffect(() => {
+    if (streamOk && imgRef.current) {
+      // Adding a cache-buster on retry to force a fresh connection
+      imgRef.current.src = `${streamUrl}?t=${Date.now()}`;
+    }
+  }, [streamOk, streamUrl]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+    };
+  }, []);
 
   return (
     <div className="group relative overflow-hidden rounded-lg bg-black/50 aspect-video">
-      <img
-        src={fallback ? latestUrl : streamUrl}
-        alt={`Camera ${name}`}
-        className="absolute inset-0 w-full h-full object-cover"
-        onError={() => setFallback(true)}
-      />
+      {streamOk ? (
+        <img
+          ref={imgRef}
+          src={streamUrl}
+          alt={`Camera ${name}`}
+          className="absolute inset-0 w-full h-full object-cover"
+          onError={handleError}
+        />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            <span className="text-xs text-white/60">Reconnecting…</span>
+          </div>
+        </div>
+      )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
       <div className="absolute bottom-0 left-0 right-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform">
         <p className="text-sm font-semibold text-white">{name}</p>
@@ -64,6 +96,8 @@ function CameraTile({ id, name, status, people }: CameraTileProps) {
   );
 }
 
+/* ────────────────────────────────── CameraGrid ────────────────────────────────── */
+
 export function CameraGrid() {
   const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(false);
@@ -82,8 +116,7 @@ export function CameraGrid() {
         people: 0,
       }));
 
-      // Optionally enrich with quick people counts from last 5 minutes (best effort)
-      // We will sequentially fetch small queries to avoid heavy load for many cams.
+      // Enrich with quick people counts from last 5 minutes (best effort)
       for (let i = 0; i < base.length; i++) {
         try {
           const p = new URLSearchParams();
