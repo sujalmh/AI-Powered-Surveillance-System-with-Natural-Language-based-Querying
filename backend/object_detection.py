@@ -353,7 +353,10 @@ def process_live_stream(
     if isinstance(source, int):
         cap = cv2.VideoCapture(source, cv2.CAP_DSHOW)
     else:
-        cap = cv2.VideoCapture(source)
+        # For HTTP/MJPEG streams (e.g. DroidCam), use FFMPEG backend
+        # and reduce buffer to 1 frame to avoid latency/stale-frame issues
+        cap = cv2.VideoCapture(source, cv2.CAP_FFMPEG)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     if not cap.isOpened():
         msg = f"Cannot open camera source {source}"
         print(f"❌ {msg}")
@@ -420,6 +423,8 @@ def process_live_stream(
     # Allow some tolerance for webcams/RTSP streams that may take a moment to provide frames
     read_failures = 0
     max_read_failures = 60  # ~2 seconds at 30fps (adjust as needed)
+    reconnect_attempts = 0
+    max_reconnects = 3  # Try reopening the stream up to 3 times
 
     while True:
         if stop_event is not None and stop_event.is_set():
@@ -429,6 +434,24 @@ def process_live_stream(
         if not ret:
             read_failures += 1
             if read_failures > max_read_failures:
+                # For HTTP/MJPEG streams, try to reconnect before giving up
+                if isinstance(source, str) and reconnect_attempts < max_reconnects:
+                    reconnect_attempts += 1
+                    print(f"🔄 Stream dropped. Reconnecting (attempt {reconnect_attempts}/{max_reconnects})...")
+                    cap.release()
+                    import time
+                    time.sleep(2)  # Wait before reconnecting
+                    cap = cv2.VideoCapture(source, cv2.CAP_FFMPEG)
+                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    if cap.isOpened():
+                        print(f"✅ Reconnected to stream on attempt {reconnect_attempts}")
+                        read_failures = 0
+                        continue
+                    else:
+                        print(f"❌ Reconnect attempt {reconnect_attempts} failed")
+                        read_failures = 0
+                        continue
+
                 msg = f"No frames from source after {max_read_failures} attempts"
                 print(f"🔴 {msg}")
                 try:
@@ -446,6 +469,7 @@ def process_live_stream(
             continue
         else:
             read_failures = 0
+            reconnect_attempts = 0  # Reset reconnect counter on successful read
 
         # Heartbeat: mark camera active and update last_seen on successful frame
         try:
