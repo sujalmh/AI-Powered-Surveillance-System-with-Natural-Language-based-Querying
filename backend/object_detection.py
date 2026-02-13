@@ -78,6 +78,11 @@ def ensure_openvino_loaded() -> bool:
     try:
         # Import here to avoid failing at module import time if OpenVINO is misconfigured
         from openvino.runtime import Core as OVCore  # type: ignore
+        from backend.app.services.model_loader import ensure_model_downloaded
+        
+        # Ensure model files exist before loading
+        ensure_model_downloaded(OPENVINO_MODEL_XML)
+        
         ie = OVCore()
         cm = ie.compile_model(model=OPENVINO_MODEL_XML, device_name="CPU")
         compiled_model = cm

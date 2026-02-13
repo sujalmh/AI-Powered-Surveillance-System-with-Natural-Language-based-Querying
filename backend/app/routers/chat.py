@@ -403,23 +403,33 @@ def history(session_id: str) -> ChatHistoryResponse:
 def sessions(limit: int = 20) -> List[ChatSession]:
     """
     Return recent chat sessions with last message and count.
+    Optimized to use MongoDB aggregation.
     """
     try:
-        ids = chat_col.distinct("session_id")
-        sessions: List[ChatSession] = []
-        for sid in ids:
-            # Latest message for this session
-            last = chat_col.find({"session_id": sid}, {"_id": 0}).sort("created_at", -1).limit(1)
-            last_msg = None
-            last_time = None
-            for m in last:
-                last_msg = m.get("content")
-                last_time = m.get("created_at")
-            count = chat_col.count_documents({"session_id": sid})
-            sessions.append(ChatSession(session_id=sid, last_message=last_msg, last_message_time=last_time, message_count=count))
-        # Sort by last_message_time desc
-        sessions.sort(key=lambda s: s.last_message_time or "", reverse=True)
-        return sessions[:limit]
+        pipeline = [
+            {"$sort": {"created_at": -1}},
+            {
+                "$group": {
+                    "_id": "$session_id",
+                    "last_message": {"$first": "$content"},
+                    "last_message_time": {"$first": "$created_at"},
+                    "message_count": {"$sum": 1}
+                }
+            },
+            {"$sort": {"last_message_time": -1}},
+            {"$limit": limit},
+            {
+                "$project": {
+                    "_id": 0,
+                    "session_id": "$_id",
+                    "last_message": 1,
+                    "last_message_time": 1,
+                    "message_count": 1
+                }
+            }
+        ]
+        docs = list(chat_col.aggregate(pipeline))
+        return [ChatSession(**d) for d in docs]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list chat sessions: {e}") from e
 
@@ -512,3 +522,4 @@ def send(req: ChatSendRequest) -> ChatSendResponse:
         return ChatSendResponse(**response_data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chat processing failed: {e}") from e
+
