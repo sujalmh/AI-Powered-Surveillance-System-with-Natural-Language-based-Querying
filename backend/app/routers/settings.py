@@ -63,6 +63,11 @@ def _get_llm_settings() -> dict:
 
 
 def _set_llm_settings(config: dict) -> None:
+    # If the incoming api_key is masked (contains '...'), don't overwrite the existing one
+    if "..." in config.get("api_key", ""):
+        existing = _get_llm_settings()
+        config["api_key"] = existing.get("api_key", config["api_key"])
+        
     app_settings.update_one(
         {"key": "llm_config"},
         {"$set": {"key": "llm_config", "value": config}},
@@ -86,7 +91,13 @@ def put_indexing_mode(req: IndexingModeRequest) -> IndexingModeResponse:
 
 @router.get("/llm-config", response_model=LlmConfigResponse)
 def get_llm_config() -> LlmConfigResponse:
-    return LlmConfigResponse(**_get_llm_settings())
+    cfg = _get_llm_settings()
+    key = cfg.get("api_key", "")
+    if key and len(key) > 10:
+        cfg["api_key"] = f"{key[:7]}...{key[-4:]}"
+    elif key:
+        cfg["api_key"] = "****"
+    return LlmConfigResponse(**cfg)
 
 
 @router.put("/llm-config", response_model=LlmConfigResponse)

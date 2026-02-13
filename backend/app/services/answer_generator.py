@@ -18,14 +18,28 @@ class AnswerGenerator:
     
     def __init__(self):
         self.llm = None
-        self._initialize_llm()
+        self._current_cfg = {}
+        self._ensure_llm()
     
-    def _initialize_llm(self):
-        """Initialize LLM (OpenAI by default)."""
+    def _ensure_llm(self):
+        """Ensure LLM is initialized and consistent with current DB settings."""
         llm_cfg = settings.get_active_llm_config()
-        provider = llm_cfg["provider"].strip().lower()
-        model = llm_cfg["model"]
-        api_key = llm_cfg["api_key"]
+        
+        # Check if config has changed
+        if (self.llm is not None and 
+            llm_cfg.get("provider") == self._current_cfg.get("provider") and
+            llm_cfg.get("model") == self._current_cfg.get("model") and
+            llm_cfg.get("api_key") == self._current_cfg.get("api_key")):
+            return
+
+        self._current_cfg = llm_cfg
+        self._initialize_llm()
+
+    def _initialize_llm(self):
+        """Initialize LLM based on current config."""
+        provider = self._current_cfg.get("provider", "").strip().lower()
+        model = self._current_cfg.get("model")
+        api_key = self._current_cfg.get("api_key")
         
         # Prioritize OpenAI
         if provider == "openai" or (not provider and api_key):
@@ -34,7 +48,7 @@ class AnswerGenerator:
                 self.llm = ChatOpenAI(
                     model=model or "gpt-4o-mini",
                     api_key=api_key,
-                    temperature=0.3,  # Slightly creative but still factual
+                    temperature=0.3,
                 )
             except Exception as e:
                 print(f"Failed to initialize OpenAI: {e}")
@@ -84,6 +98,7 @@ class AnswerGenerator:
         Returns:
             Natural language answer string
         """
+        self._ensure_llm()
         if not self.llm:
             # Fallback to template-based answer if LLM unavailable
             return self._fallback_answer(query_type, results, parsed_filter)
