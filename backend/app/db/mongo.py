@@ -82,8 +82,17 @@ def init_indexes() -> None:
         pass
 
     # anomaly_events: daily anomaly detection cache
+    # Compound unique index matches the upsert filter in _cache_result
     try:
-        anomaly_events.create_index([("date", ASCENDING)], unique=True)
+        # Drop the old single-field index if it exists to avoid conflicts
+        try:
+            anomaly_events.drop_index("date_1")
+        except Exception:
+            pass
+        anomaly_events.create_index(
+            [("date", ASCENDING), ("baseline_days", ASCENDING), ("z_threshold", ASCENDING)],
+            unique=True,
+        )
     except Exception:
         pass
 
