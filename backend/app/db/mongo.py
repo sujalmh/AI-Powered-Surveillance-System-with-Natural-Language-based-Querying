@@ -36,6 +36,10 @@ def init_indexes() -> None:
     detections.create_index(
         [("objects.object_name", ASCENDING), ("objects.color", ASCENDING), ("timestamp", DESCENDING)]
     )
+    try:
+        detections.create_index([("person_count", ASCENDING), ("timestamp", DESCENDING)])
+    except Exception:
+        pass
 
     # tracks: per-camera persistent trackers (from BoT-SORT)
     try:

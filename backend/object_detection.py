@@ -666,6 +666,26 @@ def process_live_stream(
 
                     doc["objects"].append(obj)
 
+            # Persist object count summaries for robust retrieval (e.g., no-person / multi-person queries)
+            try:
+                objs = doc.get("objects", []) if isinstance(doc.get("objects"), list) else []
+                person_count = 0
+                object_counts: Dict[str, int] = {}
+                for _o in objs:
+                    if not isinstance(_o, dict):
+                        continue
+                    _name = str(_o.get("object_name", "")).strip().lower()
+                    if not _name:
+                        continue
+                    object_counts[_name] = object_counts.get(_name, 0) + 1
+                    if _name == "person":
+                        person_count += 1
+                doc["person_count"] = int(person_count)
+                doc["object_counts"] = object_counts
+            except Exception:
+                # Keep detection loop resilient if summary bookkeeping fails
+                pass
+
             if doc["objects"]:
                 try:
                     safe_ts = timestamp.replace(":", "-").replace(".", "-")

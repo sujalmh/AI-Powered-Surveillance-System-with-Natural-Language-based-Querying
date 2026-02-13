@@ -108,17 +108,17 @@ class AnswerGenerator:
         
         # Collect detailed data from results
         for r in results:
-            if 'camera_id' in r:
+            if r.get('camera_id') is not None:
                 camera_ids.append(r['camera_id'])
-            if 'start' in r:
+            if r.get('start'):
                 timestamps_list.append(r['start'])
-            elif 'timestamp' in r:
+            elif r.get('timestamp'):
                 timestamps_list.append(r['timestamp'])
-            if 'object_name' in r:
+            if r.get('object_name'):
                 objects_found.append(r['object_name'])
-            if 'action' in r:
+            if r.get('action'):
                 actions_found.append(r['action'])
-            if 'color' in r:
+            if r.get('color'):
                 attributes_found.append(f"color: {r['color']}")
         
         # Format collected data

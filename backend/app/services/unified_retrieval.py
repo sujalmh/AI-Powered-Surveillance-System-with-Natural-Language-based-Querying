@@ -56,6 +56,16 @@ class UnifiedRetrieval:
         intent = parsed_filter.get("__intent", "find")
         ask_color = parsed_filter.get("__ask_color", False)
         has_action = parsed_filter.get("action") is not None
+        has_count_constraint = self._normalize_count_constraint(parsed_filter.get("count_constraint")) is not None
+
+        # Respect both API limit and optional NL result-limit hint (e.g., "only one clip")
+        effective_limit = max(1, int(limit))
+        try:
+            requested_limit = int(parsed_filter.get("__result_limit")) if parsed_filter.get("__result_limit") is not None else None
+            if requested_limit is not None and requested_limit > 0:
+                effective_limit = min(effective_limit, requested_limit)
+        except Exception:
+            requested_limit = None
         
         # 1. Execute structured MongoDB query (SKIP for action queries)
         structured_results = []
@@ -72,7 +82,15 @@ class UnifiedRetrieval:
         
         # 2. Execute semantic search (ALWAYS if enabled and query provided)
         semantic_results = []
-        if settings.ENABLE_SEMANTIC and semantic_query:
+        # For zero-count queries (e.g. "no person"), semantic retrieval would introduce
+        # false positives. For non-zero count queries, semantic can still help when structured
+        # returns nothing.
+        is_zero_count = bool(
+            has_count_constraint
+            and (self._normalize_count_constraint(parsed_filter.get("count_constraint")) or {}).get("eq") == 0
+        )
+        should_run_semantic = bool(settings.ENABLE_SEMANTIC and semantic_query and (not is_zero_count or has_action))
+        if should_run_semantic:
             print(f"[UnifiedRetrieval] Step 2: Executing semantic search for: {semantic_query}")
             semantic_results = self._execute_semantic_query(
                 semantic_query,
@@ -135,7 +153,7 @@ class UnifiedRetrieval:
             # Visual query: build video clips for top results
             print("[UnifiedRetrieval] Step 4: Building video clips for visual query")
             logger.info("Step 4: Building video clips for visual query")
-            clips = self._build_clips(merged_results[:5], parsed_filter)
+            clips = self._build_clips(merged_results[:effective_limit], parsed_filter)
             print(f"[UnifiedRetrieval] Generated {len(clips)} clips")
             logger.info(f"Generated {len(clips)} clips")
         else:
@@ -166,6 +184,8 @@ class UnifiedRetrieval:
             "metadata": {
                 "query_type": query_type,
                 "intent": intent,
+                "requested_limit": requested_limit,
+                "effective_limit": effective_limit,
                 "structured_count": len(structured_results),
                 "semantic_count": len(semantic_results),
                 "final_count": len(clips),
@@ -217,6 +237,34 @@ class UnifiedRetrieval:
             k: v for k, v in parsed_filter.items()
             if not k.startswith("__") and k not in metadata_fields
         }
+
+        count_constraint = self._normalize_count_constraint(parsed_filter.get("count_constraint"))
+        is_zero_count_query = bool(count_constraint and count_constraint.get("eq") == 0)
+
+        # For "no person" style queries, object-level Mongo filters would eliminate valid docs.
+        # We broaden the DB candidate set and enforce the count constraint in Python.
+        if is_zero_count_query:
+            mongo_filter.pop("objects.object_name", None)
+            mongo_filter.pop("objects.color", None)
+
+        # Use person_count index for fast server-side pre-filtering (non-zero count queries)
+        obj_name = parsed_filter.get("objects.object_name", "")
+        obj_color = parsed_filter.get("objects.color")
+        if count_constraint and obj_name and str(obj_name).lower() == "person" and not obj_color:
+            pc_filter: Dict[str, Any] = {}
+            if "eq" in count_constraint:
+                pc_filter = {"person_count": int(count_constraint["eq"])}
+            elif "gt" in count_constraint:
+                pc_filter = {"person_count": {"$gt": int(count_constraint["gt"])}}
+            elif "gte" in count_constraint:
+                pc_filter = {"person_count": {"$gte": int(count_constraint["gte"])}}
+            elif "lt" in count_constraint:
+                pc_filter = {"person_count": {"$lt": int(count_constraint["lt"])}}
+            elif "lte" in count_constraint:
+                pc_filter = {"person_count": {"$lte": int(count_constraint["lte"])}}
+            if pc_filter:
+                mongo_filter.update(pc_filter)
+                print(f"[UnifiedRetrieval] Using person_count index: {pc_filter}")
         
         # Step 1: Handle location-based camera resolution
         location_hint = parsed_filter.get("__location_hint")
@@ -240,6 +288,8 @@ class UnifiedRetrieval:
         query_limit = limit
         if parsed_filter.get("__ask_color"):
             query_limit = max(limit, 200)
+        if count_constraint:
+            query_limit = max(query_limit, 500)
         
         try:
             cursor = detections_col.find(
@@ -247,10 +297,15 @@ class UnifiedRetrieval:
                 {"_id": 0}
             ).sort("timestamp", -1).limit(query_limit)
             results = list(cursor)
+
+            # Strictly enforce count constraints in-memory.
+            results = self._filter_docs_by_count_constraint(results, parsed_filter)
             
             # FALLBACK: If detections are empty or insufficient, query vlm_frames
             # This handles uploaded videos that are indexed into vlm_frames but not detections
-            if len(results) < 5:  # Threshold for fallback
+            # Disabled for strict count-constraint queries to avoid false positives.
+            allow_vlm_fallback = count_constraint is None
+            if allow_vlm_fallback and len(results) < 5:  # Threshold for fallback
                 print(f"[UnifiedRetrieval] Few/no detections found ({len(results)}), checking vlm_frames...")
                 logger.info(f"Checking vlm_frames as fallback, detections count: {len(results)}")
                 
@@ -295,13 +350,10 @@ class UnifiedRetrieval:
                     # Transform vlm results to return existing clips directly
                     # These already have clip_url from the uploaded video, no need to build new clips
                     for vlm_doc in vlm_results:
-                        # Extract objects from object_captions arrays
-                        objects_set = set()
-                        for obj_caps in vlm_doc.get("object_captions", []):
-                            if isinstance(obj_caps, list):
-                                for cap in obj_caps:
-                                    if isinstance(cap, str):
-                                        objects_set.add(cap.lower().strip())
+                        flat_caps = self._flatten_object_captions(vlm_doc.get("object_captions", []))
+                        if not self._vlm_matches_object_filter(flat_caps, parsed_filter):
+                            continue
+                        objects_set = set(self._extract_object_tokens(flat_caps))
                         
                         # Create result that will bypass clip building
                         # Since clip_url already exists, _build_clips will skip it
@@ -341,7 +393,12 @@ class UnifiedRetrieval:
     ) -> List[Dict[str, Any]]:
         """Execute semantic FAISS vector search."""
         # Extract time and camera filters for semantic search
-        camera_id = parsed_filter.get("camera_id")
+        camera_id_raw = parsed_filter.get("camera_id")
+        camera_id: Optional[int]
+        if isinstance(camera_id_raw, int):
+            camera_id = camera_id_raw
+        else:
+            camera_id = None
         
         from_iso = None
         to_iso = None
@@ -382,19 +439,29 @@ class UnifiedRetrieval:
         For 'count' or 'find' intents: prioritize structured results
         For 'track' or semantic-heavy queries: blend both equally
         """
-        # Merge tracks from structured results
-        merged_tracks = self._merge_structured_tracks(structured, parsed_filter)
-        print(f"[UnifiedRetrieval] Merged structured tracks: {len(merged_tracks)}")
-        
-        # Combine across track IDs into continuous segments
-        combined_tracks = self._coalesce_tracks(merged_tracks)
-        print(f"[UnifiedRetrieval] Coalesced tracks: {len(combined_tracks)}")
+        count_constraint = self._normalize_count_constraint(parsed_filter.get("count_constraint"))
+        has_count_constraint = count_constraint is not None
+
+        if has_count_constraint:
+            combined_tracks = self._build_count_constrained_segments(structured, parsed_filter)
+            print(f"[UnifiedRetrieval] Count-constrained segments: {len(combined_tracks)}")
+        else:
+            # Merge tracks from structured results
+            merged_tracks = self._merge_structured_tracks(structured, parsed_filter)
+            print(f"[UnifiedRetrieval] Merged structured tracks: {len(merged_tracks)}")
+
+            # Combine across track IDs into continuous segments
+            combined_tracks = self._coalesce_tracks(merged_tracks)
+            print(f"[UnifiedRetrieval] Coalesced tracks: {len(combined_tracks)}")
         
         # Score weighting based on intent and query characteristics
         # Check if query requires semantic understanding (actions, complex behaviors)
         has_action = parsed_filter.get("action") is not None
         
-        if has_action:
+        if has_count_constraint:
+            # Strict count queries should be governed by structured evidence only
+            alpha = 1.0
+        elif has_action:
             # Action queries MUST use semantic search since detections don't have action labels
             alpha = 0.1  # 10% structured, 90% semantic
         elif intent == "count":
@@ -423,33 +490,34 @@ class UnifiedRetrieval:
                 "source": "structured"
             }
         
-        # Add/merge semantic results
-        for sem in semantic:
-            # Try to match with existing structured results by clip
-            clip_url = sem.get("clip_url")
-            matched = False
-            
-            for key, result in results_map.items():
-                if result.get("clip_url") == clip_url:
-                    # Merge semantic score
-                    result["score_semantic"] = sem.get("score_norm", 0.0)
-                    result["source"] = "hybrid"
-                    result["frames"] = sem.get("frames", [])
-                    matched = True
-                    break
-            
-            if not matched:
-                # Add as new semantic-only result
-                key = f"sem_{sem.get('camera_id')}_{sem.get('clip_path', '')}"
-                results_map[key] = {
-                    "camera_id": sem.get("camera_id"),
-                    "clip_url": sem.get("clip_url"),
-                    "clip_path": sem.get("clip_path"),
-                    "score_struct": 0.0,
-                    "score_semantic": sem.get("score_norm", 0.0),
-                    "source": "semantic",
-                    "frames": sem.get("frames", [])
-                }
+        # Add/merge semantic results (disabled for strict count constraints)
+        if not has_count_constraint:
+            for sem in semantic:
+                # Try to match with existing structured results by clip
+                clip_url = sem.get("clip_url")
+                matched = False
+
+                for key, result in results_map.items():
+                    if result.get("clip_url") == clip_url:
+                        # Merge semantic score
+                        result["score_semantic"] = sem.get("score_norm", 0.0)
+                        result["source"] = "hybrid"
+                        result["frames"] = sem.get("frames", [])
+                        matched = True
+                        break
+
+                if not matched:
+                    # Add as new semantic-only result
+                    key = f"sem_{sem.get('camera_id')}_{sem.get('clip_path', '')}"
+                    results_map[key] = {
+                        "camera_id": sem.get("camera_id"),
+                        "clip_url": sem.get("clip_url"),
+                        "clip_path": sem.get("clip_path"),
+                        "score_struct": 0.0,
+                        "score_semantic": sem.get("score_norm", 0.0),
+                        "source": "semantic",
+                        "frames": sem.get("frames", [])
+                    }
         
         # Calculate final weighted scores
         results = []
@@ -573,11 +641,8 @@ class UnifiedRetrieval:
             cur_end = self._parse_ts(segs_sorted[0]["end"])
             cam, obj, col = key
             
-            # Collect all objects from segments
-            all_segment_objects = []
-            for seg in segs_sorted:
-                if seg.get("objects"):
-                    all_segment_objects.extend(seg["objects"])
+            # Start with first segment's objects only (not all segments)
+            all_segment_objects = list(segs_sorted[0].get("objects", []))
             
             for seg in segs_sorted[1:]:
                 s = self._parse_ts(seg["start"])
@@ -587,6 +652,9 @@ class UnifiedRetrieval:
                 if gap <= self.join_gap_seconds:
                     if e > cur_end:
                         cur_end = e
+                    # Accumulate objects from this merged segment
+                    if seg.get("objects"):
+                        all_segment_objects.extend(seg["objects"])
                 else:
                     # Emit current
                     aggregated_objects = self._aggregate_objects(all_segment_objects)
@@ -601,7 +669,7 @@ class UnifiedRetrieval:
                     })
                     cur_start, cur_end = s, e
                     # Reset for next segment group
-                    all_segment_objects = seg.get("objects", []).copy() if seg.get("objects") else []
+                    all_segment_objects = list(seg.get("objects", []))
             
             # Emit final
             aggregated_objects = self._aggregate_objects(all_segment_objects)
@@ -800,12 +868,214 @@ class UnifiedRetrieval:
         name = parsed_filter.get("objects.object_name")
         color = parsed_filter.get("objects.color")
         
-        if name and obj.get("object_name") != name:
+        if name and str(obj.get("object_name", "")).lower() != str(name).lower():
             return False
-        if color and obj.get("color") != color:
+        if color and str(obj.get("color", "")).lower() != str(color).lower():
             return False
         
         return True
+
+    def _normalize_count_constraint(self, raw: Any) -> Optional[Dict[str, int]]:
+        if not isinstance(raw, dict):
+            return None
+        key_map = {
+            "eq": "eq",
+            "=": "eq",
+            "==": "eq",
+            "gte": "gte",
+            ">=": "gte",
+            "gt": "gt",
+            ">": "gt",
+            "lte": "lte",
+            "<=": "lte",
+            "lt": "lt",
+            "<": "lt",
+        }
+        out: Dict[str, int] = {}
+        for k, v in raw.items():
+            norm_k = key_map.get(str(k).strip().lower())
+            if not norm_k:
+                continue
+            try:
+                out[norm_k] = int(v)
+            except Exception:
+                continue
+        return out or None
+
+    def _count_matches_constraint(self, count: int, constraint: Dict[str, int]) -> bool:
+        if "eq" in constraint and count != int(constraint["eq"]):
+            return False
+        if "gte" in constraint and count < int(constraint["gte"]):
+            return False
+        if "gt" in constraint and count <= int(constraint["gt"]):
+            return False
+        if "lte" in constraint and count > int(constraint["lte"]):
+            return False
+        if "lt" in constraint and count >= int(constraint["lt"]):
+            return False
+        return True
+
+    def _count_matching_objects_in_doc(self, doc: Dict[str, Any], parsed_filter: Dict[str, Any]) -> int:
+        # Fast-path: use pre-computed person_count when filtering only by name="person" (no color)
+        obj_name = parsed_filter.get("objects.object_name")
+        color = parsed_filter.get("objects.color")
+        if obj_name and str(obj_name).lower() == "person" and not color:
+            pc = doc.get("person_count")
+            if pc is not None:
+                return int(pc)
+        # Fast-path: use object_counts dict for other object types (no color filter)
+        if obj_name and not color:
+            oc = doc.get("object_counts")
+            if isinstance(oc, dict):
+                cnt = oc.get(str(obj_name).lower())
+                if cnt is not None:
+                    return int(cnt)
+        # Fallback: count matching objects by iterating the array
+        objs = doc.get("objects", [])
+        if not isinstance(objs, list):
+            return 0
+        return sum(1 for o in objs if isinstance(o, dict) and self._object_matches(o, parsed_filter))
+
+    def _filter_docs_by_count_constraint(self, docs: List[Dict[str, Any]], parsed_filter: Dict[str, Any]) -> List[Dict[str, Any]]:
+        constraint = self._normalize_count_constraint(parsed_filter.get("count_constraint"))
+        if not constraint:
+            return docs
+
+        out: List[Dict[str, Any]] = []
+        for d in docs:
+            cnt = self._count_matching_objects_in_doc(d, parsed_filter)
+            if self._count_matches_constraint(cnt, constraint):
+                dd = dict(d)
+                dd["matched_object_count"] = cnt
+                out.append(dd)
+        return out
+
+    def _build_count_constrained_segments(
+        self,
+        docs: List[Dict[str, Any]],
+        parsed_filter: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """
+        Build temporal segments directly from per-detection docs that satisfy count constraints
+        (e.g., >=2 persons, ==0 persons). This avoids track-level false positives.
+        """
+        constraint = self._normalize_count_constraint(parsed_filter.get("count_constraint"))
+        if not constraint:
+            return []
+
+        filtered = self._filter_docs_by_count_constraint(docs, parsed_filter)
+        by_cam: Dict[Any, List[Dict[str, Any]]] = defaultdict(list)
+        for d in filtered:
+            by_cam[d.get("camera_id")].append(d)
+
+        segments: List[Dict[str, Any]] = []
+        for cam, cam_docs in by_cam.items():
+            cam_docs_sorted = sorted(cam_docs, key=lambda x: x.get("timestamp", ""))
+            seg_start: Optional[datetime] = None
+            seg_end: Optional[datetime] = None
+            seg_peak_count = 0
+            seg_objects: List[Dict[str, Any]] = []
+
+            def _emit_segment() -> None:
+                nonlocal seg_start, seg_end, seg_peak_count, seg_objects
+                if seg_start is None or seg_end is None:
+                    return
+                segments.append(
+                    {
+                        "camera_id": cam,
+                        "object_name": parsed_filter.get("objects.object_name"),
+                        "color": parsed_filter.get("objects.color"),
+                        "start": seg_start.isoformat(),
+                        "end": seg_end.isoformat(),
+                        "duration_seconds": max(0, int((seg_end - seg_start).total_seconds())),
+                        "objects": self._aggregate_objects(seg_objects),
+                        "match_count_peak": int(seg_peak_count),
+                        "count_constraint": constraint,
+                    }
+                )
+
+            for d in cam_docs_sorted:
+                ts = self._parse_ts(d.get("timestamp", ""))
+                cnt = int(d.get("matched_object_count", self._count_matching_objects_in_doc(d, parsed_filter)))
+                matched_objs = [
+                    o for o in (d.get("objects") or []) if isinstance(o, dict) and self._object_matches(o, parsed_filter)
+                ]
+
+                if seg_start is None:
+                    seg_start = ts
+                    seg_end = ts
+                    seg_peak_count = cnt
+                    seg_objects = matched_objs.copy()
+                    continue
+
+                gap = (ts - seg_end).total_seconds() if seg_end is not None else 0
+                if gap <= self.max_gap_seconds:
+                    seg_end = ts
+                    if cnt > seg_peak_count:
+                        seg_peak_count = cnt
+                    seg_objects.extend(matched_objs)
+                else:
+                    _emit_segment()
+                    seg_start = ts
+                    seg_end = ts
+                    seg_peak_count = cnt
+                    seg_objects = matched_objs.copy()
+
+            _emit_segment()
+
+        segments.sort(key=lambda x: x.get("start", ""), reverse=True)
+        return segments
+
+    def _flatten_object_captions(self, payload: Any) -> List[str]:
+        out: List[str] = []
+        if isinstance(payload, list):
+            for item in payload:
+                if isinstance(item, list):
+                    for x in item:
+                        if isinstance(x, str) and x.strip():
+                            out.append(x.strip().lower())
+                elif isinstance(item, str) and item.strip():
+                    out.append(item.strip().lower())
+        return out
+
+    def _extract_object_tokens(self, flat_caps: List[str]) -> List[str]:
+        out = set()
+        for cap in flat_caps:
+            low = cap.lower()
+            if "person" in low:
+                out.add("person")
+            if "vehicle" in low or "car" in low:
+                out.add("car")
+            tok = low.split(" ")[0].strip()
+            if tok:
+                out.add(tok)
+        return sorted(out)
+
+    def _vlm_matches_object_filter(self, flat_caps: List[str], parsed_filter: Dict[str, Any]) -> bool:
+        obj = parsed_filter.get("objects.object_name")
+        color = parsed_filter.get("objects.color")
+
+        if not obj and not color:
+            return True
+        if not flat_caps:
+            return False
+
+        obj_ok = True
+        if obj:
+            obj_low = str(obj).lower()
+            aliases = {obj_low}
+            if obj_low == "person":
+                aliases.update({"people", "person"})
+            elif obj_low == "car":
+                aliases.update({"car", "vehicle", "cars", "vehicles"})
+            obj_ok = any(any(a in c for a in aliases) for c in flat_caps)
+
+        color_ok = True
+        if color:
+            color_low = str(color).lower()
+            color_ok = any(color_low in c for c in flat_caps)
+
+        return obj_ok and color_ok
     
     def _parse_ts(self, ts: str) -> datetime:
         """Parse timestamp string to datetime."""

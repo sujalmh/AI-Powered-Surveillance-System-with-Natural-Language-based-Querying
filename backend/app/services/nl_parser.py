@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+import re
 
 from pydantic import BaseModel, Field
 
@@ -31,10 +32,124 @@ class NLFilter(BaseModel):
     action: Optional[str] = Field(default=None, description="Action being performed (running, walking, fighting, etc.)")
     zone: Optional[str] = Field(default=None, description="Specific zone or area mentioned (entrance, exit, hallway, etc.)")
     count_constraint: Optional[Dict[str, int]] = Field(default=None, description="Count constraints like {'gte': 3} for 'more than 3 people'")
+    result_limit: Optional[int] = Field(default=None, description="Maximum number of results to return, e.g. 1 for 'show me the latest clip'")
     ask_color: Optional[bool] = Field(default=None, description="True if the user is asking about clothing color")
     location_hint: Optional[str] = Field(default=None, description="If user refers to a location name in NL")
     semantic_query: str = Field(description="Natural language description for semantic/CLIP search - ALWAYS provide this")
     raw_query: str = Field(description="Original natural language input")
+
+
+_NUMBER_WORDS: Dict[str, int] = {
+    "zero": 0,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+}
+
+
+def _word_to_int(tok: str) -> Optional[int]:
+    t = (tok or "").strip().lower()
+    if not t:
+        return None
+    if t.isdigit():
+        try:
+            return int(t)
+        except Exception:
+            return None
+    return _NUMBER_WORDS.get(t)
+
+
+def _infer_result_limit(nl: str) -> Optional[int]:
+    low = (nl or "").lower()
+    if re.search(r"\bonly\s+one\s+(clip|clips|video|videos|result|results)\b", low):
+        return 1
+
+    m = re.search(r"\b(?:top|first|show|retrieve)\s+(\d+)\s+(clip|clips|video|videos|result|results)\b", low)
+    if m:
+        try:
+            return max(1, int(m.group(1)))
+        except Exception:
+            return None
+    return None
+
+
+def _augment_count_constraint_from_query(nl: str, f: Dict[str, Any]) -> None:
+    """
+    Backstop heuristic for count constraints when LLM output misses them.
+    Also infers objects.object_name when the LLM set count_constraint but forgot the object.
+    """
+    low = (nl or "").lower()
+
+    def _set_obj_for_noun(noun: str) -> None:
+        if noun in {"person", "people", "persons"}:
+            f["objects.object_name"] = "person"
+        elif noun in {"car", "cars", "vehicle", "vehicles"}:
+            f["objects.object_name"] = "car"
+
+    # If count_constraint is already set (by LLM), still ensure object name is present
+    if f.get("count_constraint"):
+        if not f.get("objects.object_name"):
+            # Try to infer the object noun from the NL query
+            m = re.search(r"\b(person|people|persons|car|cars|vehicle|vehicles)\b", low)
+            if m:
+                _set_obj_for_noun(m.group(1))
+        return
+
+    # no/without/zero ...
+    m = re.search(r"\b(no|without|zero)\s+(person|people|persons|car|cars|vehicle|vehicles)\b", low)
+    if m:
+        _set_obj_for_noun(m.group(2))
+        f["count_constraint"] = {"eq": 0}
+        return
+
+    # more than / over / greater than
+    m = re.search(
+        r"\b(?:more than|greater than|over)\s+(\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)\s+(person|people|persons|car|cars|vehicle|vehicles)\b",
+        low,
+    )
+    if m:
+        n = _word_to_int(m.group(1))
+        if n is not None:
+            _set_obj_for_noun(m.group(2))
+            f["count_constraint"] = {"gt": int(n)}
+            return
+
+    # at least / minimum of
+    m = re.search(
+        r"\b(?:at least|minimum of)\s+(\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)\s+(person|people|persons|car|cars|vehicle|vehicles)\b",
+        low,
+    )
+    if m:
+        n = _word_to_int(m.group(1))
+        if n is not None:
+            _set_obj_for_noun(m.group(2))
+            f["count_constraint"] = {"gte": int(n)}
+            return
+
+    # multiple people
+    if re.search(r"\b(multiple|more than one|two or more)\s+(person|people|persons)\b", low):
+        f["objects.object_name"] = "person"
+        f["count_constraint"] = {"gte": 2}
+        return
+
+    # exactly / equal to
+    m = re.search(
+        r"\b(?:exactly|equal to)\s+(\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)\s+(person|people|persons|car|cars|vehicle|vehicles)\b",
+        low,
+    )
+    if m:
+        n = _word_to_int(m.group(1))
+        if n is not None:
+            _set_obj_for_noun(m.group(2))
+            f["count_constraint"] = {"eq": int(n)}
+            return
 
 
 PROMPT_TEMPLATE = """You are an intelligent surveillance query parser. Convert the user's natural language query into a comprehensive JSON object.
@@ -61,6 +176,7 @@ CRITICAL INSTRUCTIONS:
    - action: Running, walking, fighting, carrying, falling, etc.
    - zone: entrance, exit, hallway, parking, gate, etc.
    - count_constraint: For "more than 3 people" use key "gte" with value 3, for "exactly 2" use key "eq" with value 2
+   - result_limit: Maximum results to return. For "only one clip" use 1, for "top 5 results" use 5, for "the latest clip" use 1
    - location_hint: Camera location references or named areas. Examples:
      * "Lab camera" → location_hint: "Lab"
      * "Gate 3" → location_hint: "Gate 3"
@@ -216,6 +332,14 @@ def parse_nl_with_llm(nl: str) -> Dict[str, Any]:
     
     if result.count_constraint:
         f["count_constraint"] = result.count_constraint
+    _augment_count_constraint_from_query(nl, f)
+
+    # Result limit: prefer LLM output, fall back to regex inference
+    llm_limit = result.result_limit
+    regex_limit = _infer_result_limit(nl)
+    requested_limit = llm_limit if llm_limit is not None else regex_limit
+    if requested_limit is not None:
+        f["__result_limit"] = int(requested_limit)
 
     # Extract semantic query for CLIP-based search
     # semantic_query is now mandatory from LLM
