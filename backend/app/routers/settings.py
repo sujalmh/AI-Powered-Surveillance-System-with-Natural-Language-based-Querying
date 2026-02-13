@@ -63,10 +63,11 @@ def _get_llm_settings() -> dict:
 
 
 def _set_llm_settings(config: dict) -> None:
-    # If the incoming api_key is masked (contains '...'), don't overwrite the existing one
-    if "..." in config.get("api_key", ""):
+    # If the incoming api_key is masked (contains '...' or is '****'), don't overwrite the existing one
+    incoming_key = config.get("api_key", "")
+    if "..." in incoming_key or incoming_key == "****":
         existing = _get_llm_settings()
-        config["api_key"] = existing.get("api_key", config["api_key"])
+        config["api_key"] = existing.get("api_key", incoming_key)
         
     app_settings.update_one(
         {"key": "llm_config"},
