@@ -224,7 +224,7 @@ def _get_lc_components():
     api_key = llm_cfg["api_key"]
     
     llm = None
-    if provider == "openai" or (not provider and api_key):
+    if provider == "openai":
         try:
             from langchain_openai import ChatOpenAI
             llm = ChatOpenAI(
@@ -247,13 +247,12 @@ def _get_lc_components():
             raise RuntimeError(f"LangChain OpenRouter not available or misconfigured: {e}")
     elif provider == "ollama":
         try:
-            # Community provider for Ollama
             from langchain_community.chat_models import ChatOllama
             llm = ChatOllama(model=model or "llama3.1", base_url=settings.OLLAMA_BASE_URL, temperature=0.0)
         except Exception as e:
             raise RuntimeError(f"LangChain Ollama not available or misconfigured: {e}")
-    else:
-        # Try OpenAI if key present, otherwise Ollama as default
+    elif not provider:
+        # Default fallback logic
         if api_key:
             try:
                 from langchain_openai import ChatOpenAI
@@ -263,13 +262,15 @@ def _get_lc_components():
                     temperature=0.0,
                 )
             except Exception as e:
-                raise RuntimeError(f"LangChain OpenAI not available or misconfigured: {e}")
+                raise RuntimeError(f"LangChain OpenAI default failed: {e}")
         else:
             try:
                 from langchain_community.chat_models import ChatOllama
                 llm = ChatOllama(model=model or "llama3.1", base_url=settings.OLLAMA_BASE_URL, temperature=0.0)
             except Exception as e:
-                raise RuntimeError(f"LangChain Ollama not available or misconfigured: {e}")
+                raise RuntimeError(f"LangChain Ollama default failed: {e}")
+    else:
+        raise RuntimeError(f"Unsupported LLM provider: '{provider}'. Supported: openai, openrouter, ollama, or leave empty.")
 
     from langchain_core.prompts import ChatPromptTemplate  # type: ignore
     from langchain_core.output_parsers import PydanticOutputParser  # type: ignore

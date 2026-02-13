@@ -1,4 +1,5 @@
 import os
+import logging
 from pathlib import Path
 from typing import List
 from dotenv import load_dotenv
@@ -43,8 +44,8 @@ class Settings:
         self.LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "").strip().lower()  # e.g., "openai", "ollama", "openrouter"
         self.OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
         
-        # Auto-detect OpenRouter if key starts with sk-or- and provider is not set or set to openai
-        if self.OPENAI_API_KEY.startswith("sk-or-") and self.LLM_PROVIDER in ("", "openai"):
+        # Auto-detect OpenRouter if key starts with sk-or- and provider is not set
+        if self.OPENAI_API_KEY.startswith("sk-or-") and not self.LLM_PROVIDER:
             self.LLM_PROVIDER = "openrouter"
             
         self.OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
@@ -94,9 +95,9 @@ class Settings:
                     "model": cfg.get("model", self.NL_DEFAULT_MODEL),
                     "api_key": cfg.get("api_key", self.OPENAI_API_KEY)
                 }
-        except Exception:
+        except Exception as e:
             # Fallback to env if DB not available or table doesn't exist yet
-            pass
+            logging.exception(f"Failed to load llm_config from MongoDB in get_active_llm_config: {e}")
             
         return {
             "provider": self.LLM_PROVIDER,
