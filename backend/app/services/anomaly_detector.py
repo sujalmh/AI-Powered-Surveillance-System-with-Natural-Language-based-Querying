@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 import logging
+import time as _time
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -26,6 +27,49 @@ logger = logging.getLogger(__name__)
 DEFAULT_BASELINE_DAYS = 7
 DEFAULT_Z_THRESHOLD = 2.0
 SEVERITY_THRESHOLDS = {"high": 3.0, "medium": 2.0, "low": 1.5}
+
+# How many minutes before today's cached result is considered stale
+CACHE_TTL_MINUTES = 10
+
+
+# ──────────────────────────────── Helpers ──────────────────────────────────
+
+def _ts_match_expr(field: str, gte: datetime, lt: datetime) -> dict:
+    """
+    Build a $match expression that works regardless of whether the stored
+    *field* is an ISO-8601 string or a native BSON Date.
+
+    Strategy: use $expr with $dateFromString (with onError fallback) so the
+    comparison is always performed on Date objects.
+    """
+    return {
+        "$expr": {
+            "$and": [
+                {
+                    "$gte": [
+                        {
+                            "$dateFromString": {
+                                "dateString": f"${field}",
+                                "onError": None,
+                            }
+                        },
+                        gte,
+                    ]
+                },
+                {
+                    "$lt": [
+                        {
+                            "$dateFromString": {
+                                "dateString": f"${field}",
+                                "onError": None,
+                            }
+                        },
+                        lt,
+                    ]
+                },
+            ]
+        }
+    }
 
 
 # ──────────────────────────────── Service ─────────────────────────────────
@@ -47,6 +91,9 @@ class AnomalyDetector:
         """
         Run anomaly detection for *target_date* (defaults to today).
 
+        Uses a MongoDB cache with a TTL so repeat dashboard loads are fast.
+        Today's cache is refreshed every CACHE_TTL_MINUTES minutes.
+
         Returns:
             {
                 "date": "2026-02-13",
@@ -60,6 +107,14 @@ class AnomalyDetector:
         target = target_date or now
         day_start = target.replace(hour=0, minute=0, second=0, microsecond=0)
         day_end = day_start + timedelta(days=1)
+        date_str = day_start.strftime("%Y-%m-%d")
+
+        # ── Try to read from cache first ──
+        cached = self._read_cache(date_str, is_today=(day_start.date() == now.date()))
+        if cached is not None:
+            return cached
+
+        # ── No usable cache — compute fresh ──
 
         # 1. Build hourly baseline from historical data
         baseline = self._build_hourly_baseline(day_start)
@@ -81,7 +136,7 @@ class AnomalyDetector:
         events.sort(key=lambda e: (severity_order.get(e["severity"], 9), e.get("hour", 0)))
 
         result = {
-            "date": day_start.strftime("%Y-%m-%d"),
+            "date": date_str,
             "count": len(events),
             "events": events,
             "baseline_days": self.baseline_days,
@@ -92,6 +147,48 @@ class AnomalyDetector:
         self._cache_result(result)
 
         return result
+
+    # ── private: cache ────────────────────────────────────────────────────
+
+    def _read_cache(self, date_str: str, is_today: bool) -> Optional[Dict[str, Any]]:
+        """
+        Return a cached anomaly result if it exists and matches the current
+        parameters.  For today's date, apply a staleness TTL.
+        """
+        try:
+            doc = anomaly_events.find_one(
+                {
+                    "date": date_str,
+                    "baseline_days": self.baseline_days,
+                    "z_threshold": self.z_threshold,
+                },
+                {"_id": 0},
+            )
+            if doc is None:
+                return None
+
+            # For historical dates the cache never goes stale
+            if not is_today:
+                return doc
+
+            # For today: check TTL
+            cached_at = doc.get("cached_at")
+            if cached_at is None:
+                return None  # no timestamp — treat as stale
+
+            if isinstance(cached_at, str):
+                cached_at = datetime.fromisoformat(cached_at)
+
+            age_minutes = (datetime.utcnow() - cached_at).total_seconds() / 60.0
+            if age_minutes <= CACHE_TTL_MINUTES:
+                logger.info(f"Returning cached anomaly result for {date_str} (age {age_minutes:.1f}m)")
+                return doc
+
+            # Stale — recompute
+            return None
+        except Exception as e:
+            logger.warning(f"Cache read failed, recomputing: {e}")
+            return None
 
     # ── private: baseline ─────────────────────────────────────────────────
 
@@ -105,20 +202,17 @@ class AnomalyDetector:
         baseline_start = day_start - timedelta(days=self.baseline_days)
 
         pipeline = [
-            {
-                "$match": {
-                    "timestamp": {
-                        "$gte": baseline_start.isoformat(),
-                        "$lt": day_start.isoformat(),
-                    }
-                }
-            },
-            # Parse hour from ISO timestamp string
+            # Match using $dateFromString so comparison is on Date objects
+            # regardless of whether "timestamp" is stored as String or Date
+            {"$match": _ts_match_expr("timestamp", baseline_start, day_start)},
+            # Parse hour from timestamp
             {
                 "$addFields": {
-                    "ts_date": {"$dateFromString": {"dateString": "$timestamp"}},
+                    "ts_date": {"$dateFromString": {"dateString": "$timestamp", "onError": None}},
                 }
             },
+            # Filter out docs where timestamp couldn't be parsed
+            {"$match": {"ts_date": {"$ne": None}}},
             {
                 "$addFields": {
                     "hour": {"$hour": "$ts_date"},
@@ -177,19 +271,13 @@ class AnomalyDetector:
         Returns: {hour: {"total": int, "cameras": {cam_id: count, ...}}, ...}
         """
         pipeline = [
-            {
-                "$match": {
-                    "timestamp": {
-                        "$gte": day_start.isoformat(),
-                        "$lt": day_end.isoformat(),
-                    }
-                }
-            },
+            {"$match": _ts_match_expr("timestamp", day_start, day_end)},
             {
                 "$addFields": {
-                    "ts_date": {"$dateFromString": {"dateString": "$timestamp"}},
+                    "ts_date": {"$dateFromString": {"dateString": "$timestamp", "onError": None}},
                 }
             },
+            {"$match": {"ts_date": {"$ne": None}}},
             {
                 "$addFields": {
                     "hour": {"$hour": "$ts_date"},
@@ -299,11 +387,7 @@ class AnomalyDetector:
 
         # Get today's object type distribution per camera
         pipeline_today = [
-            {
-                "$match": {
-                    "timestamp": {"$gte": day_start.isoformat(), "$lt": day_end.isoformat()}
-                }
-            },
+            {"$match": _ts_match_expr("timestamp", day_start, day_end)},
             {"$unwind": "$objects"},
             {
                 "$group": {
@@ -318,11 +402,7 @@ class AnomalyDetector:
 
         # Get baseline object type distribution per camera
         pipeline_baseline = [
-            {
-                "$match": {
-                    "timestamp": {"$gte": baseline_start.isoformat(), "$lt": day_start.isoformat()}
-                }
-            },
+            {"$match": _ts_match_expr("timestamp", baseline_start, day_start)},
             {"$unwind": "$objects"},
             {
                 "$group": {
@@ -391,9 +471,14 @@ class AnomalyDetector:
     def _cache_result(self, result: Dict[str, Any]) -> None:
         """Upsert today's anomaly result to MongoDB for fast dashboard reads."""
         try:
+            payload = {**result, "cached_at": datetime.utcnow().isoformat()}
             anomaly_events.update_one(
-                {"date": result["date"]},
-                {"$set": result},
+                {
+                    "date": result["date"],
+                    "baseline_days": result["baseline_days"],
+                    "z_threshold": result["z_threshold"],
+                },
+                {"$set": payload},
                 upsert=True,
             )
         except Exception as e:

@@ -389,10 +389,24 @@ class ThreadedFrameReader:
     def reopen(self, source, backend=None):
         """Release old cap, open a new one, restart reader thread."""
         self.stop()
-        try:
-            self._cap.release()
-        except Exception:
-            pass
+        # If thread is still alive after stop() timeout, forcibly release
+        # the old capture to unblock any blocking cap.read() in _run.
+        if self._thread and self._thread.is_alive():
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+            # Poll briefly for thread to exit after cap release
+            import time
+            for _ in range(10):
+                if not self._thread.is_alive():
+                    break
+                time.sleep(0.1)
+        else:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
         if backend is not None:
             self._cap = cv2.VideoCapture(source, backend)
         else:

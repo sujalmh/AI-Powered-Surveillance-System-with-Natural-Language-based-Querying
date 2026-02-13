@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from backend.app.services.anomaly_detector import AnomalyDetector
 
@@ -39,7 +39,7 @@ def get_anomalies(
         try:
             target = datetime.strptime(date, "%Y-%m-%d")
         except ValueError:
-            return {"error": f"Invalid date format: {date}. Use YYYY-MM-DD."}
+            raise HTTPException(status_code=400, detail=f"Invalid date format: {date}. Use YYYY-MM-DD.")
 
     detector = AnomalyDetector(
         baseline_days=baseline_days,
