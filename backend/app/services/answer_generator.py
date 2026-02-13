@@ -22,24 +22,40 @@ class AnswerGenerator:
     
     def _initialize_llm(self):
         """Initialize LLM (OpenAI by default)."""
-        provider = (settings.LLM_PROVIDER or "").strip().lower()
+        llm_cfg = settings.get_active_llm_config()
+        provider = llm_cfg["provider"].strip().lower()
+        model = llm_cfg["model"]
+        api_key = llm_cfg["api_key"]
         
         # Prioritize OpenAI
-        if provider == "openai" or (not provider and settings.OPENAI_API_KEY):
+        if provider == "openai" or (not provider and api_key):
             try:
                 from langchain_openai import ChatOpenAI
                 self.llm = ChatOpenAI(
-                    model=settings.NL_DEFAULT_MODEL or "gpt-4o-mini",
+                    model=model or "gpt-4o-mini",
+                    api_key=api_key,
                     temperature=0.3,  # Slightly creative but still factual
                 )
             except Exception as e:
                 print(f"Failed to initialize OpenAI: {e}")
                 self.llm = None
+        elif provider == "openrouter":
+            try:
+                from langchain_openai import ChatOpenAI
+                self.llm = ChatOpenAI(
+                    model=model or "gpt-4o-mini",
+                    openai_api_base=settings.OPENROUTER_BASE_URL,
+                    openai_api_key=api_key or settings.OPENAI_API_KEY,
+                    temperature=0.3,
+                )
+            except Exception as e:
+                print(f"Failed to initialize OpenRouter: {e}")
+                self.llm = None
         elif provider == "ollama":
             try:
                 from langchain_community.chat_models import ChatOllama
                 self.llm = ChatOllama(
-                    model=settings.NL_DEFAULT_MODEL or "llama3",
+                    model=model or "llama3.1",
                     base_url=settings.OLLAMA_BASE_URL,
                     temperature=0.3
                 )

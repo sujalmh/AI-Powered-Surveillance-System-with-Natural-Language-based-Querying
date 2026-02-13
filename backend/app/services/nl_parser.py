@@ -218,31 +218,48 @@ def _get_lc_components():
     except Exception as e:
         raise RuntimeError(f"LangChain core not available: {e}")
 
-    provider = (settings.LLM_PROVIDER or "openai").strip().lower()
+    llm_cfg = settings.get_active_llm_config()
+    provider = llm_cfg["provider"].strip().lower()
+    model = llm_cfg["model"]
+    api_key = llm_cfg["api_key"]
+    
     llm = None
-    if provider == "openai" or (not provider and settings.OPENAI_API_KEY):
+    if provider == "openai" or (not provider and api_key):
         try:
             from langchain_openai import ChatOpenAI
             llm = ChatOpenAI(
-                model=settings.NL_DEFAULT_MODEL or "gpt-4o-mini",
+                model=model or "gpt-4o-mini",
+                api_key=api_key,
                 temperature=0.0,
             )
         except Exception as e:
             raise RuntimeError(f"LangChain OpenAI not available or misconfigured: {e}")
+    elif provider == "openrouter":
+        try:
+            from langchain_openai import ChatOpenAI
+            llm = ChatOpenAI(
+                model=model or "gpt-4o-mini",
+                openai_api_base=settings.OPENROUTER_BASE_URL,
+                openai_api_key=api_key or settings.OPENAI_API_KEY,
+                temperature=0.0,
+            )
+        except Exception as e:
+            raise RuntimeError(f"LangChain OpenRouter not available or misconfigured: {e}")
     elif provider == "ollama":
         try:
             # Community provider for Ollama
             from langchain_community.chat_models import ChatOllama
-            llm = ChatOllama(model=settings.NL_DEFAULT_MODEL or "llama3", base_url=settings.OLLAMA_BASE_URL, temperature=0.0)
+            llm = ChatOllama(model=model or "llama3.1", base_url=settings.OLLAMA_BASE_URL, temperature=0.0)
         except Exception as e:
             raise RuntimeError(f"LangChain Ollama not available or misconfigured: {e}")
     else:
         # Try OpenAI if key present, otherwise Ollama as default
-        if settings.OPENAI_API_KEY:
+        if api_key:
             try:
                 from langchain_openai import ChatOpenAI
                 llm = ChatOpenAI(
-                    model=settings.NL_DEFAULT_MODEL or "gpt-4o-mini",
+                    model=model or "gpt-4o-mini",
+                    api_key=api_key,
                     temperature=0.0,
                 )
             except Exception as e:
@@ -250,7 +267,7 @@ def _get_lc_components():
         else:
             try:
                 from langchain_community.chat_models import ChatOllama
-                llm = ChatOllama(model=settings.NL_DEFAULT_MODEL or "llama3", base_url=settings.OLLAMA_BASE_URL, temperature=0.0)
+                llm = ChatOllama(model=model or "llama3.1", base_url=settings.OLLAMA_BASE_URL, temperature=0.0)
             except Exception as e:
                 raise RuntimeError(f"LangChain Ollama not available or misconfigured: {e}")
 

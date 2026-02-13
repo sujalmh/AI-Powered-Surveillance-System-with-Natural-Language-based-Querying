@@ -1,13 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Save, Check, Eye, EyeOff, AlertTriangle, Trash2 } from "lucide-react"
 
 export function SystemConfig() {
   const [formData, setFormData] = useState({
     mongoUri: "mongodb+srv://user:pass@cluster.mongodb.net/surveillance",
     llmApiKey: "sk-proj-...",
-    model: "gpt-4-turbo",
+    provider: "openai",
+    model: "gpt-4o-mini",
     storageLimit: "1000",
   })
   const [indexingMode, setIndexingMode] = useState<"structured" | "semantic" | "both">("both")
@@ -15,19 +16,36 @@ export function SystemConfig() {
   const [showSecrets, setShowSecrets] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  const handleSave = () => {
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+  const handleSave = async () => {
+    try {
+      const { api } = await import("../../../lib/api")
+      await api.setLlmConfig({
+        provider: formData.provider,
+        model: formData.model,
+        api_key: formData.llmApiKey
+      })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (e) {
+      console.error(e)
+      alert("Failed to save LLM configuration: " + e)
+    }
   }
 
-  // Fetch current indexing mode on mount
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useState(() => {
+  // Fetch current indexing mode and LLM config on mount
+  useEffect(() => {
     import("../../../lib/api").then(({ api }) => {
-      api.getIndexingMode().then((res) => setIndexingMode(res.indexing_mode)).catch(() => {})
+      api.getIndexingMode().then((res) => setIndexingMode(res.indexing_mode)).catch(() => { })
+      api.getLlmConfig().then((res) => {
+        setFormData(prev => ({
+          ...prev,
+          provider: res.provider || "openai",
+          model: res.model || "gpt-4o-mini",
+          llmApiKey: res.api_key || ""
+        }))
+      }).catch(() => { })
     })
-    return undefined
-  })
+  }, [])
 
   const handleModeSave = async () => {
     setModeSaving("saving")
@@ -42,6 +60,29 @@ export function SystemConfig() {
       console.error(e)
       alert("Failed to save indexing mode")
     }
+  }
+
+  const PROVIDER_MODELS: Record<string, string[]> = {
+    openai: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],
+    openrouter: [
+      "google/gemini-2.0-flash-001",
+      "google/gemini-2.0-pro-exp-02-05:free",
+      "anthropic/claude-3.5-sonnet",
+      "deepseek/deepseek-r1-distill-llama-70b",
+      "meta-llama/llama-3.1-405b",
+      "mistralai/mistral-large-2411",
+    ],
+    ollama: ["llama3.1", "mistral", "phi3", "nomic-embed-text"],
+    anthropic: ["claude-3-5-sonnet-20240620", "claude-3-opus-20240229", "claude-3-sonnet-20240229"],
+  }
+
+  const handleProviderChange = (provider: string) => {
+    const models = PROVIDER_MODELS[provider] || []
+    setFormData({
+      ...formData,
+      provider,
+      model: models[0] || formData.model
+    })
   }
 
   return (
@@ -78,16 +119,29 @@ export function SystemConfig() {
       </div>
 
       <div>
+        <label className="text-sm text-muted-foreground block mb-2">LLM Provider</label>
+        <select
+          value={formData.provider || "openai"}
+          onChange={(e) => handleProviderChange(e.target.value)}
+          className="w-full bg-slate-900/50 dark:bg-slate-900 backdrop-blur-xl border border-white/20 rounded-2xl px-4 py-2 text-foreground outline-none focus:border-cyan-400/50 transition-colors mb-4 [&>option]:bg-slate-900 [&>option]:text-white"
+        >
+          <option value="openai">OpenAI</option>
+          <option value="openrouter">OpenRouter</option>
+          <option value="ollama">Ollama (Local)</option>
+          <option value="anthropic">Anthropic</option>
+        </select>
+
         <label className="text-sm text-muted-foreground block mb-2">Model Selection</label>
         <select
           value={formData.model}
           onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-          className="w-full bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl px-4 py-2 text-foreground bg-transparent outline-none focus:border-cyan-400/50 transition-colors"
+          className="w-full bg-slate-900/50 dark:bg-slate-900 backdrop-blur-xl border border-white/20 rounded-2xl px-4 py-2 text-foreground outline-none focus:border-cyan-400/50 transition-colors [&>option]:bg-slate-900 [&>option]:text-white"
         >
-          <option>gpt-4-turbo</option>
-          <option>gpt-4</option>
-          <option>gpt-3.5-turbo</option>
-          <option>claude-3-opus</option>
+          {(PROVIDER_MODELS[formData.provider || "openai"] || []).map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
         </select>
       </div>
 
