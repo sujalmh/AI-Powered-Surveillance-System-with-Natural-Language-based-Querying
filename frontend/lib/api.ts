@@ -214,5 +214,12 @@ export const api = {
             method: "PUT",
             body: JSON.stringify({ indexing_mode: mode }),
         }),
+    getLlmConfig: () =>
+        http<{ provider: string; model: string; api_key: string }>("/api/settings/llm-config"),
+    setLlmConfig: (config: { provider: string; model: string; api_key: string }) =>
+        http<{ provider: string; model: string; api_key: string }>("/api/settings/llm-config", {
+            method: "PUT",
+            body: JSON.stringify(config),
+        }),
     resetSystem: () => http<{ status: string; message: string }>("/api/settings/reset", { method: "DELETE" }),
 };
