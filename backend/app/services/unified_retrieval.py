@@ -1136,8 +1136,6 @@ class UnifiedRetrieval:
                 return datetime.strptime(ts.split(".")[0], "%Y-%m-%dT%H:%M:%S")
             except Exception:
                 return datetime.utcnow()
-            except Exception:
-                return datetime.utcnow()
     
     def _normalize_scores(self, scores: List[float]) -> List[float]:
         """Normalize scores to 0-1 range."""
