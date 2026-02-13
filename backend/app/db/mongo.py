@@ -20,6 +20,7 @@ chat_messages: Collection = db["chat_messages"]
 videos: Collection = db["videos"]  # optional manifest of recording segments
 vlm_frames: Collection = db["vlm_frames"]  # semantic frame-level metadata (FAISS stores vectors)
 app_settings: Collection = db["settings"]  # app-level settings (e.g., indexing mode)
+anomaly_events: Collection = db["anomaly_events"]  # cached daily anomaly detection results
 
 
 def init_indexes() -> None:
@@ -77,6 +78,21 @@ def init_indexes() -> None:
         vlm_frames.create_index([("camera_id", ASCENDING), ("frame_ts", DESCENDING)])
         vlm_frames.create_index([("hash", ASCENDING)])
         vlm_frames.create_index([("model", ASCENDING)])
+    except Exception:
+        pass
+
+    # anomaly_events: daily anomaly detection cache
+    # Compound unique index matches the upsert filter in _cache_result
+    try:
+        # Drop the old single-field index if it exists to avoid conflicts
+        try:
+            anomaly_events.drop_index("date_1")
+        except Exception:
+            pass
+        anomaly_events.create_index(
+            [("date", ASCENDING), ("baseline_days", ASCENDING), ("z_threshold", ASCENDING)],
+            unique=True,
+        )
     except Exception:
         pass
 

@@ -336,6 +336,89 @@ def _auto_build_and_index(camera_id: int, start_iso: str, end_iso: str, every_se
 
 
 # =========================================
+# Threaded frame reader — keeps capture flowing
+# even while YOLO detection blocks the main loop.
+# =========================================
+class ThreadedFrameReader:
+    """Continuously reads frames on a background thread and feeds the MJPEG store."""
+
+    def __init__(self, cap: "cv2.VideoCapture", camera_id: int):
+        self._cap = cap
+        self._camera_id = camera_id
+        self._frame = None
+        self._ret = False
+        self._lock = threading.Lock()
+        self._stopped = False
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        while not self._stopped:
+            ret, frame = self._cap.read()
+            with self._lock:
+                self._ret = ret
+                self._frame = frame
+            if ret:
+                # Push every captured frame to the MJPEG store immediately
+                try:
+                    encode_ok, jpg = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+                    if encode_ok:
+                        update_frame(self._camera_id, jpg.tobytes())
+                except Exception:
+                    pass
+            else:
+                import time
+                time.sleep(0.01)  # Avoid busy-spin on read failure
+
+    def read(self):
+        """Return the latest frame (non-blocking)."""
+        with self._lock:
+            return self._ret, self._frame
+
+    def stop(self) -> None:
+        self._stopped = True
+        self._thread.join(timeout=3)
+
+    def release(self) -> None:
+        self.stop()
+        try:
+            self._cap.release()
+        except Exception:
+            pass
+
+    def reopen(self, source, backend=None):
+        """Release old cap, open a new one, restart reader thread."""
+        self.stop()
+        # If thread is still alive after stop() timeout, forcibly release
+        # the old capture to unblock any blocking cap.read() in _run.
+        if self._thread and self._thread.is_alive():
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+            # Poll briefly for thread to exit after cap release
+            import time
+            for _ in range(10):
+                if not self._thread.is_alive():
+                    break
+                time.sleep(0.1)
+        else:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+        if backend is not None:
+            self._cap = cv2.VideoCapture(source, backend)
+        else:
+            self._cap = cv2.VideoCapture(source)
+        self._cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        self._stopped = False
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+        return self._cap.isOpened()
+
+
+# =========================================
 # MAIN DETECTION & TRACKING LOOP
 # =========================================
 def process_live_stream(
@@ -353,7 +436,10 @@ def process_live_stream(
     if isinstance(source, int):
         cap = cv2.VideoCapture(source, cv2.CAP_DSHOW)
     else:
-        cap = cv2.VideoCapture(source)
+        # For HTTP/MJPEG streams (e.g. DroidCam), use FFMPEG backend
+        # and reduce buffer to 1 frame to avoid latency/stale-frame issues
+        cap = cv2.VideoCapture(source, cv2.CAP_FFMPEG)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     if not cap.isOpened():
         msg = f"Cannot open camera source {source}"
         print(f"❌ {msg}")
@@ -382,6 +468,10 @@ def process_live_stream(
     fps = cap.get(cv2.CAP_PROP_FPS) or 30
     frame_interval = int(fps / 2) # Process 2 frames per second
     frame_count = 0
+
+    # Wrap capture in a threaded reader so frames flow to the MJPEG stream
+    # even while YOLO inference blocks the detection loop.
+    reader = ThreadedFrameReader(cap, camera_id)
 
     # Initialize BoT-SORT tracker (if available)
     tracker = None
@@ -420,15 +510,32 @@ def process_live_stream(
     # Allow some tolerance for webcams/RTSP streams that may take a moment to provide frames
     read_failures = 0
     max_read_failures = 60  # ~2 seconds at 30fps (adjust as needed)
+    reconnect_attempts = 0
+    max_reconnects = 3  # Try reopening the stream up to 3 times
 
     while True:
         if stop_event is not None and stop_event.is_set():
             print("🛑 Stop signal received.")
             break
-        ret, frame = cap.read()
-        if not ret:
+        ret, frame = reader.read()
+        if not ret or frame is None:
             read_failures += 1
             if read_failures > max_read_failures:
+                # For HTTP/MJPEG streams, try to reconnect before giving up
+                if isinstance(source, str) and reconnect_attempts < max_reconnects:
+                    reconnect_attempts += 1
+                    print(f"🔄 Stream dropped. Reconnecting (attempt {reconnect_attempts}/{max_reconnects})...")
+                    import time
+                    time.sleep(2)  # Wait before reconnecting
+                    if reader.reopen(source, cv2.CAP_FFMPEG):
+                        print(f"✅ Reconnected to stream on attempt {reconnect_attempts}")
+                        read_failures = 0
+                        continue
+                    else:
+                        print(f"❌ Reconnect attempt {reconnect_attempts} failed")
+                        read_failures = 0
+                        continue
+
                 msg = f"No frames from source after {max_read_failures} attempts"
                 print(f"🔴 {msg}")
                 try:
@@ -440,12 +547,13 @@ def process_live_stream(
                 except Exception:
                     pass
                 break
-            # brief delay before next read attempt; helps some drivers/RTSP warm-up
+            # brief delay before next read attempt
             import time
-            time.sleep(0.001)  # 1ms delay, equivalent to cv2.waitKey(1)
+            time.sleep(0.03)  # 30ms — check ~30 times/sec for a new frame
             continue
         else:
             read_failures = 0
+            reconnect_attempts = 0  # Reset reconnect counter on successful read
 
         # Heartbeat: mark camera active and update last_seen on successful frame
         try:
@@ -457,15 +565,8 @@ def process_live_stream(
         except Exception:
             pass
 
-        # Update live preview frame (MJPEG)
-        try:
-            # Optionally resize for bandwidth; keep original for now
-            encode_ok, jpg = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
-            if encode_ok:
-                update_frame(camera_id, jpg.tobytes())
-        except Exception as _e:
-            # Do not interrupt pipeline on preview failure
-            pass
+        # NOTE: Frame store update is handled by ThreadedFrameReader continuously.
+        # No need to call update_frame() here — the reader thread does it at full FPS.
 
         if frame_count % frame_interval == 0:
             # Run YOLO with or without external tracker
@@ -759,7 +860,7 @@ def process_live_stream(
         {"$set": {"status": "inactive"}}
     )
     
-    cap.release()
+    reader.release()
     # Removed cv2.destroyAllWindows - requires GUI-enabled OpenCV
     print(f"✅ Camera {camera_id} processing completed.")
 

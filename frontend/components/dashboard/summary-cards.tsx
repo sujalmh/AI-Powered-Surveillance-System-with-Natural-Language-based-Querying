@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, AlertTriangle, TrendingUp, Clock } from "lucide-react";
+import { Camera, AlertTriangle, TrendingUp, Activity } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -9,7 +9,7 @@ export function SummaryCards() {
   const [activeCameras, setActiveCameras] = useState<number>(0);
   const [liveAlerts, setLiveAlerts] = useState<number>(0);
   const [anomalies, setAnomalies] = useState<number>(0);
-  const [avgResponse, setAvgResponse] = useState<string>("-");
+  const [detectionsToday, setDetectionsToday] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -30,23 +30,22 @@ export function SummaryCards() {
       }).length;
       setLiveAlerts(live);
 
-      // Anomalies today: count detections of objects (e.g., person) today; simplistic
+      // Anomalies today: statistical anomaly detection via Z-score analysis
+      try {
+        const anomalyResult = await api.getAnomalies();
+        setAnomalies(anomalyResult.count);
+      } catch {
+        // Fallback: if endpoint unavailable, show 0
+        setAnomalies(0);
+      }
+
+      // Detections today: total detection records since midnight
       const start = new Date();
       start.setHours(0, 0, 0, 0);
-      const params = new URLSearchParams();
-      params.set("from", start.toISOString());
-      const dets = (await api.listDetections(params)) as any[];
-      const anomalyCount = dets.reduce((acc, d) => acc + (Array.isArray(d.objects) ? d.objects.length : 0), 0);
-      setAnomalies(anomalyCount);
-
-      // Avg. response time: not available yet -> compute mock from logs (diff between now and triggered)
-      if (logs.length > 0) {
-        const diffs = logs.slice(0, 10).map((l) => Math.max(1, Math.floor((now - new Date(l.triggered_at).getTime()) / 1000)));
-        const avg = Math.floor(diffs.reduce((a, b) => a + b, 0) / diffs.length);
-        setAvgResponse(`${avg}s`);
-      } else {
-        setAvgResponse("-");
-      }
+      const detParams = new URLSearchParams();
+      detParams.set("from", start.toISOString());
+      const dets = (await api.listDetections(detParams)) as any[];
+      setDetectionsToday(dets.length);
     } catch (e: any) {
       setErr(e?.message || "Failed to load summary");
     } finally {
@@ -76,19 +75,19 @@ export function SummaryCards() {
         icon: TrendingUp,
       },
       {
-        title: "Avg. Response Time",
-        value: avgResponse,
-        icon: Clock,
+        title: "Detections Today",
+        value: String(detectionsToday),
+        icon: Activity,
       },
     ],
-    [activeCameras, liveAlerts, anomalies, avgResponse]
+    [activeCameras, liveAlerts, anomalies, detectionsToday]
   );
 
   const colorByTitle: Record<string, string> = {
     "Active Cameras": "#3B82F6",     // blue-500
     "Live Alerts": "#F59E0B",        // amber-500
     "Anomalies Today": "#EF4444",    // red-500
-    "Avg. Response Time": "#06B6D4", // cyan-500
+    "Detections Today": "#10B981",   // emerald-500
   };
 
   return (

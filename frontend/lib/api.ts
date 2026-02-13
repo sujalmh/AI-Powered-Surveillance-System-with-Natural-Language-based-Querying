@@ -222,4 +222,28 @@ export const api = {
             body: JSON.stringify(config),
         }),
     resetSystem: () => http<{ status: string; message: string }>("/api/settings/reset", { method: "DELETE" }),
+
+    // Dashboard
+    getAnomalies: (opts?: { date?: string; threshold?: number; baseline_days?: number }) => {
+        const p = new URLSearchParams();
+        if (opts?.date) p.set("date", opts.date);
+        if (opts?.threshold != null) p.set("threshold", String(opts.threshold));
+        if (opts?.baseline_days != null) p.set("baseline_days", String(opts.baseline_days));
+        return http<{
+            date: string;
+            count: number;
+            events: Array<{
+                type: string;
+                hour?: number | null;
+                actual_count: number;
+                baseline_mean?: number;
+                z_score?: number | null;
+                severity: string;
+                description: string;
+                cameras?: Record<string, number>;
+            }>;
+            baseline_days: number;
+            z_threshold: number;
+        }>(`/api/dashboard/anomalies?${p.toString()}`);
+    },
 };
