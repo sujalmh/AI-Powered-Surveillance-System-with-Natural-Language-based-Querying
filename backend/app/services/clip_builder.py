@@ -3,9 +3,9 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import List, Optional, Tuple, Set
+from typing import List, Optional, Set, Tuple
 
 import cv2
 
@@ -73,6 +73,7 @@ def _collect_snapshots(
     start_dt: datetime,
     end_dt: datetime,
     allowed_timestamps: Optional[List[str]] = None,
+    whitelist_dts: Optional[Set[datetime]] = None,
     whitelist_tolerance_sec: float = 5.0,
 ) -> List[Tuple[datetime, Path]]:
     cam_dir = settings.SNAPSHOTS_DIR / f"camera_{camera_id}"
@@ -103,6 +104,23 @@ def _collect_snapshots(
     return files
 
 
+def _parse_whitelist(stamps: List[str]) -> Set[datetime]:
+    out = set()
+    for s in stamps:
+        try:
+            # Handle possible variations in ISO format
+            # Replace Z with +00:00 to handle UTC explicitly
+            safe = s.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(safe)
+            if dt.tzinfo is not None:
+                # Convert to UTC and strip timezone info to match naive file timestamps (which are UTC)
+                dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+            out.add(dt)
+        except Exception:
+            pass
+    return out
+
+
 def build_clip_from_snapshots(
     camera_id: int,
     start_iso: str,
@@ -123,7 +141,12 @@ def build_clip_from_snapshots(
     if end_dt < start_dt:
         raise ValueError("end must be >= start")
 
-    items = _collect_snapshots(camera_id, start_dt, end_dt, allowed_timestamps)
+    items = _collect_snapshots(
+        camera_id,
+        start_dt,
+        end_dt,
+        whitelist_dts=_parse_whitelist(allowed_timestamps) if allowed_timestamps else None,
+    )
     if not items:
         raise FileNotFoundError("No snapshots found in the requested interval")
 

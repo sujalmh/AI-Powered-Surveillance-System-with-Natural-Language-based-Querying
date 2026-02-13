@@ -73,7 +73,6 @@ export function SystemConfig() {
       "mistralai/mistral-large-2411",
     ],
     ollama: ["llama3.1", "mistral", "phi3", "nomic-embed-text"],
-    anthropic: ["claude-3-5-sonnet-20240620", "claude-3-opus-20240229", "claude-3-sonnet-20240229"],
   }
 
   const handleProviderChange = (provider: string) => {
@@ -128,7 +127,6 @@ export function SystemConfig() {
           <option value="openai">OpenAI</option>
           <option value="openrouter">OpenRouter</option>
           <option value="ollama">Ollama (Local)</option>
-          <option value="anthropic">Anthropic</option>
         </select>
 
         <label className="text-sm text-muted-foreground block mb-2">Model Selection</label>
@@ -137,11 +135,17 @@ export function SystemConfig() {
           onChange={(e) => setFormData({ ...formData, model: e.target.value })}
           className="w-full bg-slate-900/50 dark:bg-slate-900 backdrop-blur-xl border border-white/20 rounded-2xl px-4 py-2 text-foreground outline-none focus:border-cyan-400/50 transition-colors [&>option]:bg-slate-900 [&>option]:text-white"
         >
-          {(PROVIDER_MODELS[formData.provider || "openai"] || []).map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
+          {(() => {
+            const options = PROVIDER_MODELS[formData.provider || "openai"] || []
+            const finalOptions = formData.model && !options.includes(formData.model)
+              ? [formData.model, ...options]
+              : options
+            return finalOptions.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))
+          })()}
         </select>
       </div>
 

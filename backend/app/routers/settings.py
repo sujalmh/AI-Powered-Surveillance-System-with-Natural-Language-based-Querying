@@ -34,6 +34,16 @@ class LlmConfigRequest(LlmConfig):
     pass
 
 
+# Constants for masking
+MASK_ELLIPSIS = "..."
+MASK_SHORT = "****"
+
+
+def _is_masked(key: str) -> bool:
+    """Check if the provided key is a masked visualization."""
+    return MASK_ELLIPSIS in (key or "") or key == MASK_SHORT
+
+
 def _get_mode() -> IndexingMode:
     doc = app_settings.find_one({"key": "indexing_mode"}, {"_id": 0, "value": 1})
     if doc and isinstance(doc.get("value"), str) and doc["value"] in ("structured", "semantic", "both"):
@@ -63,6 +73,12 @@ def _get_llm_settings() -> dict:
 
 
 def _set_llm_settings(config: dict) -> None:
+    # If the incoming api_key is masked, don't overwrite the existing one
+    incoming_key = config.get("api_key", "")
+    if _is_masked(incoming_key):
+        existing = _get_llm_settings()
+        config["api_key"] = existing.get("api_key", incoming_key)
+        
     app_settings.update_one(
         {"key": "llm_config"},
         {"$set": {"key": "llm_config", "value": config}},
@@ -86,7 +102,13 @@ def put_indexing_mode(req: IndexingModeRequest) -> IndexingModeResponse:
 
 @router.get("/llm-config", response_model=LlmConfigResponse)
 def get_llm_config() -> LlmConfigResponse:
-    return LlmConfigResponse(**_get_llm_settings())
+    cfg = _get_llm_settings()
+    key = cfg.get("api_key", "")
+    if key and len(key) > 10:
+        cfg["api_key"] = f"{key[:7]}{MASK_ELLIPSIS}{key[-4:]}"
+    elif key:
+        cfg["api_key"] = MASK_SHORT
+    return LlmConfigResponse(**cfg)
 
 
 @router.put("/llm-config", response_model=LlmConfigResponse)

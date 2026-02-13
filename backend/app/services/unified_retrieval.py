@@ -296,6 +296,19 @@ class UnifiedRetrieval:
         
         print(f"[UnifiedRetrieval] MongoDB filter: {mongo_filter}")
         logger.debug(f"MongoDB filter: {mongo_filter}")
+
+        # Normalize object name to lowercase (YOLO stores lowercase names)
+        if "objects.object_name" in mongo_filter:
+            mongo_filter["objects.object_name"] = str(mongo_filter["objects.object_name"]).lower()
+
+        # Ensure timestamp filter values are consistent ISO strings
+        if "timestamp" in mongo_filter:
+            ts_f = mongo_filter["timestamp"]
+            if isinstance(ts_f, dict):
+                for op in ("$gte", "$lte", "$gt", "$lt"):
+                    if op in ts_f and isinstance(ts_f[op], str):
+                        # Normalize: strip trailing Z or +/-HH:MM timezone offset
+                        ts_f[op] = re.sub(r"(Z|[+-]\d{2}:\d{2})$", "", ts_f[op])
         
         if "timestamp" in mongo_filter:
             ts_f = mongo_filter["timestamp"]
@@ -429,7 +442,7 @@ class UnifiedRetrieval:
         
         # Lower confidence threshold for action queries (they need more lenient matching)
         has_action = parsed_filter.get("action") is not None
-        min_confidence = 0.15 if has_action else 0.25
+        min_confidence = 0.10 if has_action else 0.15
         
         try:
             result = search_unstructured(
@@ -576,8 +589,9 @@ class UnifiedRetrieval:
                     continue
                 
                 tid = obj.get("track_id", -1)
-                if tid is None or tid < 0:
-                    continue
+                # Use a synthetic track key for trackless detections instead of dropping them
+                if tid is None or (isinstance(tid, (int, float)) and tid < 0):
+                    tid = f"notrak_{cam}_{ts.isoformat()}_{id(obj)}"  # synthetic unique key
                 
                 key = (cam, tid)
                 per_track.setdefault(key, []).append(ts)

@@ -455,7 +455,9 @@ def send(req: ChatSendRequest) -> ChatSendResponse:
 
         # If LLM suggested a relative window and absolute timestamp not provided, expand to [now-last_minutes, now]
         tsf = parsed.get("timestamp")
-        if "__last_minutes" in parsed and not tsf:
+        # Fix: empty dict {} is truthy in Python, so check for actual content
+        has_absolute_ts = isinstance(tsf, dict) and (tsf.get("$gte") or tsf.get("$lte"))
+        if "__last_minutes" in parsed and not has_absolute_ts:
             try:
                 minutes = int(parsed["__last_minutes"])
                 now = datetime.utcnow()
@@ -463,6 +465,14 @@ def send(req: ChatSendRequest) -> ChatSendResponse:
                 parsed["timestamp"] = {"$gte": start.isoformat(), "$lte": now.isoformat()}
             except Exception:
                 pass
+
+        # Default time window: if no time filter at all, default to last 24 hours
+        # This prevents queries from searching the entire detection history
+        if "timestamp" not in parsed and "__last_minutes" not in parsed:
+            now = datetime.utcnow()
+            start = now - timedelta(hours=24)
+            parsed["timestamp"] = {"$gte": start.isoformat(), "$lte": now.isoformat()}
+            parsed["__last_minutes"] = 1440
 
         # Execute unified hybrid retrieval
         logger.info("Starting unified hybrid retrieval...")
