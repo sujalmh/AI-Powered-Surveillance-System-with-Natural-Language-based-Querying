@@ -37,6 +37,11 @@ try:
 except Exception:
     settings_router = None  # type: ignore
 
+try:
+    from backend.app.routers.dashboard import router as dashboard_router  # type: ignore
+except Exception:
+    dashboard_router = None  # type: ignore
+
 
 app = FastAPI(title=settings.APP_NAME, version=settings.VERSION)
 
@@ -68,6 +73,8 @@ if semantic_router:
     app.include_router(semantic_router, prefix="/api/semantic", tags=["semantic"])
 if settings_router:
     app.include_router(settings_router, prefix="/api/settings", tags=["settings"])
+if dashboard_router:
+    app.include_router(dashboard_router, prefix="/api/dashboard", tags=["dashboard"])
 
 # Static media mounts (local disk). Access: /media/{type}/...
 app.mount("/media/recordings", StaticFiles(directory=str(settings.RECORDINGS_DIR)), name="recordings")
