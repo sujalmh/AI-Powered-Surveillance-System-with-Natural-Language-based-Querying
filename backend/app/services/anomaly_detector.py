@@ -308,7 +308,8 @@ class AnomalyDetector:
                 hourly[hour] = {"total": 0, "cameras": {}}
             hourly[hour]["total"] += count
             if cam is not None:
-                hourly[hour]["cameras"][cam] = count
+                # MongoDB requires keys to be strings
+                hourly[hour]["cameras"][str(cam)] = count
 
         return hourly
 

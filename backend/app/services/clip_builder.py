@@ -52,10 +52,27 @@ def _parse_ts_from_filename(name: str) -> Optional[datetime]:
     return None
 
 
+def _parse_whitelist(stamps: List[str]) -> Set[datetime]:
+    out = set()
+    for s in stamps:
+        try:
+            # Replace Z with +00:00 to handle UTC explicitly
+            safe = s.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(safe)
+            if dt.tzinfo is not None:
+                # Convert to UTC and strip timezone info
+                dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+            out.add(dt)
+        except Exception:
+            pass
+    return out
+
+
 def _collect_snapshots(
     camera_id: int,
     start_dt: datetime,
     end_dt: datetime,
+    allowed_timestamps: Optional[List[str]] = None,
     whitelist_dts: Optional[Set[datetime]] = None,
     whitelist_tolerance_sec: float = 5.0,
 ) -> List[Tuple[datetime, Path]]:
@@ -63,6 +80,12 @@ def _collect_snapshots(
     if not cam_dir.exists():
         return []
     files: List[Tuple[datetime, Path]] = []
+    
+    # Parse allowed timestamps into a set of datetime objects for efficient lookup
+    whitelist_dts: Optional[Set[datetime]] = None
+    if allowed_timestamps:
+        whitelist_dts = _parse_whitelist(allowed_timestamps)
+
     for p in cam_dir.glob("*.jpg"):
         ts = _parse_ts_from_filename(p.name)
         if ts is None:

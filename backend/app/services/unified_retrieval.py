@@ -310,7 +310,14 @@ class UnifiedRetrieval:
                         # Normalize: strip trailing Z or +/-HH:MM timezone offset
                         ts_f[op] = re.sub(r"(Z|[+-]\d{2}:\d{2})$", "", ts_f[op])
         
-        # Increase limit for color queries to get better distribution
+        if "timestamp" in mongo_filter:
+            ts_f = mongo_filter["timestamp"]
+            if isinstance(ts_f, dict):
+                for op in ("$gte", "$lte", "$gt", "$lt"):
+                    if op in ts_f and isinstance(ts_f[op], str):
+                        # Normalize: strip trailing Z or +/-HH:MM timezone offset
+                        ts_f[op] = re.sub(r"(Z|[+-]\d{2}:\d{2})$", "", ts_f[op])
+        # Initialize query_limit to avoid UnboundLocalError
         query_limit = limit
         if parsed_filter.get("__ask_color"):
             query_limit = max(limit, 200)
@@ -606,6 +613,7 @@ class UnifiedRetrieval:
             if not times:
                 continue
             
+            seg_start_idx = 0
             start = times[0]
             prev = times[0]
             
@@ -614,7 +622,7 @@ class UnifiedRetrieval:
             # Create a representative object with aggregated attributes
             aggregated_objects = self._aggregate_objects(track_objects)
             
-            for t in times[1:]:
+            for i, t in enumerate(times[1:], start=1):
                 gap = (t - prev).total_seconds()
                 if gap <= self.max_gap_seconds:
                     prev = t
@@ -626,10 +634,11 @@ class UnifiedRetrieval:
                     m["duration_seconds"] = max(0, int((prev - start).total_seconds()))
                     m["objects"] = aggregated_objects  # Attach full object details
                     # Collect timestamps for this segment to whitelist frames in clip builder
-                    m["matched_timestamps"] = [t.isoformat() for t in times[times.index(start):times.index(prev)+1]]
+                    m["matched_timestamps"] = [t.isoformat() for t in times[seg_start_idx:i]]
                     merged.append(m)
                     start = t
                     prev = t
+                    seg_start_idx = i
             
             # Close last segment
             m = dict(meta[key])
@@ -637,7 +646,7 @@ class UnifiedRetrieval:
             m["end"] = prev.isoformat()
             m["duration_seconds"] = max(0, int((prev - start).total_seconds()))
             m["objects"] = aggregated_objects  # Attach full object details
-            m["matched_timestamps"] = [t.isoformat() for t in times[times.index(start):times.index(prev)+1]]
+            m["matched_timestamps"] = [t.isoformat() for t in times[seg_start_idx:]]
             merged.append(m)
         
         merged.sort(key=lambda x: x.get("start", ""), reverse=True)
@@ -1062,7 +1071,7 @@ class UnifiedRetrieval:
                     continue
 
                 gap = (ts - seg_end).total_seconds() if seg_end is not None else 0
-                if gap <= self.max_gap_seconds:
+                if gap <= self.join_gap_seconds:
                     seg_end = ts
                     if cnt > seg_peak_count:
                         seg_peak_count = cnt
@@ -1135,8 +1144,8 @@ class UnifiedRetrieval:
     def _parse_ts(self, ts: str) -> datetime:
         """Parse timestamp string to datetime."""
         try:
-            # Robust parsing: handle Z and offsets
-            safe = ts.replace("Z", "").split("+")[0]
+            # Robust parsing: strip Z and +/-HH:MM timezone offset
+            safe = re.sub(r"(Z|[+-]\d{2}:\d{2})$", "", ts)
             return datetime.fromisoformat(safe)
         except Exception:
             try:
