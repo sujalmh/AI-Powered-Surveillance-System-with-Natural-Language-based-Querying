@@ -68,7 +68,7 @@ export function RecentAlerts() {
 
       // Start SSE
       evtSource = api.streamAlerts({ last_ts: lastTs });
-      evtSource.onmessage = (e) => {
+      evtSource.onmessage = (e: MessageEvent) => {
         if (aborted) return;
         try {
           const data = JSON.parse(e.data);
@@ -80,9 +80,9 @@ export function RecentAlerts() {
             message: data.message || "Alert triggered",
           };
 
-          setLogs((prev) => {
+          setLogs((prev: AlertLog[]) => {
             // Avoid duplicates
-            if (prev.some((p) => p.id === newLog.id)) return prev;
+            if (prev.some((p: AlertLog) => p.id === newLog.id)) return prev;
             return [newLog, ...prev];
           });
         } catch (err) {
@@ -90,7 +90,7 @@ export function RecentAlerts() {
         }
       };
 
-      evtSource.onerror = (e) => {
+      evtSource.onerror = (e: Event) => {
         if (aborted) return;
         // Check if connection closed or error
         if (evtSource?.readyState === EventSource.CLOSED) {
