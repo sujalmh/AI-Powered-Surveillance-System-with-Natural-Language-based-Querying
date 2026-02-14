@@ -237,7 +237,11 @@ def evaluate_realtime(
       want_name = None
 
     # --- NEW: Explicit Crowd Density ---
-    if event_type == "crowd_density" and want_name:
+    if event_type == "crowd_density":
+      if not want_name:
+        print(f"⚠️ Warning: Crowd density rule {rid} (camera {camera_id}) missing object name. Skipping.")
+        continue
+
       cnt = presence.get(want_name.lower(), 0)
       min_count = float(rule.get("min_count", 5))
       if cnt >= min_count and _cooldown_ok(rid, camera_id, cooldown):

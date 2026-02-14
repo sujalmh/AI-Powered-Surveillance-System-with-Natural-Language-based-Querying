@@ -53,9 +53,12 @@ export function RecentAlerts() {
 
   useEffect(() => {
     let evtSource: EventSource | null = null;
+    let aborted = false;
 
     // Initial load then stream
     load().then((initialLogs) => {
+      if (aborted) return;
+
       // Find latest timestamp to resume stream from
       let lastTs = undefined;
       if (initialLogs.length > 0) {
@@ -66,6 +69,7 @@ export function RecentAlerts() {
       // Start SSE
       evtSource = api.streamAlerts({ last_ts: lastTs });
       evtSource.onmessage = (e) => {
+        if (aborted) return;
         try {
           const data = JSON.parse(e.data);
           const newLog: AlertLog = {
@@ -87,6 +91,7 @@ export function RecentAlerts() {
       };
 
       evtSource.onerror = (e) => {
+        if (aborted) return;
         // Check if connection closed or error
         if (evtSource?.readyState === EventSource.CLOSED) {
           // optional: reconnect logic is handled by browser usually, but customized retry can go here
@@ -95,6 +100,7 @@ export function RecentAlerts() {
     });
 
     return () => {
+      aborted = true;
       if (evtSource) {
         evtSource.close();
       }
