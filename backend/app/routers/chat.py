@@ -111,6 +111,31 @@ def parse_simple_nl_to_filter(nl: str) -> Dict[str, Any]:
     - camera by simple pattern "camera {id}" or "at <location words>" (location becomes string match)
     """
     txt = nl.lower()
+
+    number_words = {
+        "zero": 0,
+        "one": 1,
+        "two": 2,
+        "three": 3,
+        "four": 4,
+        "five": 5,
+        "six": 6,
+        "seven": 7,
+        "eight": 8,
+        "nine": 9,
+        "ten": 10,
+    }
+
+    def _to_int(tok: str) -> Optional[int]:
+        tok = (tok or "").strip().lower()
+        if not tok:
+            return None
+        if tok.isdigit():
+            try:
+                return int(tok)
+            except Exception:
+                return None
+        return number_words.get(tok)
     ask_color = bool(re.search(r"\b(color|colour|clothes|clothing|wearing|shirt|jacket|dress|pants|backpack|bag)\b", txt))
 
     # time: last X minutes/hours
@@ -131,6 +156,95 @@ def parse_simple_nl_to_filter(nl: str) -> Dict[str, Any]:
     elif re.search(r"\b(bag|backpack)\b", txt):
         # Not a YOLO class by default; we will keep object as person but later filter by attributes if available
         object_name = "person"
+
+    # count constraints (very common in user requests)
+    count_constraint: Optional[Dict[str, int]] = None
+
+    # "no person" / "without person" style
+    if re.search(r"\b(no|without|zero)\s+(person|people|persons)\b", txt):
+        object_name = "person"
+        count_constraint = {"eq": 0}
+    elif re.search(r"\b(no|without|zero)\s+(car|cars|vehicle|vehicles)\b", txt):
+        object_name = "car"
+        count_constraint = {"eq": 0}
+    else:
+        # "more than X people"
+        m_cnt = re.search(
+            r"\b(?:more than|greater than|over)\s+(\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)\s+(person|people|persons|car|cars|vehicle|vehicles)\b",
+            txt,
+        )
+        if m_cnt:
+            n = _to_int(m_cnt.group(1))
+            noun = m_cnt.group(2)
+            if n is not None:
+                count_constraint = {"gt": int(n)}
+                if noun in {"person", "people", "persons"}:
+                    object_name = "person"
+                elif noun in {"car", "cars", "vehicle", "vehicles"}:
+                    object_name = "car"
+
+        # "at least X people" / "X or more people" / "multiple people"
+        if count_constraint is None:
+            m_cnt = re.search(
+                r"\b(?:at least|minimum of)\s+(\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)\s+(person|people|persons|car|cars|vehicle|vehicles)\b",
+                txt,
+            )
+            if m_cnt:
+                n = _to_int(m_cnt.group(1))
+                noun = m_cnt.group(2)
+                if n is not None:
+                    count_constraint = {"gte": int(n)}
+                    if noun in {"person", "people", "persons"}:
+                        object_name = "person"
+                    elif noun in {"car", "cars", "vehicle", "vehicles"}:
+                        object_name = "car"
+
+        if count_constraint is None and re.search(r"\b(multiple|more than one|two or more)\s+(person|people|persons)\b", txt):
+            object_name = "person"
+            count_constraint = {"gte": 2}
+
+        # "exactly X people" / "X people"
+        if count_constraint is None:
+            m_cnt = re.search(
+                r"\b(?:exactly|equal to)\s+(\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)\s+(person|people|persons|car|cars|vehicle|vehicles)\b",
+                txt,
+            )
+            if m_cnt:
+                n = _to_int(m_cnt.group(1))
+                noun = m_cnt.group(2)
+                if n is not None:
+                    count_constraint = {"eq": int(n)}
+                    if noun in {"person", "people", "persons"}:
+                        object_name = "person"
+                    elif noun in {"car", "cars", "vehicle", "vehicles"}:
+                        object_name = "car"
+
+        if count_constraint is None:
+            m_cnt = re.search(
+                r"\b(\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)\s+(person|people|persons|car|cars|vehicle|vehicles)\b",
+                txt,
+            )
+            if m_cnt:
+                n = _to_int(m_cnt.group(1))
+                noun = m_cnt.group(2)
+                if n is not None:
+                    count_constraint = {"eq": int(n)}
+                    if noun in {"person", "people", "persons"}:
+                        object_name = "person"
+                    elif noun in {"car", "cars", "vehicle", "vehicles"}:
+                        object_name = "car"
+
+    # Result count hints: "only one clip", "top 3 clips"
+    result_limit: Optional[int] = None
+    if re.search(r"\bonly\s+one\s+(clip|clips|video|videos|result|results)\b", txt):
+        result_limit = 1
+    else:
+        m_rl = re.search(r"\b(?:top|first|show|retrieve)\s+(\d+)\s+(clip|clips|video|videos|result|results)\b", txt)
+        if m_rl:
+            try:
+                result_limit = max(1, int(m_rl.group(1)))
+            except Exception:
+                result_limit = None
 
     # If the question is about color and no explicit time was provided, default to last 60 minutes
     if last_minutes is None and ask_color:
@@ -174,6 +288,25 @@ def parse_simple_nl_to_filter(nl: str) -> Dict[str, Any]:
         f["objects.object_name"] = object_name
     if color:
         f["objects.color"] = color
+    if count_constraint:
+        f["count_constraint"] = count_constraint
+    if result_limit is not None:
+        f["__result_limit"] = int(result_limit)
+
+    # Track raw/semantic payload for unified retrieval and answer generation
+    f["__raw"] = nl
+    f["__semantic_query"] = nl
+
+    # Basic intent/query type inference for fallback mode
+    if re.search(r"\b(how many|count|number of)\b", txt):
+        f["query_type"] = "informational"
+        f["__intent"] = "count"
+    elif re.search(r"\b(track|where|went|follow)\b", txt):
+        f["query_type"] = "visual"
+        f["__intent"] = "track"
+    else:
+        f["query_type"] = "visual"
+        f["__intent"] = "find"
 
     # Note: location is not directly stored on detections; it is a property of cameras.
     # Basic baseline ignores location unless we add a join. For now we return it in parsed_filter for UI awareness.
@@ -184,194 +317,6 @@ def parse_simple_nl_to_filter(nl: str) -> Dict[str, Any]:
         f["__ask_color"] = True
 
     return f
-
-
-def run_detection_query(filter_query: Dict[str, Any], limit: int = 50) -> List[Dict[str, Any]]:
-    cur = detections_col.find(filter_query, {"_id": 0}).sort("timestamp", -1).limit(limit)
-    return list(cur)
-
-
-def _parse_ts(ts: str) -> datetime:
-    try:
-        return datetime.fromisoformat(ts)
-    except Exception:
-        # Fallback tolerant parser
-        try:
-            return datetime.strptime(ts.split(".")[0], "%Y-%m-%dT%H:%M:%S")
-        except Exception:
-            return datetime.utcnow()
-
-
-def _object_matches(obj: Dict[str, Any], parsed: Dict[str, Any]) -> bool:
-    if not isinstance(obj, dict):
-        return False
-    name = parsed.get("objects.object_name")
-    color = parsed.get("objects.color")
-    if name and obj.get("object_name") != name:
-        return False
-    if color and obj.get("color") != color:
-        return False
-    return True
-
-
-def merge_tracks(results: List[Dict[str, Any]], parsed: Dict[str, Any], max_gap_seconds: int = 3) -> List[Dict[str, Any]]:
-    """
-    Merge contiguous detections belonging to the same track (same camera_id + track_id)
-    into single intervals when the time gap between consecutive hits is <= max_gap_seconds.
-    Returns a flat list of merged intervals for all tracks.
-    """
-    # Collect timestamps per (camera_id, track_id) for matching objects
-    per_track: Dict[tuple, List[datetime]] = {}
-    meta: Dict[tuple, Dict[str, Any]] = {}
-
-    for doc in results:
-        cam = doc.get("camera_id")
-        ts = _parse_ts(doc.get("timestamp", ""))
-        for obj in doc.get("objects", []):
-            if not _object_matches(obj, parsed):
-                continue
-            tid = obj.get("track_id", -1)
-            if tid is None or tid < 0:
-                # Skip untracked objects for merging
-                continue
-            key = (cam, tid)
-            per_track.setdefault(key, []).append(ts)
-            # Store representative metadata
-            if key not in meta:
-                meta[key] = {
-                    "camera_id": cam,
-                    "track_id": tid,
-                    "object_name": obj.get("object_name"),
-                    "color": obj.get("color"),
-                }
-
-    merged: List[Dict[str, Any]] = []
-    for key, times in per_track.items():
-        times.sort()
-        if not times:
-            continue
-        start = times[0]
-        prev = times[0]
-        for t in times[1:]:
-            gap = (t - prev).total_seconds()
-            if gap <= max_gap_seconds:
-                # Continue current segment
-                prev = t
-            else:
-                # Close current segment and start a new one
-                m = dict(meta[key])
-                m["start"] = start.isoformat()
-                m["end"] = prev.isoformat()
-                m["duration_seconds"] = max(0, int((prev - start).total_seconds()))
-                merged.append(m)
-                start = t
-                prev = t
-        # Close last segment
-        m = dict(meta[key])
-        m["start"] = start.isoformat()
-        m["end"] = prev.isoformat()
-        m["duration_seconds"] = max(0, int((prev - start).total_seconds()))
-        merged.append(m)
-
-    # Sort merged intervals by start time descending (most recent first)
-    merged.sort(key=lambda x: x.get("start", ""), reverse=True)
-    return merged
-
-
-def combine_track_segments(merged: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Combine all contiguous segments for each (camera_id, track_id) into a single span:
-    start = min(segment.start), end = max(segment.end). This produces one clip per person/track.
-    """
-    by_key: Dict[tuple, Dict[str, Any]] = {}
-    for seg in merged:
-        key = (seg.get("camera_id"), seg.get("track_id"))
-        s = _parse_ts(seg.get("start", ""))
-        e = _parse_ts(seg.get("end", ""))
-        if key not in by_key:
-            by_key[key] = {
-                "camera_id": seg.get("camera_id"),
-                "track_id": seg.get("track_id"),
-                "object_name": seg.get("object_name"),
-                "color": seg.get("color"),
-                "start": s,
-                "end": e,
-            }
-        else:
-            if s < by_key[key]["start"]:
-                by_key[key]["start"] = s
-            if e > by_key[key]["end"]:
-                by_key[key]["end"] = e
-    out: List[Dict[str, Any]] = []
-    for v in by_key.values():
-        start_dt = v["start"]
-        end_dt = v["end"]
-        out.append({
-            "camera_id": v["camera_id"],
-            "track_id": v["track_id"],
-            "object_name": v.get("object_name"),
-            "color": v.get("color"),
-            "start": start_dt.isoformat(),
-            "end": end_dt.isoformat(),
-            "duration_seconds": max(0, int((end_dt - start_dt).total_seconds())),
-        })
-    out.sort(key=lambda x: x.get("start", ""), reverse=True)
-    return out
-
-
-def coalesce_across_tracks(merged: List[Dict[str, Any]], join_gap_seconds: int = 10) -> List[Dict[str, Any]]:
-    """
-    Coalesce segments across different track_ids when they are temporally adjacent to form one final clip.
-    Groups by (camera_id, object_name, color) and merges when next.start - prev.end <= join_gap_seconds.
-    This handles tracker ID churn so many 2-second clips become one continuous clip like 09:19:20 → 09:20:20.
-    """
-    # Group by camera + object/color signature
-    groups: Dict[tuple, List[Dict[str, Any]]] = {}
-    for seg in merged:
-        key = (seg.get("camera_id"), seg.get("object_name"), seg.get("color"))
-        groups.setdefault(key, []).append(seg)
-
-    output: List[Dict[str, Any]] = []
-    for key, segs in groups.items():
-        # Sort by start time
-        segs_sorted = sorted(segs, key=lambda s: s.get("start", ""))
-        if not segs_sorted:
-            continue
-        # Rolling merge using join_gap_seconds
-        cur_start = _parse_ts(segs_sorted[0]["start"])
-        cur_end = _parse_ts(segs_sorted[0]["end"])
-        cam, obj, col = key
-        for seg in segs_sorted[1:]:
-            s = _parse_ts(seg["start"])
-            e = _parse_ts(seg["end"])
-            gap = (s - cur_end).total_seconds()
-            if gap <= join_gap_seconds:
-                # Extend current window
-                if e > cur_end:
-                    cur_end = e
-            else:
-                # Emit current and start a new one
-                output.append({
-                    "camera_id": cam,
-                    "object_name": obj,
-                    "color": col,
-                    "start": cur_start.isoformat(),
-                    "end": cur_end.isoformat(),
-                    "duration_seconds": max(0, int((cur_end - cur_start).total_seconds())),
-                })
-                cur_start, cur_end = s, e
-        # Emit final
-        output.append({
-            "camera_id": cam,
-            "object_name": obj,
-            "color": col,
-            "start": cur_start.isoformat(),
-            "end": cur_end.isoformat(),
-            "duration_seconds": max(0, int((cur_end - cur_start).total_seconds())),
-        })
-    # Sort combined spans by start descending
-    output.sort(key=lambda x: x.get("start", ""), reverse=True)
-    return output
 
 
 def _guess_count_from_text(nl: str) -> Optional[int]:
@@ -434,33 +379,6 @@ def _maybe_create_alert_from_nl(nl: str, parsed: Dict[str, Any]) -> Optional[Dic
     except Exception:
         return None
 
-def craft_answer(nl: str, parsed: Dict[str, Any], results: List[Dict[str, Any]]) -> str:
-    # Count unique persons by distinct (camera_id, track_id) for matching objects.
-    unique_ids = set()
-    for doc in results:
-        cam = doc.get("camera_id")
-        for obj in doc.get("objects", []):
-            if not _object_matches(obj, parsed):
-                continue
-            tid = obj.get("track_id", -1)
-            if tid is None or tid < 0:
-                # Skip untracked
-                continue
-            unique_ids.add((cam, tid))
-
-    count = len(unique_ids)
-    obj = parsed.get("objects.object_name")
-    color = parsed.get("objects.color")
-    cam = parsed.get("camera_id")
-    parts = []
-    if obj:
-        parts.append(obj)
-    if color:
-        parts.append(color.lower())
-    subject = " ".join(parts) if parts else "objects"
-    where = f" on camera {cam}" if cam is not None else ""
-    return f"Found {count} {subject}{where} for your query."
-
 
 @router.get("/history", response_model=ChatHistoryResponse)
 def history(session_id: str) -> ChatHistoryResponse:
@@ -485,23 +403,33 @@ def history(session_id: str) -> ChatHistoryResponse:
 def sessions(limit: int = 20) -> List[ChatSession]:
     """
     Return recent chat sessions with last message and count.
+    Optimized to use MongoDB aggregation.
     """
     try:
-        ids = chat_col.distinct("session_id")
-        sessions: List[ChatSession] = []
-        for sid in ids:
-            # Latest message for this session
-            last = chat_col.find({"session_id": sid}, {"_id": 0}).sort("created_at", -1).limit(1)
-            last_msg = None
-            last_time = None
-            for m in last:
-                last_msg = m.get("content")
-                last_time = m.get("created_at")
-            count = chat_col.count_documents({"session_id": sid})
-            sessions.append(ChatSession(session_id=sid, last_message=last_msg, last_message_time=last_time, message_count=count))
-        # Sort by last_message_time desc
-        sessions.sort(key=lambda s: s.last_message_time or "", reverse=True)
-        return sessions[:limit]
+        pipeline = [
+            {"$sort": {"created_at": -1}},
+            {
+                "$group": {
+                    "_id": "$session_id",
+                    "last_message": {"$first": "$content"},
+                    "last_message_time": {"$first": "$created_at"},
+                    "message_count": {"$sum": 1}
+                }
+            },
+            {"$sort": {"last_message_time": -1}},
+            {"$limit": limit},
+            {
+                "$project": {
+                    "_id": 0,
+                    "session_id": "$_id",
+                    "last_message": 1,
+                    "last_message_time": 1,
+                    "message_count": 1
+                }
+            }
+        ]
+        docs = list(chat_col.aggregate(pipeline))
+        return [ChatSession(**d) for d in docs]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list chat sessions: {e}") from e
 
@@ -527,7 +455,9 @@ def send(req: ChatSendRequest) -> ChatSendResponse:
 
         # If LLM suggested a relative window and absolute timestamp not provided, expand to [now-last_minutes, now]
         tsf = parsed.get("timestamp")
-        if "__last_minutes" in parsed and not tsf:
+        # Fix: empty dict {} is truthy in Python, so check for actual content
+        has_absolute_ts = isinstance(tsf, dict) and (tsf.get("$gte") or tsf.get("$lte"))
+        if "__last_minutes" in parsed and not has_absolute_ts:
             try:
                 minutes = int(parsed["__last_minutes"])
                 now = datetime.utcnow()
@@ -535,6 +465,14 @@ def send(req: ChatSendRequest) -> ChatSendResponse:
                 parsed["timestamp"] = {"$gte": start.isoformat(), "$lte": now.isoformat()}
             except Exception:
                 pass
+
+        # Default time window: if no time filter at all, default to last 24 hours
+        # This prevents queries from searching the entire detection history
+        if "timestamp" not in parsed and "__last_minutes" not in parsed:
+            now = datetime.utcnow()
+            start = now - timedelta(hours=24)
+            parsed["timestamp"] = {"$gte": start.isoformat(), "$lte": now.isoformat()}
+            parsed["__last_minutes"] = 1440
 
         # Execute unified hybrid retrieval
         logger.info("Starting unified hybrid retrieval...")
@@ -594,3 +532,4 @@ def send(req: ChatSendRequest) -> ChatSendResponse:
         return ChatSendResponse(**response_data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chat processing failed: {e}") from e
+

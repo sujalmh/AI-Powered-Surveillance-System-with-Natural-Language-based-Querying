@@ -1,4 +1,5 @@
 import os
+import logging
 from pathlib import Path
 from typing import List
 from dotenv import load_dotenv
@@ -40,9 +41,15 @@ class Settings:
         )
 
         # LLM / NLP (optional; wire later)
-        self.LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "")  # e.g., "openai", "ollama"
+        self.LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "").strip().lower()  # e.g., "openai", "ollama", "openrouter"
         self.OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+        
+        # Auto-detect OpenRouter if key starts with sk-or- and provider is not set
+        if self.OPENAI_API_KEY.startswith("sk-or-") and not self.LLM_PROVIDER:
+            self.LLM_PROVIDER = "openrouter"
+            
         self.OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        self.OPENROUTER_BASE_URL: str = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
         self.NL_DEFAULT_MODEL: str = os.getenv("NL_DEFAULT_MODEL", "gpt-4o-mini")
 
         # Semantic VLM / Vector Search (optional; can be disabled)
@@ -74,6 +81,29 @@ class Settings:
         # Hugging Face auth for private/large models
         self.HF_TOKEN: str = os.getenv("HF_TOKEN", "")
         self.HF_HOME: str = os.getenv("HF_HOME", "")
+
+    def get_active_llm_config(self) -> dict:
+        """Fetch active LLM configuration from MongoDB (overrides .env if present)."""
+        try:
+            from backend.app.db.mongo import app_settings
+            doc = app_settings.find_one({"key": "llm_config"}, {"_id": 0, "value": 1})
+            if doc and isinstance(doc.get("value"), dict):
+                cfg = doc["value"]
+                # If provider is openrouter but base url is not set, it should use the default
+                return {
+                    "provider": cfg.get("provider", self.LLM_PROVIDER),
+                    "model": cfg.get("model", self.NL_DEFAULT_MODEL),
+                    "api_key": cfg.get("api_key", self.OPENAI_API_KEY)
+                }
+        except Exception as e:
+            # Fallback to env if DB not available or table doesn't exist yet
+            logging.exception(f"Failed to load llm_config from MongoDB in get_active_llm_config: {e}")
+            
+        return {
+            "provider": self.LLM_PROVIDER,
+            "model": self.NL_DEFAULT_MODEL,
+            "api_key": self.OPENAI_API_KEY
+        }
 
     def ensure_storage_dirs(self) -> None:
         self.RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)

@@ -18,28 +18,58 @@ class AnswerGenerator:
     
     def __init__(self):
         self.llm = None
-        self._initialize_llm()
+        self._current_cfg = {}
+        self._ensure_llm()
     
+    def _ensure_llm(self):
+        """Ensure LLM is initialized and consistent with current DB settings."""
+        llm_cfg = settings.get_active_llm_config()
+        
+        # Check if config has changed
+        if (self.llm is not None and 
+            llm_cfg.get("provider") == self._current_cfg.get("provider") and
+            llm_cfg.get("model") == self._current_cfg.get("model") and
+            llm_cfg.get("api_key") == self._current_cfg.get("api_key")):
+            return
+
+        self._current_cfg = llm_cfg
+        self._initialize_llm()
+
     def _initialize_llm(self):
-        """Initialize LLM (OpenAI by default)."""
-        provider = (settings.LLM_PROVIDER or "").strip().lower()
+        """Initialize LLM based on current config."""
+        provider = self._current_cfg.get("provider", "").strip().lower()
+        model = self._current_cfg.get("model")
+        api_key = self._current_cfg.get("api_key")
         
         # Prioritize OpenAI
-        if provider == "openai" or (not provider and settings.OPENAI_API_KEY):
+        if provider == "openai" or (not provider and api_key):
             try:
                 from langchain_openai import ChatOpenAI
                 self.llm = ChatOpenAI(
-                    model=settings.NL_DEFAULT_MODEL or "gpt-4o-mini",
-                    temperature=0.3,  # Slightly creative but still factual
+                    model=model or "gpt-4o-mini",
+                    api_key=api_key,
+                    temperature=0.3,
                 )
             except Exception as e:
                 print(f"Failed to initialize OpenAI: {e}")
+                self.llm = None
+        elif provider == "openrouter":
+            try:
+                from langchain_openai import ChatOpenAI
+                self.llm = ChatOpenAI(
+                    model=model or "gpt-4o-mini",
+                    openai_api_base=settings.OPENROUTER_BASE_URL,
+                    openai_api_key=api_key or settings.OPENAI_API_KEY,
+                    temperature=0.3,
+                )
+            except Exception as e:
+                print(f"Failed to initialize OpenRouter: {e}")
                 self.llm = None
         elif provider == "ollama":
             try:
                 from langchain_community.chat_models import ChatOllama
                 self.llm = ChatOllama(
-                    model=settings.NL_DEFAULT_MODEL or "llama3",
+                    model=model or "llama3.1",
                     base_url=settings.OLLAMA_BASE_URL,
                     temperature=0.3
                 )
@@ -68,6 +98,7 @@ class AnswerGenerator:
         Returns:
             Natural language answer string
         """
+        self._ensure_llm()
         if not self.llm:
             # Fallback to template-based answer if LLM unavailable
             return self._fallback_answer(query_type, results, parsed_filter)
@@ -108,17 +139,17 @@ class AnswerGenerator:
         
         # Collect detailed data from results
         for r in results:
-            if 'camera_id' in r:
+            if r.get('camera_id') is not None:
                 camera_ids.append(r['camera_id'])
-            if 'start' in r:
+            if r.get('start'):
                 timestamps_list.append(r['start'])
-            elif 'timestamp' in r:
+            elif r.get('timestamp'):
                 timestamps_list.append(r['timestamp'])
-            if 'object_name' in r:
+            if r.get('object_name'):
                 objects_found.append(r['object_name'])
-            if 'action' in r:
+            if r.get('action'):
                 actions_found.append(r['action'])
-            if 'color' in r:
+            if r.get('color'):
                 attributes_found.append(f"color: {r['color']}")
         
         # Format collected data

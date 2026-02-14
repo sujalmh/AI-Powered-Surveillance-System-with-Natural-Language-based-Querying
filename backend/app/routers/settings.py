@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal, Optional, Dict, Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -20,6 +20,30 @@ class IndexingModeRequest(BaseModel):
     indexing_mode: IndexingMode
 
 
+class LlmConfig(BaseModel):
+    provider: str
+    model: str
+    api_key: str
+
+
+class LlmConfigResponse(LlmConfig):
+    pass
+
+
+class LlmConfigRequest(LlmConfig):
+    pass
+
+
+# Constants for masking
+MASK_ELLIPSIS = "..."
+MASK_SHORT = "****"
+
+
+def _is_masked(key: str) -> bool:
+    """Check if the provided key is a masked visualization."""
+    return MASK_ELLIPSIS in (key or "") or key == MASK_SHORT
+
+
 def _get_mode() -> IndexingMode:
     doc = app_settings.find_one({"key": "indexing_mode"}, {"_id": 0, "value": 1})
     if doc and isinstance(doc.get("value"), str) and doc["value"] in ("structured", "semantic", "both"):
@@ -36,6 +60,32 @@ def _set_mode(mode: IndexingMode) -> None:
     )
 
 
+def _get_llm_settings() -> dict:
+    from backend.app.config import settings
+    doc = app_settings.find_one({"key": "llm_config"}, {"_id": 0, "value": 1})
+    if doc and isinstance(doc.get("value"), dict):
+        return doc["value"]
+    return {
+        "provider": settings.LLM_PROVIDER,
+        "model": settings.NL_DEFAULT_MODEL,
+        "api_key": settings.OPENAI_API_KEY
+    }
+
+
+def _set_llm_settings(config: dict) -> None:
+    # If the incoming api_key is masked, don't overwrite the existing one
+    incoming_key = config.get("api_key", "")
+    if _is_masked(incoming_key):
+        existing = _get_llm_settings()
+        config["api_key"] = existing.get("api_key", incoming_key)
+        
+    app_settings.update_one(
+        {"key": "llm_config"},
+        {"$set": {"key": "llm_config", "value": config}},
+        upsert=True,
+    )
+
+
 @router.get("/indexing-mode", response_model=IndexingModeResponse)
 def get_indexing_mode() -> IndexingModeResponse:
     return IndexingModeResponse(indexing_mode=_get_mode())
@@ -48,6 +98,26 @@ def put_indexing_mode(req: IndexingModeRequest) -> IndexingModeResponse:
         return IndexingModeResponse(indexing_mode=req.indexing_mode)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"failed to save indexing mode: {e}")
+
+
+@router.get("/llm-config", response_model=LlmConfigResponse)
+def get_llm_config() -> LlmConfigResponse:
+    cfg = _get_llm_settings()
+    key = cfg.get("api_key", "")
+    if key and len(key) > 10:
+        cfg["api_key"] = f"{key[:7]}{MASK_ELLIPSIS}{key[-4:]}"
+    elif key:
+        cfg["api_key"] = MASK_SHORT
+    return LlmConfigResponse(**cfg)
+
+
+@router.put("/llm-config", response_model=LlmConfigResponse)
+def put_llm_config(req: LlmConfigRequest) -> LlmConfigResponse:
+    try:
+        _set_llm_settings(req.dict())
+        return LlmConfigResponse(**req.dict())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"failed to save llm config: {e}")
 
 
 @router.delete("/reset")

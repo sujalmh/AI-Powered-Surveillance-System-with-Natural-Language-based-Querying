@@ -27,7 +27,7 @@ def search_unstructured(
     camera_id: Optional[int] = None,
     from_iso: Optional[str] = None,
     to_iso: Optional[str] = None,
-    min_confidence: float = 0.25,
+    min_confidence: float = 0.15,
 ) -> Dict[str, Any]:
     """
     Semantic (vector-only) search using CLIP text embedding + FAISS.
@@ -53,6 +53,9 @@ def search_unstructured(
         # Time window filter if available
         try:
             ts = meta.get("frame_ts")
+            if (from_iso or to_iso) and not ts:
+                # Strict time-bounded queries should not accept rows without timestamps
+                return False
             if ts and (from_iso or to_iso):
                 dt = datetime.fromisoformat(ts)
                 if from_iso and dt < datetime.fromisoformat(from_iso):
@@ -63,7 +66,9 @@ def search_unstructured(
             pass
         return True
 
-    hits = store.vector_search(emb[0], top_k=top_k, filter_pred=_filter_pred)
+    # Over-fetch to compensate for post-filtering losses (camera/time filters)
+    fetch_multiplier = 4 if (camera_id is not None or from_iso or to_iso) else 1
+    hits = store.vector_search(emb[0], top_k=top_k * fetch_multiplier, filter_pred=_filter_pred)
 
     # Group by clip to form clip-level results
     by_clip: Dict[str, Dict[str, Any]] = {}
