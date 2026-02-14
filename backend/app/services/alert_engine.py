@@ -221,7 +221,10 @@ def evaluate_realtime(
 
     cooldown = float(rd.get("cooldown_sec", 60.0))
 
-    # 1) Count-based (e.g., "more than 3 people in frame")
+    # Extract event type explicitly
+    event_type = str(rule.get("event", "")).lower()
+
+    # 1) Count-based setup (getting want_name)
     # rule.objects[0].name and rule.count {">=": N}
     # Fall back to >=1 if no count specified
     trig_count = False
@@ -233,7 +236,90 @@ def evaluate_realtime(
     except Exception:
       want_name = None
 
-    if want_name:
+    # --- NEW: Explicit Crowd Density ---
+    if event_type == "crowd_density" and want_name:
+      cnt = presence.get(want_name.lower(), 0)
+      min_count = float(rule.get("min_count", 5))
+      if cnt >= min_count and _cooldown_ok(rid, camera_id, cooldown):
+        _insert_alert_log(
+          rd,
+          camera_id,
+          {
+            "message": f"High crowd density detected: {cnt} {want_name}(s) (limit {int(min_count)})",
+            "snapshot": snapshot_url,
+            "class": want_name,
+            "count": cnt,
+          },
+        )
+        continue
+
+    # --- NEW: Suspicious Loitering ---
+    if event_type == "loitering" and want_name:
+      max_duration = float(rule.get("duration_sec", 60.0))
+      triggered_loiter = False
+      loitering_objs = []
+      
+      for o in objects:
+        if str(o.get("object_name", "")).lower() == want_name.lower():
+            th = o.get("track_history")
+            if th and isinstance(th, dict):
+                try:
+                    fs_str = th.get("first_seen")
+                    ls_str = th.get("last_seen")
+                    if fs_str and ls_str:
+                        fs = datetime.fromisoformat(fs_str.replace("Z", "+00:00"))
+                        ls = datetime.fromisoformat(ls_str.replace("Z", "+00:00"))
+                        
+                        if fs.tzinfo is None: fs = fs.replace(tzinfo=timezone.utc)
+                        if ls.tzinfo is None: ls = ls.replace(tzinfo=timezone.utc)
+
+                        duration = (ls - fs).total_seconds()
+                        if duration >= max_duration:
+                            triggered_loiter = True
+                            loitering_objs.append({
+                                "track_id": o.get("track_id"),
+                                "duration": round(duration, 1)
+                            })
+                except Exception:
+                    pass
+      
+      if triggered_loiter and _cooldown_ok(rid, camera_id, cooldown):
+        _insert_alert_log(
+            rd,
+            camera_id,
+            {
+                "message": f"Suspicious loitering detected: {len(loitering_objs)} {want_name}(s) > {max_duration}s",
+                "snapshot": snapshot_url,
+                "loitering_objects": loitering_objs
+            }
+        )
+        continue
+
+    # 3) Class enter during time (e.g., "car enters during night hours")
+    if event_type == "class_enter_during_time" and want_name:
+      win = _parse_local_time_window(rule.get("time_of_day"))
+      ok_time = True if win is None else _in_local_window(win, now_dt)
+      if ok_time:
+        prev_cnt = int(last_presence.get(want_name.lower(), 0)) if last_presence else 0
+        curr_cnt = int(presence.get(want_name.lower(), 0))
+        entered = prev_cnt == 0 and curr_cnt > 0
+        if entered and _cooldown_ok(rid, camera_id, cooldown):
+          _insert_alert_log(
+            rd,
+            camera_id,
+            {
+              "message": f"{want_name} entered during time window",
+              "snapshot": snapshot_url,
+              "class": want_name,
+              "prev_count": prev_cnt,
+              "curr_count": curr_cnt,
+            },
+          )
+          continue
+
+    # 4) Generic Count-based (Fallthrough)
+    # Only run if event is empty or not one of the special types above
+    if want_name and event_type not in ("crowd_density", "loitering", "class_enter_during_time"):
       cnt = presence.get(want_name.lower(), 0)
       cond = rule.get("count")
       trig = True
@@ -268,30 +354,9 @@ def evaluate_realtime(
         )
         continue  # next rule
 
-    # 2) Class enter during time (e.g., "car enters during night hours")
-    # Expect rule["event"] == "class_enter_during_time", rule.objects[0].name is the class
-    if str(rule.get("event", "")).lower() == "class_enter_during_time" and want_name:
-      win = _parse_local_time_window(rule.get("time_of_day"))
-      ok_time = True if win is None else _in_local_window(win, now_dt)
-      if ok_time:
-        prev_cnt = int(last_presence.get(want_name.lower(), 0)) if last_presence else 0
-        curr_cnt = int(presence.get(want_name.lower(), 0))
-        entered = prev_cnt == 0 and curr_cnt > 0
-        if entered and _cooldown_ok(rid, camera_id, cooldown):
-          _insert_alert_log(
-            rd,
-            camera_id,
-            {
-              "message": f"{want_name} entered during time window",
-              "snapshot": snapshot_url,
-              "class": want_name,
-              "prev_count": prev_cnt,
-              "curr_count": curr_cnt,
-            },
-          )
-          continue
 
-    # 3) Fight detection (heuristic)
+
+    # 5) Fight detection (heuristic)
     if str(rule.get("behavior", "")).lower() == "fight":
       pboxes = _person_boxes(objects)
       if _fight_heuristic(pboxes, energy_hist) and _cooldown_ok(rid, camera_id, cooldown):
