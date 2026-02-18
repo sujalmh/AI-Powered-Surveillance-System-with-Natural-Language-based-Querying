@@ -9,7 +9,7 @@ from typing import Any, Deque, Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
-from backend.app.db.mongo import alerts as alerts_col, alert_logs as alert_logs_col
+from backend.app.db.mongo import alerts as alerts_col, alert_logs as alert_logs_col, zones as zones_col
 
 
 @dataclass
@@ -173,10 +173,12 @@ def evaluate_realtime(
   objects: List[Dict[str, Any]],
   frame_bgr: Optional[np.ndarray] = None,
   snapshot_url: Optional[str] = None,
+  zone_counts: Optional[Dict[str, int]] = None,
 ) -> None:
   """
   Evaluate all active alert rules against the latest frame objects (and optional frame).
-  This is intended to be called from the detection loop after persistence.
+  When rule.area.zone_id is set, count is taken from zone_counts for that zone (crowd-in-zone).
+  When rule.occupancy_pct is set, zone capacity is used to compute occupancy percentage.
   """
   # Prepare per-camera state
   st = _PER_CAMERA[camera_id]
@@ -234,7 +236,14 @@ def evaluate_realtime(
       want_name = None
 
     if want_name:
-      cnt = presence.get(want_name.lower(), 0)
+      # Zone-based count: use zone_counts when rule.area.zone_id is set
+      area = rule.get("area") or {}
+      zone_id = area.get("zone_id") if isinstance(area, dict) else None
+      if zone_id and zone_counts is not None and want_name.lower() == "person":
+        cnt = int(zone_counts.get(str(zone_id), 0))
+      else:
+        cnt = presence.get(want_name.lower(), 0)
+
       cond = rule.get("count")
       trig = True
       if cond:
@@ -255,15 +264,46 @@ def evaluate_realtime(
             trig &= cnt < v
       else:
         trig = cnt >= 1
+
+      # Optional: occupancy_pct (e.g. {" >=": 80}) when zone has capacity
+      occ_cond = rule.get("occupancy_pct")
+      if occ_cond and zone_id and zone_counts is not None:
+        try:
+          zone_doc = zones_col.find_one({"camera_id": camera_id, "zone_id": zone_id})
+          cap = zone_doc.get("capacity") if zone_doc else None
+          if cap is not None and int(cap) > 0:
+            occ_pct = 100.0 * cnt / int(cap)
+            for op, val in occ_cond.items():
+              try:
+                v = float(val)
+              except Exception:
+                continue
+              if op == ">=":
+                trig &= occ_pct >= v
+              elif op == ">":
+                trig &= occ_pct > v
+              elif op == "<=":
+                trig &= occ_pct <= v
+              elif op == "<":
+                trig &= occ_pct < v
+              elif op == "==":
+                trig &= occ_pct == v
+        except Exception:
+          pass
+
       if trig and _cooldown_ok(rid, camera_id, cooldown):
+        msg = f"Rule '{rd.get('name')}' matched count: {want_name}={cnt}"
+        if zone_id:
+          msg = f"Rule '{rd.get('name')}' matched zone {zone_id}: {want_name}={cnt}"
         _insert_alert_log(
           rd,
           camera_id,
           {
-            "message": f"Rule '{rd.get('name')}' matched count: {want_name}={cnt}",
+            "message": msg,
             "snapshot": snapshot_url,
             "class": want_name,
             "count": cnt,
+            "zone_id": zone_id,
           },
         )
         continue  # next rule

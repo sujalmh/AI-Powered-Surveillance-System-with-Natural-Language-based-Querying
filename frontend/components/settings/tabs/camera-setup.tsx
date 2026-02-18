@@ -16,7 +16,7 @@ type CameraDoc = {
 
 export function CameraSetup() {
   const [cameras, setCameras] = useState<CameraDoc[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
@@ -239,7 +239,7 @@ export function CameraSetup() {
           <button
             onClick={onAddCamera}
             disabled={!canAdd || saving || probingId === "new"}
-            className="glow-button flex-1 flex items-center justify-center gap-2 disabled:opacity-60"
+            className="glow-button flex-1 flex items-center justify-center gap-2 px-4 py-2.5"
             title="Register, probe, then start camera"
           >
             <Plus className="w-4 h-4" />
@@ -325,20 +325,20 @@ export function CameraSetup() {
                       <button
                         onClick={() => onStop(camera.camera_id)}
                         disabled={stoppingId === camera.camera_id}
-                        className="p-2 hover:bg-white/10 rounded transition-colors disabled:opacity-60 flex items-center gap-1"
+                        className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 hover:border-red-500/50 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5 font-medium text-sm"
                         title="Stop"
                       >
-                        <Square className="w-4 h-4 text-red-400" />
+                        <Square className="w-4 h-4" />
                         {stoppingId === camera.camera_id ? "Stopping..." : "Stop"}
                       </button>
                     ) : (
                       <button
                         onClick={() => onStart(camera.camera_id, camera.source, camera.location)}
                         disabled={startingId === camera.camera_id}
-                        className="p-2 hover:bg-white/10 rounded transition-colors disabled:opacity-60 flex items-center gap-1"
+                        className="px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 hover:border-green-500/50 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5 font-medium text-sm"
                         title="Start"
                       >
-                        <Play className="w-4 h-4 text-green-400" />
+                        <Play className="w-4 h-4" />
                         {startingId === camera.camera_id ? "Starting..." : "Start"}
                       </button>
                     )}

@@ -35,6 +35,10 @@ class NLFilter(BaseModel):
     result_limit: Optional[int] = Field(default=None, description="Maximum number of results to return, e.g. 1 for 'show me the latest clip'")
     ask_color: Optional[bool] = Field(default=None, description="True if the user is asking about clothing color")
     location_hint: Optional[str] = Field(default=None, description="If user refers to a location name in NL")
+    query_subtype: Optional[str] = Field(
+        default=None,
+        description="Optional subtype for informational/system queries: 'alerts' for alert logs, 'cameras' for camera devices/status",
+    )
     semantic_query: str = Field(description="Natural language description for semantic/CLIP search - ALWAYS provide this")
     raw_query: str = Field(description="Original natural language input")
 
@@ -52,6 +56,59 @@ _NUMBER_WORDS: Dict[str, int] = {
     "nine": 9,
     "ten": 10,
 }
+
+# Synonym dictionaries for query expansion (improves recall without changing primary filter)
+OBJECT_SYNONYMS: Dict[str, List[str]] = {
+    "person": ["person", "people", "persons", "pedestrian", "human"],
+    "people": ["person", "people", "persons", "pedestrian", "human"],
+    "car": ["car", "cars", "vehicle", "vehicles", "automobile"],
+    "vehicle": ["car", "cars", "vehicle", "vehicles", "automobile"],
+    "dog": ["dog", "dogs", "canine"],
+    "bicycle": ["bicycle", "bike", "bikes", "cyclist"],
+    "truck": ["truck", "trucks", "lorry"],
+}
+ACTION_SYNONYMS: Dict[str, List[str]] = {
+    "running": ["running", "jogging", "sprinting", "runs"],
+    "walking": ["walking", "walks", "strolling"],
+    "fighting": ["fighting", "altercation", "conflict", "violence", "fight", "brawl"],
+    "carrying": ["carrying", "carries", "holding", "lifting"],
+    "falling": ["falling", "falls", "fallen", "trip", "collapse"],
+}
+COLOR_SYNONYMS: Dict[str, List[str]] = {
+    "red": ["red", "crimson", "maroon", "burgundy", "scarlet"],
+    "blue": ["blue", "navy", "azure", "cobalt"],
+    "green": ["green", "lime", "emerald", "teal"],
+    "black": ["black", "dark"],
+    "white": ["white", "light"],
+    "yellow": ["yellow", "gold", "amber"],
+}
+
+
+def _expand_parsed_filter(f: Dict[str, Any]) -> None:
+    """
+    Add __expanded_terms to the parsed filter for downstream recall improvement.
+    Does not change primary filters; expansion is used for optional $in or semantic broadening.
+    """
+    if not getattr(settings, "ENABLE_QUERY_EXPANSION", True):
+        return
+    try:
+        expanded: Dict[str, Any] = {}
+        obj = f.get("objects.object_name")
+        if obj and isinstance(obj, str):
+            obj_lower = obj.strip().lower()
+            expanded["objects"] = OBJECT_SYNONYMS.get(obj_lower, [obj_lower])
+        action = f.get("action")
+        if action and isinstance(action, str):
+            action_lower = action.strip().lower()
+            expanded["action"] = ACTION_SYNONYMS.get(action_lower, [action_lower])
+        col = f.get("objects.color")
+        if col and isinstance(col, str):
+            col_lower = col.strip().lower()
+            expanded["color"] = COLOR_SYNONYMS.get(col_lower, [col_lower])
+        if expanded:
+            f["__expanded_terms"] = expanded
+    except Exception:
+        pass
 
 
 def _word_to_int(tok: str) -> Optional[int]:
@@ -168,7 +225,15 @@ CRITICAL INSTRUCTIONS:
      * Non-visual information requests
      * Examples: "how many cameras are active?", "total detections today?", "system status?"
 
-2. STRUCTURED FILTERS (extract if present):
+2. QUERY SUBTYPE FOR SYSTEM QUERIES (OPTIONAL):
+   - Use query_subtype ONLY for informational or system/status-style questions.
+   - Set query_subtype = "alerts" if the user is asking about alerts, alert logs, or notifications, for example:
+     * "any alerts found?", "have any alerts been triggered?", "show recent alerts", "what alerts fired today?"
+   - Set query_subtype = "cameras" if the user is asking about camera DEVICES or their status (NOT detecting cameras in the scene), for example:
+     * "any cameras found?", "how many cameras are active?", "camera status", "which cameras are running?"
+   - For normal visual queries about detections (people, cars, etc.), leave query_subtype as null/omitted.
+
+3. STRUCTURED FILTERS (extract if present):
    - time: Relative (last X minutes) or absolute timestamps
    - camera_id: Specific camera number (ONLY if numeric ID explicitly mentioned like "camera 5")
    - objects: Person, car, bag, etc. (IMPORTANT: use lowercase names like 'person', 'car', 'dog' etc.)
@@ -184,7 +249,7 @@ CRITICAL INSTRUCTIONS:
      * "from the parking lot" → location_hint: "parking lot"
      * Extract ANY location/area name mentioned with or without the word "camera"
 
-3. SEMANTIC QUERY (ALWAYS REQUIRED):
+4. SEMANTIC QUERY (ALWAYS REQUIRED):
    - Create a descriptive natural language string capturing the CONTEXTUAL meaning
    - Include urgency, behavior, scene description
    - Examples:
@@ -193,7 +258,7 @@ CRITICAL INSTRUCTIONS:
      * "person in red shirt carrying large backpack"
    - If the query is informational, still provide a semantic version describing what's being asked
 
-4. IMPORTANT:
+5. IMPORTANT:
    - ALWAYS fill both structured filters AND semantic_query
    - semantic_query must NEVER be null or empty
    - Only include fields that are actually present in the query
@@ -341,6 +406,15 @@ def parse_nl_with_llm(nl: str) -> Dict[str, Any]:
         intent = "track"
     f["__intent"] = intent
 
+    # Optional query subtype for system/status queries (alerts, cameras, etc.)
+    subtype_raw = getattr(result, "query_subtype", None)
+    if subtype_raw:
+        subtype = str(subtype_raw).strip().lower()
+        if subtype in {"alert", "alerts"}:
+            f["__query_subtype"] = "alerts"
+        elif subtype in {"camera", "cameras"}:
+            f["__query_subtype"] = "cameras"
+
     # New enhanced fields
     if result.action:
         f["action"] = result.action
@@ -351,6 +425,11 @@ def parse_nl_with_llm(nl: str) -> Dict[str, Any]:
     if result.count_constraint:
         f["count_constraint"] = result.count_constraint
     _augment_count_constraint_from_query(nl, f)
+    # Crowd synonyms: "crowded", "busy", "packed" (e.g. "was the lobby crowded?") -> at least N people
+    if not f.get("count_constraint") and f.get("zone"):
+        nl_low = nl.lower()
+        if any(w in nl_low for w in ("crowded", "busy", "packed", "crowd")):
+            f["count_constraint"] = {"gte": 5}
 
     # Result limit: prefer LLM output, fall back to regex inference
     llm_limit = result.result_limit
@@ -381,6 +460,9 @@ def parse_nl_with_llm(nl: str) -> Dict[str, Any]:
     else:
         f["__embedding_text"] = semantic_query
         f["__colors_norm"] = []
+
+    # Query expansion: add synonym-based expanded terms for recall (optional downstream use)
+    _expand_parsed_filter(f)
 
     print(f"[NL Parser] Input: {nl}")
     print(f"[NL Parser] Parsed Filter: {f}")

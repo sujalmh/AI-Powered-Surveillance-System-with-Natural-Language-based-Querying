@@ -26,7 +26,7 @@ function timeAgo(ts: string): string {
 
 export function RecentAlerts() {
   const [logs, setLogs] = useState<AlertLog[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
   const load = async () => {

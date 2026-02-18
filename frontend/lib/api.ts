@@ -52,20 +52,33 @@ export type ChatSendResponse = {
 export const API_BASE =
     process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/+$/, "") || "http://localhost:8000";
 
-async function http<T>(path: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(`${API_BASE}${path}`, {
-        ...init,
-        headers: {
-            "Content-Type": "application/json",
-            ...(init?.headers || {}),
-        },
-        cache: "no-store",
-    });
-    if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(`HTTP ${res.status} ${res.statusText}: ${text}`);
+async function http<T>(path: string, init?: RequestInit, timeoutMs: number = 30000): Promise<T> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    
+    try {
+        const res = await fetch(`${API_BASE}${path}`, {
+            ...init,
+            signal: controller.signal,
+            headers: {
+                "Content-Type": "application/json",
+                ...(init?.headers || {}),
+            },
+            cache: "no-store",
+        });
+        clearTimeout(timeoutId);
+        if (!res.ok) {
+            const text = await res.text().catch(() => "");
+            throw new Error(`HTTP ${res.status} ${res.statusText}: ${text}`);
+        }
+        return res.json() as Promise<T>;
+    } catch (error: any) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+            throw new Error(`Request timeout after ${timeoutMs}ms`);
+        }
+        throw error;
     }
-    return res.json() as Promise<T>;
 }
 
 export const api = {
@@ -118,6 +131,18 @@ export const api = {
         p.set("timeout", String(timeout));
         return http<{ ok: boolean; message: string }>(`/api/cameras/probe?${p.toString()}`);
     },
+    listZones: (cameraId: number) =>
+        http<Array<{ zone_id: string; name: string; bbox?: Record<string, number>; capacity?: number; area_sqm?: number }>>(
+            `/api/cameras/${cameraId}/zones`
+        ),
+    getOccupancy: (cameraId: number) =>
+        http<{
+            camera_id: number;
+            person_count: number;
+            zone_counts: Record<string, number>;
+            zones: Array<{ zone_id: string; name: string; count: number; capacity?: number; occupancy_pct?: number }>;
+            latest_timestamp?: string;
+        }>(`/api/cameras/${cameraId}/occupancy`),
 
     // Detections
     listDetections: (params: URLSearchParams) =>
