@@ -216,7 +216,7 @@ Alert Logs (up to first 10):
                     cam_str = f"Camera {a['camera_id']}" if a.get("camera_id") is not None else "Unknown camera"
                     prompt += f"- {idx}. [{a.get('severity', 'info')}] {a.get('alert_name') or 'Unnamed alert'} at {a.get('triggered_at') or 'unknown time'} on {cam_str}: {a.get('message')}\n"  # noqa: E501
 
-                prompt += f"""
+                prompt += """
 
 CRITICAL INSTRUCTIONS:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -252,7 +252,7 @@ Camera Status (up to first 10):
                     running = "running" if c.get("running") else "not running"
                     prompt += f"- {idx}. Camera {c.get('camera_id')} at '{c.get('location')}' is {status}, currently {running}.\n"  # noqa: E501
 
-                prompt += f"""
+                prompt += """
 
 CRITICAL INSTRUCTIONS:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

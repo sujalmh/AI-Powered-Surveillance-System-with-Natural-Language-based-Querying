@@ -445,14 +445,26 @@ class UnifiedRetrieval:
 
         results: List[Dict[str, Any]] = []
         for c in cameras:
-            cid = int(c.get("camera_id"))
+            raw_id = c.get("camera_id")
+            cid: Optional[int] = None
+            if raw_id is not None:
+                try:
+                    cid = int(raw_id)
+                except (TypeError, ValueError):
+                    pass
+            if cid is None:
+                # Malformed or missing camera_id: include doc with running=False so query doesn't crash
+                result = dict(c)
+                result["type"] = "camera_status"
+                result["running"] = False
+                results.append(result)
+                continue
             running = False
             try:
                 running = runner.is_running(cid)
             except Exception:
                 # If runtime status fails, treat as not running but keep DB status
                 running = False
-
             result = dict(c)
             result["type"] = "camera_status"
             result["running"] = running
@@ -663,8 +675,8 @@ class UnifiedRetrieval:
                                 print(f"[UnifiedRetrieval] DIAGNOSTIC: Sample timestamps in DB: {sample_timestamps}")
                                 logger.warning(f"DIAGNOSTIC: Sample timestamps in DB: {sample_timestamps}")
                         else:
-                            print(f"[UnifiedRetrieval] DIAGNOSTIC: No detections found even without object filter (time/camera only)")
-                            logger.warning(f"DIAGNOSTIC: No detections found even without object filter (time/camera only)")
+                            print("[UnifiedRetrieval] DIAGNOSTIC: No detections found even without object filter (time/camera only)")
+                            logger.warning("DIAGNOSTIC: No detections found even without object filter (time/camera only)")
                     except Exception as diag_err:
                         print(f"[UnifiedRetrieval] DIAGNOSTIC query failed: {diag_err}")
                         logger.error(f"DIAGNOSTIC query failed: {diag_err}")

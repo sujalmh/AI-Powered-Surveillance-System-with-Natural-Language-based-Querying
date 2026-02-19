@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from collections import deque, defaultdict
 from dataclasses import dataclass
@@ -10,6 +11,31 @@ import cv2
 import numpy as np
 
 from backend.app.db.mongo import alerts as alerts_col, alert_logs as alert_logs_col, zones as zones_col
+
+_log = logging.getLogger(__name__)
+
+# Zone capacity cache to avoid per-frame Mongo hits in evaluate_realtime
+_ZONE_CAP_CACHE: Dict[Tuple[int, str], Tuple[Optional[int], float]] = {}
+_ZONE_CAP_TTL = 60.0
+
+
+def _get_zone_capacity(camera_id: int, zone_id: str) -> Optional[int]:
+  """Return cached zone capacity or query Mongo and update cache. Returns None if not found or on error."""
+  now = time.time()
+  key = (camera_id, zone_id)
+  entry = _ZONE_CAP_CACHE.get(key)
+  if entry is not None and (now - entry[1]) < _ZONE_CAP_TTL:
+    return entry[0]
+  try:
+    zone_doc = zones_col.find_one({"camera_id": camera_id, "zone_id": zone_id}, {"capacity": 1})
+    cap = zone_doc.get("capacity") if zone_doc else None
+    if cap is not None:
+      cap = int(cap)
+    _ZONE_CAP_CACHE[key] = (cap, now)
+    return cap
+  except Exception as e:
+    _log.warning("Failed to get zone capacity for camera_id=%s zone_id=%s: %s", camera_id, zone_id, e, exc_info=True)
+    return None
 
 
 @dataclass
@@ -268,28 +294,25 @@ def evaluate_realtime(
       # Optional: occupancy_pct (e.g. {" >=": 80}) when zone has capacity
       occ_cond = rule.get("occupancy_pct")
       if occ_cond and zone_id and zone_counts is not None:
-        try:
-          zone_doc = zones_col.find_one({"camera_id": camera_id, "zone_id": zone_id})
-          cap = zone_doc.get("capacity") if zone_doc else None
-          if cap is not None and int(cap) > 0:
-            occ_pct = 100.0 * cnt / int(cap)
-            for op, val in occ_cond.items():
-              try:
-                v = float(val)
-              except Exception:
-                continue
-              if op == ">=":
-                trig &= occ_pct >= v
-              elif op == ">":
-                trig &= occ_pct > v
-              elif op == "<=":
-                trig &= occ_pct <= v
-              elif op == "<":
-                trig &= occ_pct < v
-              elif op == "==":
-                trig &= occ_pct == v
-        except Exception:
-          pass
+        cap = _get_zone_capacity(camera_id, zone_id)
+        if cap is not None and cap > 0:
+          occ_pct = 100.0 * cnt / cap
+          for op, val in occ_cond.items():
+            try:
+              v = float(val)
+            except Exception as e:
+              _log.warning("Invalid occupancy_pct value %r: %s", val, e, exc_info=True)
+              continue
+            if op == ">=":
+              trig &= occ_pct >= v
+            elif op == ">":
+              trig &= occ_pct > v
+            elif op == "<=":
+              trig &= occ_pct <= v
+            elif op == "<":
+              trig &= occ_pct < v
+            elif op == "==":
+              trig &= occ_pct == v
 
       if trig and _cooldown_ok(rid, camera_id, cooldown):
         msg = f"Rule '{rd.get('name')}' matched count: {want_name}={cnt}"

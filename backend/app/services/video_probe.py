@@ -33,22 +33,23 @@ def can_open_source(source: Union[int, str], timeout_seconds: float = 10.0) -> T
     open_timeout = min(5.0, timeout_seconds * 0.5)  # Max 5 seconds to open, or half of total timeout
 
     try:
+        start_time = time.time()
         # Retry opening for network streams (DroidCam, IP cameras, etc.)
         for attempt in range(max_open_attempts):
             cap_result = [None]
             cap_error = [None]
-            
-            def _open_capture():
+
+            def _open_capture(result_list=cap_result, error_list=cap_error):
                 try:
                     # Use DirectShow for local webcams on Windows
                     if isinstance(source, int):
                         c = cv2.VideoCapture(source, cv2.CAP_DSHOW)
                     else:
                         c = cv2.VideoCapture(source, cv2.CAP_FFMPEG)
-                    cap_result[0] = c
+                    result_list[0] = c
                 except Exception as e:
-                    cap_error[0] = e
-            
+                    error_list[0] = e
+
             # Open capture in a thread with timeout
             thread = threading.Thread(target=_open_capture, daemon=True)
             thread.start()
@@ -86,9 +87,10 @@ def can_open_source(source: Union[int, str], timeout_seconds: float = 10.0) -> T
         if cap is None or not cap.isOpened():
             return False, f"cv2.VideoCapture could not open source: {source}"
 
-        # Try to read at least one frame within remaining timeout window
-        frame_read_timeout = timeout_seconds - open_timeout
-        deadline = time.time() + frame_read_timeout
+        # Try to read at least one frame within true remaining timeout (elapsed since start)
+        elapsed = time.time() - start_time
+        remaining = max(0.0, timeout_seconds - elapsed)
+        deadline = time.time() + remaining
         while time.time() < deadline:
             ok, _ = cap.read()
             if ok:
@@ -96,7 +98,7 @@ def can_open_source(source: Union[int, str], timeout_seconds: float = 10.0) -> T
             # Small sleep to avoid hot loop; some streams need a moment to warm up
             time.sleep(0.1)
 
-        return False, f"Opened source but failed to read a frame within {frame_read_timeout:.1f}s"
+        return False, f"Opened source but failed to read a frame within {remaining:.1f}s"
     except Exception as e:
         return False, f"Exception during probe: {e}"
     finally:

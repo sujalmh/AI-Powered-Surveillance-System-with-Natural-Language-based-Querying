@@ -1,4 +1,5 @@
 import cv2
+import logging
 import numpy as np
 import datetime
 from ultralytics import YOLO
@@ -25,6 +26,9 @@ from backend.app.services.attribute_encoder import get_attribute_encoder
 from backend.app.services.person_store import get_person_store
 from backend.app.services.fusion import MultimodalFusion
 from backend.app.services.alert_engine import evaluate_realtime
+
+logger = logging.getLogger(__name__)
+
 
 def _get_zones_for_camera(zones_collection: Any, camera_id: int) -> List[Dict[str, Any]]:
     """Return list of zone docs for camera, with short TTL cache."""
@@ -865,8 +869,13 @@ def process_live_stream(
                     doc["zone_counts"] = _compute_zone_counts(
                         doc["objects"], zones_list, w, h
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.exception(
+                    "Zone-counting failed for camera_id=%s timestamp=%s: %s",
+                    camera_id,
+                    timestamp,
+                    e,
+                )
 
             if doc["objects"]:
                 try:

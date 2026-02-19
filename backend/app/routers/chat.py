@@ -456,7 +456,7 @@ def send(req: ChatSendRequest) -> ChatSendResponse:
         # If LLM suggested a relative window and absolute timestamp not provided, expand to [now-last_minutes, now]
         # Use local time to match detections (object_detection stores timestamp via datetime.now())
         tsf = parsed.get("timestamp")
-        # Fix: empty dict {} is truthy in Python, so check for actual content
+        # Check that tsf is a dict and contains $gte or $lte keys (empty dict is falsy in Python)
         has_absolute_ts = isinstance(tsf, dict) and (tsf.get("$gte") or tsf.get("$lte"))
         if "__last_minutes" in parsed and not has_absolute_ts:
             try:

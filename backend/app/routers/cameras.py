@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Optional, Union
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from backend.app.db.mongo import cameras as cameras_col, zones as zones_col
 from backend.app.services.detection_runner import runner
@@ -25,11 +25,23 @@ class StartCameraRequest(BaseModel):
 
 
 class ZoneBbox(BaseModel):
-    """Normalized [0,1] coordinates."""
+    """Normalized [0,1] coordinates. Requires x_min < x_max and y_min < y_max (no degenerate/inverted boxes)."""
     x_min: float = Field(..., ge=0, le=1)
     y_min: float = Field(..., ge=0, le=1)
     x_max: float = Field(..., ge=0, le=1)
     y_max: float = Field(..., ge=0, le=1)
+
+    @model_validator(mode="after")
+    def check_bbox_ranges(self) -> "ZoneBbox":
+        if self.x_min >= self.x_max:
+            raise ValueError(
+                f"Invalid bbox: x_min ({self.x_min}) must be strictly less than x_max ({self.x_max})"
+            )
+        if self.y_min >= self.y_max:
+            raise ValueError(
+                f"Invalid bbox: y_min ({self.y_min}) must be strictly less than y_max ({self.y_max})"
+            )
+        return self
 
 
 class CreateZoneRequest(BaseModel):
@@ -180,8 +192,12 @@ def delete_camera(camera_id: int) -> Dict[str, Any]:
 def list_zones(camera_id: int) -> List[Dict[str, Any]]:
     """List all zones (ROIs) for a camera."""
     try:
+        if cameras_col.find_one({"camera_id": camera_id}) is None:
+            raise HTTPException(status_code=404, detail="Camera not found")
         docs = list(zones_col.find({"camera_id": camera_id}, {"_id": 0}))
         return docs
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list zones: {e}") from e
 
