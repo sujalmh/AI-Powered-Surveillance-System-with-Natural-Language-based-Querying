@@ -82,6 +82,9 @@ def search_unstructured(
             w_rest = (1.0 - w_primary) / max(1, n - 1)
             weights = [w_primary] + [w_rest] * (n - 1)
             combined = np.average(embs, axis=0, weights=weights).astype(np.float32)
+            norm = np.linalg.norm(combined)
+            if norm > 1e-12:
+                combined = combined / norm
             query_emb = combined
         except Exception:
             query_emb = get_embedder().text_embed([query])[0]

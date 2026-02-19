@@ -1369,12 +1369,19 @@ class UnifiedRetrieval:
         obj_name = parsed_filter.get("objects.object_name")
         color = parsed_filter.get("objects.color")
         zone_ids = parsed_filter.get("__zone_ids") or []
-        # Zone-aware: use zone_counts when zone_ids resolved and filtering by person (no color)
+        # Zone-aware: use zone_counts when zone_ids resolved and filtering by person (no color).
+        # Match MongoDB $or semantics: doc matches if any zone satisfies the count constraint.
         if zone_ids and obj_name and str(obj_name).lower() == "person" and not color:
             zc = doc.get("zone_counts") or {}
             if isinstance(zc, dict):
-                cnt = max(int(zc.get(zid, 0)) for zid in zone_ids) if zone_ids else 0
-                return cnt
+                counts = [int(zc.get(zid, 0)) for zid in zone_ids]
+                constraint = self._normalize_count_constraint(parsed_filter.get("count_constraint"))
+                if constraint:
+                    for c in counts:
+                        if self._count_matches_constraint(c, constraint):
+                            return c
+                    return 0
+                return max(counts) if counts else 0
         # Fast-path: use pre-computed person_count when filtering only by name="person" (no color)
         if obj_name and str(obj_name).lower() == "person" and not color:
             pc = doc.get("person_count")

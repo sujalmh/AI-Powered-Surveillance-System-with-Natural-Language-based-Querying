@@ -208,6 +208,11 @@ def _augment_count_constraint_from_query(nl: str, f: Dict[str, Any]) -> None:
             f["count_constraint"] = {"eq": int(n)}
             return
 
+    # Crowd synonyms: "crowded", "busy", "packed" when zone is set (e.g. "was the lobby crowded?")
+    if not f.get("count_constraint") and f.get("zone") and any(w in low for w in ("crowded", "busy", "packed", "crowd")):
+        _set_obj_for_noun("person")
+        f["count_constraint"] = {"gte": 5}
+
 
 PROMPT_TEMPLATE = """You are an intelligent surveillance query parser. Convert the user's natural language query into a comprehensive JSON object.
 
@@ -425,11 +430,6 @@ def parse_nl_with_llm(nl: str) -> Dict[str, Any]:
     if result.count_constraint:
         f["count_constraint"] = result.count_constraint
     _augment_count_constraint_from_query(nl, f)
-    # Crowd synonyms: "crowded", "busy", "packed" (e.g. "was the lobby crowded?") -> at least N people
-    if not f.get("count_constraint") and f.get("zone"):
-        nl_low = nl.lower()
-        if any(w in nl_low for w in ("crowded", "busy", "packed", "crowd")):
-            f["count_constraint"] = {"gte": 5}
 
     # Result limit: prefer LLM output, fall back to regex inference
     llm_limit = result.result_limit
