@@ -42,15 +42,69 @@ export function RecentAlerts() {
         message: l.message || "Alert triggered",
       }));
       setLogs(list);
+      return list;
     } catch (e: any) {
       setErr(e?.message || "Failed to load alerts");
+      return [];
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    load();
+    let evtSource: EventSource | null = null;
+    let aborted = false;
+
+    // Initial load then stream
+    load().then((initialLogs) => {
+      if (aborted) return;
+
+      // Find latest timestamp to resume stream from
+      let lastTs = undefined;
+      if (initialLogs.length > 0) {
+        // logs are sorted triggered_at desc, so first is latest
+        lastTs = initialLogs[0].triggered_at;
+      }
+
+      // Start SSE
+      evtSource = api.streamAlerts({ last_ts: lastTs });
+      evtSource.onmessage = (e: MessageEvent) => {
+        if (aborted) return;
+        try {
+          const data = JSON.parse(e.data);
+          const newLog: AlertLog = {
+            id: String(data.id),
+            alert_id: String(data.alert_id),
+            triggered_at: data.triggered_at,
+            camera_id: typeof data.camera_id === "number" ? data.camera_id : undefined,
+            message: data.message || "Alert triggered",
+          };
+
+          setLogs((prev: AlertLog[]) => {
+            // Avoid duplicates
+            if (prev.some((p: AlertLog) => p.id === newLog.id)) return prev;
+            return [newLog, ...prev];
+          });
+        } catch (err) {
+          console.error("Failed to parse SSE alert event", err);
+        }
+      };
+
+      evtSource.onerror = (e: Event) => {
+        if (aborted) return;
+        // Check if connection closed or error
+        if (evtSource?.readyState === EventSource.CLOSED) {
+          // optional: reconnect logic is handled by browser usually, but customized retry can go here
+        }
+      };
+    });
+
+    return () => {
+      aborted = true;
+      if (evtSource) {
+        evtSource.close();
+      }
+    };
   }, []);
 
   return (
@@ -60,17 +114,17 @@ export function RecentAlerts() {
         {loading && <span className="text-xs text-muted-foreground">Loading…</span>}
         {err && <span className="text-xs text-destructive">{err}</span>}
         <button
-          onClick={load}
+          onClick={() => load()}
           className="ml-auto px-3 py-1.5 rounded-lg bg-accent/10 border border-accent text-xs text-accent-foreground hover:bg-accent/20 transition-colors"
         >
           Refresh
         </button>
       </div>
-      <div className="space-y-3">
+      <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
         {logs.map((alert) => (
           <div
             key={alert.id}
-            className="bg-muted/20 border border-border rounded-2xl p-3 shadow-[0_2px_8px_rgba(25,24,59,0.08)] hover:shadow-[0_0_15px_rgba(161,194,189,0.2)] transition-all duration-300"
+            className="bg-muted/20 border border-border rounded-2xl p-3 shadow-[0_2px_8px_rgba(25,24,59,0.08)] hover:shadow-[0_0_15px_rgba(161,194,189,0.2)] transition-all duration-300 animate-in fade-in slide-in-from-top-2"
           >
             <div className="flex items-start gap-3">
               <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5 text-accent" />
