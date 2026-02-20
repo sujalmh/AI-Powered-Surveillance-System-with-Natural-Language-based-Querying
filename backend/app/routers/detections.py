@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from backend.app.db.mongo import detections as detections_col
 
@@ -35,6 +35,15 @@ def parse_iso(ts: Optional[str]) -> Optional[datetime]:
         return None
 
 
+def _normalize_iso(dt: datetime) -> str:
+    """
+    Convert datetime to UTC, drop tz offset, and return naive ISO string to match stored detection docs.
+    """
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt.isoformat()
+
+
 @router.get("/", response_model=List[Dict[str, Any]])
 def list_detections(
     camera_id: Optional[int] = None,
@@ -57,17 +66,17 @@ def list_detections(
 
         time_filter: Dict[str, Any] = {}
         if last_minutes:
-            end = datetime.utcnow()
+            end = datetime.now(timezone.utc)
             start = end - timedelta(minutes=last_minutes)
-            time_filter["$gte"] = start.isoformat()
-            time_filter["$lte"] = end.isoformat()
+            time_filter["$gte"] = _normalize_iso(start)
+            time_filter["$lte"] = _normalize_iso(end)
         else:
             start = parse_iso(from_ts)
             end = parse_iso(to_ts)
             if start:
-                time_filter["$gte"] = start.isoformat()
+                time_filter["$gte"] = _normalize_iso(start)
             if end:
-                time_filter["$lte"] = end.isoformat()
+                time_filter["$lte"] = _normalize_iso(end)
 
         if time_filter:
             query["timestamp"] = time_filter
@@ -104,17 +113,17 @@ def object_counts(
 
         time_filter: Dict[str, Any] = {}
         if last_minutes:
-            end = datetime.utcnow()
+            end = datetime.now(timezone.utc)
             start = end - timedelta(minutes=last_minutes)
-            time_filter["$gte"] = start.isoformat()
-            time_filter["$lte"] = end.isoformat()
+            time_filter["$gte"] = _normalize_iso(start)
+            time_filter["$lte"] = _normalize_iso(end)
         else:
             start = parse_iso(from_ts)
             end = parse_iso(to_ts)
             if start:
-                time_filter["$gte"] = start.isoformat()
+                time_filter["$gte"] = _normalize_iso(start)
             if end:
-                time_filter["$lte"] = end.isoformat()
+                time_filter["$lte"] = _normalize_iso(end)
 
         if time_filter:
             match["timestamp"] = time_filter
@@ -153,17 +162,17 @@ def color_counts(
 
         time_filter: Dict[str, Any] = {}
         if last_minutes:
-            end = datetime.utcnow()
+            end = datetime.now(timezone.utc)
             start = end - timedelta(minutes=last_minutes)
-            time_filter["$gte"] = start.isoformat()
-            time_filter["$lte"] = end.isoformat()
+            time_filter["$gte"] = _normalize_iso(start)
+            time_filter["$lte"] = _normalize_iso(end)
         else:
             start = parse_iso(from_ts)
             end = parse_iso(to_ts)
             if start:
-                time_filter["$gte"] = start.isoformat()
+                time_filter["$gte"] = _normalize_iso(start)
             if end:
-                time_filter["$lte"] = end.isoformat()
+                time_filter["$lte"] = _normalize_iso(end)
 
         if time_filter:
             match["timestamp"] = time_filter

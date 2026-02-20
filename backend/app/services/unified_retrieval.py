@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from typing import Any, Dict, List, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 
 from backend.app.db.mongo import (
@@ -1557,7 +1557,7 @@ class UnifiedRetrieval:
             try:
                 return datetime.strptime(ts.split(".")[0], "%Y-%m-%dT%H:%M:%S")
             except Exception:
-                return datetime.utcnow()
+                return datetime.now(timezone.utc)
     
     def _normalize_scores(self, scores: List[float]) -> List[float]:
         """Normalize scores to 0-1 range."""
