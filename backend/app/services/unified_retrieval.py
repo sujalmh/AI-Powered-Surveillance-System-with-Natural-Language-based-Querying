@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -7,11 +8,15 @@ from collections import defaultdict
 from backend.app.db.mongo import (
     detections as detections_col,
     cameras as cameras_col,
-    vlm_frames as vlm_frames_col
+    zones as zones_col,
+    vlm_frames as vlm_frames_col,
+    alert_logs as alert_logs_col,
+    alerts as alerts_col,
 )
 from backend.app.services.clip_builder import build_clip_from_snapshots
 from backend.app.services.sem_search import search_unstructured
 from backend.app.services.answer_generator import AnswerGenerator
+from backend.app.services.detection_runner import runner
 from backend.app.config import settings
 import logging
 import re
@@ -31,6 +36,34 @@ class UnifiedRetrieval:
     def __init__(self):
         self.max_gap_seconds = 3  # Gap for merging contiguous track detections
         self.join_gap_seconds = 10  # Gap for coalescing across track IDs
+        self._current_max_gap: Optional[float] = None  # Optional adaptive override
+        self._current_join_gap: Optional[float] = None
+
+    def _compute_adaptive_gaps(self, structured_results: List[Dict[str, Any]]) -> Tuple[float, float]:
+        """Compute max_gap and join_gap from detection timestamp distribution. Bounds: 1-30s."""
+        if not getattr(settings, "ENABLE_ADAPTIVE_GAPS", True) or not structured_results:
+            return self.max_gap_seconds, self.join_gap_seconds
+        try:
+            timestamps: List[datetime] = []
+            for doc in structured_results:
+                ts = doc.get("timestamp")
+                if ts:
+                    t = self._parse_ts(ts)
+                    timestamps.append(t)
+            if len(timestamps) < 2:
+                return self.max_gap_seconds, self.join_gap_seconds
+            timestamps.sort()
+            gaps = [(timestamps[i + 1] - timestamps[i]).total_seconds() for i in range(len(timestamps) - 1)]
+            gaps = [g for g in gaps if g > 0 and g < 60]
+            if not gaps:
+                return self.max_gap_seconds, self.join_gap_seconds
+            median_gap = float(sorted(gaps)[len(gaps) // 2])
+            max_gap = max(1.0, min(30.0, median_gap * 2.0))
+            join_gap = max(3.0, min(30.0, max_gap * 3.0))
+            return max_gap, join_gap
+        except Exception as e:
+            logger.debug(f"Adaptive gaps failed: {e}")
+            return self.max_gap_seconds, self.join_gap_seconds
     
     def search(
         self,
@@ -52,9 +85,10 @@ class UnifiedRetrieval:
             - answer: Natural language answer
             - metadata: Info about filters applied
         """
-        # Extract query type and intent
+        # Extract query type, subtype, and intent
         query_type = parsed_filter.get("query_type", "visual")
         intent = parsed_filter.get("__intent", "find")
+        query_subtype = parsed_filter.get("__query_subtype")
         ask_color = parsed_filter.get("__ask_color", False)
         has_action = parsed_filter.get("action") is not None
         count_constraint_norm = self._normalize_count_constraint(parsed_filter.get("count_constraint"))
@@ -70,7 +104,79 @@ class UnifiedRetrieval:
         except Exception:
             requested_limit = None
         
-        # 1. Execute structured MongoDB query (SKIP for action queries)
+        # Special handling for system/informational subtypes
+        if isinstance(query_subtype, str):
+            qs = query_subtype.strip().lower()
+        else:
+            qs = None
+
+        # Alerts query: answer from alert_logs collection (no clips)
+        if qs == "alerts":
+            print("[UnifiedRetrieval] Handling query as ALERTS informational query")
+            logger.info("Handling query as ALERTS informational query")
+            results = self._execute_alert_query(parsed_filter, limit)
+            answer_gen = AnswerGenerator()
+            answer = answer_gen.generate(
+                query=parsed_filter.get("__raw", ""),
+                query_type="informational",
+                results=results,
+                parsed_filter=parsed_filter,
+                metadata={
+                    "intent": intent,
+                    "query_subtype": "alerts",
+                    "structured_count": len(results),
+                    "semantic_count": 0,
+                    "final_count": len(results),
+                },
+            )
+            print(f"[UnifiedRetrieval] Final ALERTS result count: {len(results)}")
+            return {
+                "results": results,
+                "answer": answer,
+                "metadata": {
+                    "query_type": "informational",
+                    "intent": intent,
+                    "query_subtype": "alerts",
+                    "structured_count": len(results),
+                    "semantic_count": 0,
+                    "final_count": len(results),
+                },
+            }
+
+        # Cameras/system query: answer from cameras collection (no clips)
+        if qs == "cameras":
+            print("[UnifiedRetrieval] Handling query as CAMERAS informational query")
+            logger.info("Handling query as CAMERAS informational query")
+            results = self._execute_camera_query(parsed_filter, limit)
+            answer_gen = AnswerGenerator()
+            answer = answer_gen.generate(
+                query=parsed_filter.get("__raw", ""),
+                query_type="informational",
+                results=results,
+                parsed_filter=parsed_filter,
+                metadata={
+                    "intent": intent,
+                    "query_subtype": "cameras",
+                    "structured_count": len(results),
+                    "semantic_count": 0,
+                    "final_count": len(results),
+                },
+            )
+            print(f"[UnifiedRetrieval] Final CAMERAS result count: {len(results)}")
+            return {
+                "results": results,
+                "answer": answer,
+                "metadata": {
+                    "query_type": "informational",
+                    "intent": intent,
+                    "query_subtype": "cameras",
+                    "structured_count": len(results),
+                    "semantic_count": 0,
+                    "final_count": len(results),
+                },
+            }
+
+        # 1. Execute structured MongoDB query for detections (SKIP for action queries)
         structured_results = []
         if has_action:
             # Action queries only use semantic search - structured search returns irrelevant results
@@ -159,12 +265,18 @@ class UnifiedRetrieval:
             query_type = "informational"  # Override for answer generator
             clips = []  # Ensure no clips
         elif query_type == "visual":
-            # Visual query: build video clips for top results
-            print("[UnifiedRetrieval] Step 4: Building video clips for visual query")
-            logger.info("Step 4: Building video clips for visual query")
-            clips = self._build_clips(merged_results[:effective_limit], parsed_filter)
-            print(f"[UnifiedRetrieval] Generated {len(clips)} clips")
-            logger.info(f"Generated {len(clips)} clips")
+            if merged_results:
+                # Visual query: build video clips for top results
+                print("[UnifiedRetrieval] Step 4: Building video clips for visual query")
+                logger.info("Step 4: Building video clips for visual query")
+                clips = self._build_clips(merged_results[:effective_limit], parsed_filter)
+                print(f"[UnifiedRetrieval] Generated {len(clips)} clips")
+                logger.info(f"Generated {len(clips)} clips")
+            else:
+                # No results to build clips from
+                print("[UnifiedRetrieval] Step 4: Skipping clip generation - no results found")
+                logger.info("Step 4: Skipping clip generation - no results found")
+                clips = []
         else:
             # Informational query: NO clip generation, return merged results as-is
             print("[UnifiedRetrieval] Step 4: Skipping clip generation for informational query")
@@ -236,7 +348,156 @@ class UnifiedRetrieval:
             print(f"[UnifiedRetrieval] Error resolving location: {e}")
             logger.error(f"Error resolving location: {e}")
             return None
+
+    def _execute_alert_query(
+        self,
+        parsed_filter: Dict[str, Any],
+        limit: int,
+    ) -> List[Dict[str, Any]]:
+        """
+        Execute an informational query over alert_logs.
+
+        Supports basic time and camera filters derived from parsed_filter.
+        """
+        q: Dict[str, Any] = {}
+
+        # Time filter: reuse timestamp window from parsed_filter if present
+        ts_filter = parsed_filter.get("timestamp")
+        if isinstance(ts_filter, dict):
+            triggered_ts: Dict[str, Any] = {}
+            if ts_filter.get("$gte"):
+                triggered_ts["$gte"] = ts_filter["$gte"]
+            if ts_filter.get("$lte"):
+                triggered_ts["$lte"] = ts_filter["$lte"]
+            if triggered_ts:
+                q["triggered_at"] = triggered_ts
+
+        # Camera filter if provided
+        cam = parsed_filter.get("camera_id")
+        if isinstance(cam, int):
+            q["camera_id"] = cam
+
+        print(f"[UnifiedRetrieval] Alert query filter: {q}")
+        logger.debug(f"Alert query filter: {q}")
+
+        docs = list(
+            alert_logs_col.find(q)
+            .sort("triggered_at", -1)
+            .limit(int(limit))
+        )
+
+        # Enrich with alert rule names when available
+        alert_ids = [
+            d.get("alert_id") for d in docs if d.get("alert_id") is not None
+        ]
+        alert_map: Dict[str, Dict[str, Any]] = {}
+        if alert_ids:
+            try:
+                alert_docs = list(alerts_col.find({"_id": {"$in": alert_ids}}))
+                for a in alert_docs:
+                    alert_map[str(a.get("_id"))] = a
+            except Exception as e:
+                print(f"[UnifiedRetrieval] Failed to enrich alerts: {e}")
+                logger.error(f"Failed to enrich alerts: {e}")
+
+        results: List[Dict[str, Any]] = []
+        for d in docs:
+            alert_id_str = str(d.get("alert_id")) if d.get("alert_id") is not None else None
+            rule = alert_map.get(alert_id_str, {}) if alert_id_str else {}
+            results.append(
+                {
+                    "type": "alert_log",
+                    "alert_log_id": str(d.get("_id")),
+                    "alert_id": alert_id_str,
+                    "alert_name": rule.get("name"),
+                    "camera_id": d.get("camera_id"),
+                    "triggered_at": d.get("triggered_at"),
+                    "severity": d.get("severity", rule.get("severity", "info")),
+                    "message": d.get("message", ""),
+                    "snapshot": d.get("snapshot"),
+                    "clip": d.get("clip"),
+                }
+            )
+
+        return results
+
+    def _execute_camera_query(
+        self,
+        parsed_filter: Dict[str, Any],
+        limit: int,
+    ) -> List[Dict[str, Any]]:
+        """
+        Execute an informational query over cameras collection.
+
+        Returns per-camera metadata and current runtime status.
+        """
+        cam_filter: Dict[str, Any] = {}
+
+        cam = parsed_filter.get("camera_id")
+        if isinstance(cam, int):
+            cam_filter["camera_id"] = cam
+
+        print(f"[UnifiedRetrieval] Camera query filter: {cam_filter}")
+        logger.debug(f"Camera query filter: {cam_filter}")
+
+        cursor = cameras_col.find(cam_filter, {"_id": 0}).limit(int(limit))
+        cameras = list(cursor)
+
+        results: List[Dict[str, Any]] = []
+        for c in cameras:
+            raw_id = c.get("camera_id")
+            cid: Optional[int] = None
+            if raw_id is not None:
+                try:
+                    cid = int(raw_id)
+                except (TypeError, ValueError):
+                    pass
+            if cid is None:
+                # Malformed or missing camera_id: include doc with running=False so query doesn't crash
+                result = dict(c)
+                result["type"] = "camera_status"
+                result["running"] = False
+                results.append(result)
+                continue
+            running = False
+            try:
+                running = runner.is_running(cid)
+            except Exception:
+                # If runtime status fails, treat as not running but keep DB status
+                running = False
+            result = dict(c)
+            result["type"] = "camera_status"
+            result["running"] = running
+            results.append(result)
+
+        return results
     
+    def _resolve_zone_to_ids(self, zone_text: Optional[str], camera_id: Any) -> List[str]:
+        """Resolve zone name/text to list of zone_ids from zones collection (for zone-aware retrieval)."""
+        if not zone_text or not str(zone_text).strip():
+            return []
+        zone_text = str(zone_text).strip().lower()
+        try:
+            q: Dict[str, Any] = {
+                "$or": [
+                    {"name": {"$regex": re.escape(zone_text), "$options": "i"}},
+                    {"zone_id": {"$regex": re.escape(zone_text), "$options": "i"}},
+                ]
+            }
+            if camera_id is not None:
+                if isinstance(camera_id, (list, tuple)):
+                    q["camera_id"] = {"$in": list(camera_id)}
+                else:
+                    q["camera_id"] = int(camera_id)
+            zone_docs = list(zones_col.find(q, {"zone_id": 1}))
+            zone_ids = [str(z["zone_id"]) for z in zone_docs if z.get("zone_id")]
+            if zone_ids:
+                print(f"[UnifiedRetrieval] Resolved zone '{zone_text}' -> zone_ids: {zone_ids}")
+            return zone_ids
+        except Exception as e:
+            logger.debug(f"Zone resolution failed: {e}")
+            return []
+
     def _execute_structured_query(
         self,
         parsed_filter: Dict[str, Any],
@@ -254,16 +515,35 @@ class UnifiedRetrieval:
         count_constraint = self._normalize_count_constraint(parsed_filter.get("count_constraint"))
         is_zero_count_query = bool(count_constraint and count_constraint.get("eq") == 0)
 
+        # Resolve zone (text) to zone_ids for zone-aware count filtering
+        zone_text = parsed_filter.get("zone")
+        camera_id_filter = mongo_filter.get("camera_id")
+        zone_ids: List[str] = []
+        if zone_text:
+            zone_ids = self._resolve_zone_to_ids(zone_text, camera_id_filter)
+            parsed_filter["__zone_ids"] = zone_ids
+
         # For "no person" style queries, object-level Mongo filters would eliminate valid docs.
         # We broaden the DB candidate set and enforce the count constraint in Python.
         if is_zero_count_query:
             mongo_filter.pop("objects.object_name", None)
             mongo_filter.pop("objects.color", None)
 
-        # Use person_count index for fast server-side pre-filtering (non-zero count queries)
+        # Use person_count or zone_counts for fast server-side pre-filtering
         obj_name = parsed_filter.get("objects.object_name", "")
         obj_color = parsed_filter.get("objects.color")
-        if count_constraint and obj_name and str(obj_name).lower() == "person" and not obj_color:
+        use_zone_counts = bool(
+            zone_ids and count_constraint and obj_name and str(obj_name).lower() == "person"
+            and not obj_color and not is_zero_count_query
+        )
+        if is_zero_count_query and zone_ids:
+            or_zero = []
+            for zid in zone_ids:
+                or_zero.append({"zone_counts." + zid: 0})
+                or_zero.append({"zone_counts." + zid: {"$exists": False}})
+            mongo_filter["$or"] = or_zero
+            print(f"[UnifiedRetrieval] Zero-count zone filter: zone_counts.* == 0 or missing for {zone_ids}")
+        elif count_constraint and obj_name and str(obj_name).lower() == "person" and not obj_color and not use_zone_counts:
             pc_filter: Dict[str, Any] = {}
             if "eq" in count_constraint:
                 pc_filter = {"person_count": int(count_constraint["eq"])}
@@ -278,6 +558,24 @@ class UnifiedRetrieval:
             if pc_filter:
                 mongo_filter.update(pc_filter)
                 print(f"[UnifiedRetrieval] Using person_count index: {pc_filter}")
+        elif use_zone_counts:
+            # Filter by zone_counts.<zone_id> for at least one resolved zone
+            or_conditions: List[Dict[str, Any]] = []
+            for zid in zone_ids:
+                key = f"zone_counts.{zid}"
+                if "eq" in count_constraint:
+                    or_conditions.append({key: int(count_constraint["eq"])})
+                elif "gt" in count_constraint:
+                    or_conditions.append({key: {"$gt": int(count_constraint["gt"])}})
+                elif "gte" in count_constraint:
+                    or_conditions.append({key: {"$gte": int(count_constraint["gte"])}})
+                elif "lt" in count_constraint:
+                    or_conditions.append({key: {"$lt": int(count_constraint["lt"])}})
+                elif "lte" in count_constraint:
+                    or_conditions.append({key: {"$lte": int(count_constraint["lte"])}})
+            if or_conditions:
+                mongo_filter["$or"] = or_conditions
+                print(f"[UnifiedRetrieval] Using zone_counts filter: $or over {zone_ids}")
         
         # Step 1: Handle location-based camera resolution
         location_hint = parsed_filter.get("__location_hint")
@@ -298,25 +596,30 @@ class UnifiedRetrieval:
         logger.debug(f"MongoDB filter: {mongo_filter}")
 
         # Normalize object name to lowercase (YOLO stores lowercase names)
+        original_obj_name = None
         if "objects.object_name" in mongo_filter:
+            original_obj_name = mongo_filter["objects.object_name"]
             mongo_filter["objects.object_name"] = str(mongo_filter["objects.object_name"]).lower()
+            print(f"[UnifiedRetrieval] Normalized object_name: '{original_obj_name}' -> '{mongo_filter['objects.object_name']}'")
+            logger.debug(f"Normalized object_name: '{original_obj_name}' -> '{mongo_filter['objects.object_name']}'")
 
         # Ensure timestamp filter values are consistent ISO strings
+        original_timestamps = {}
         if "timestamp" in mongo_filter:
             ts_f = mongo_filter["timestamp"]
             if isinstance(ts_f, dict):
+                original_timestamps = ts_f.copy()
                 for op in ("$gte", "$lte", "$gt", "$lt"):
                     if op in ts_f and isinstance(ts_f[op], str):
+                        original_val = ts_f[op]
                         # Normalize: strip trailing Z or +/-HH:MM timezone offset
                         ts_f[op] = re.sub(r"(Z|[+-]\d{2}:\d{2})$", "", ts_f[op])
-        
-        if "timestamp" in mongo_filter:
-            ts_f = mongo_filter["timestamp"]
-            if isinstance(ts_f, dict):
-                for op in ("$gte", "$lte", "$gt", "$lt"):
-                    if op in ts_f and isinstance(ts_f[op], str):
-                        # Normalize: strip trailing Z or +/-HH:MM timezone offset
-                        ts_f[op] = re.sub(r"(Z|[+-]\d{2}:\d{2})$", "", ts_f[op])
+                        if original_val != ts_f[op]:
+                            print(f"[UnifiedRetrieval] Normalized timestamp {op}: '{original_val}' -> '{ts_f[op]}'")
+                            logger.debug(f"Normalized timestamp {op}: '{original_val}' -> '{ts_f[op]}'")
+                if original_timestamps:
+                    print(f"[UnifiedRetrieval] Timestamp filter range: {ts_f.get('$gte', 'N/A')} to {ts_f.get('$lte', 'N/A')}")
+                    logger.debug(f"Timestamp filter range: {ts_f.get('$gte', 'N/A')} to {ts_f.get('$lte', 'N/A')}")
         # Initialize query_limit to avoid UnboundLocalError
         query_limit = limit
         if parsed_filter.get("__ask_color"):
@@ -325,14 +628,65 @@ class UnifiedRetrieval:
             query_limit = max(query_limit, 500)
         
         try:
+            # Execute the main query
             cursor = detections_col.find(
                 mongo_filter,
                 {"_id": 0}
             ).sort("timestamp", -1).limit(query_limit)
             results = list(cursor)
+            
+            print(f"[UnifiedRetrieval] Initial query returned {len(results)} detection(s)")
+            logger.debug(f"Initial query returned {len(results)} detection(s)")
+
+            # If query returned 0 results, try a diagnostic fallback query to see if ANY detections exist
+            if len(results) == 0:
+                # Build a broader diagnostic query (remove object filter, keep time/camera)
+                diagnostic_filter: Dict[str, Any] = {}
+                if "timestamp" in mongo_filter:
+                    diagnostic_filter["timestamp"] = mongo_filter["timestamp"]
+                if "camera_id" in mongo_filter:
+                    diagnostic_filter["camera_id"] = mongo_filter["camera_id"]
+                
+                if diagnostic_filter:
+                    try:
+                        diagnostic_cursor = detections_col.find(
+                            diagnostic_filter,
+                            {"_id": 0, "timestamp": 1, "camera_id": 1, "objects.object_name": 1}
+                        ).sort("timestamp", -1).limit(5)
+                        diagnostic_results = list(diagnostic_cursor)
+                        
+                        if diagnostic_results:
+                            print(f"[UnifiedRetrieval] DIAGNOSTIC: Found {len(diagnostic_results)} detection(s) without object filter")
+                            logger.warning(f"DIAGNOSTIC: Found {len(diagnostic_results)} detection(s) without object filter")
+                            # Log sample object names found
+                            obj_names_found = set()
+                            for d in diagnostic_results:
+                                for obj in d.get("objects", []):
+                                    if isinstance(obj, dict):
+                                        obj_name = obj.get("object_name")
+                                        if obj_name:
+                                            obj_names_found.add(str(obj_name))
+                            if obj_names_found:
+                                print(f"[UnifiedRetrieval] DIAGNOSTIC: Object names found in DB: {sorted(obj_names_found)}")
+                                logger.warning(f"DIAGNOSTIC: Object names found in DB: {sorted(obj_names_found)}")
+                            # Log sample timestamps
+                            sample_timestamps = [d.get("timestamp") for d in diagnostic_results[:3] if d.get("timestamp")]
+                            if sample_timestamps:
+                                print(f"[UnifiedRetrieval] DIAGNOSTIC: Sample timestamps in DB: {sample_timestamps}")
+                                logger.warning(f"DIAGNOSTIC: Sample timestamps in DB: {sample_timestamps}")
+                        else:
+                            print("[UnifiedRetrieval] DIAGNOSTIC: No detections found even without object filter (time/camera only)")
+                            logger.warning("DIAGNOSTIC: No detections found even without object filter (time/camera only)")
+                    except Exception as diag_err:
+                        print(f"[UnifiedRetrieval] DIAGNOSTIC query failed: {diag_err}")
+                        logger.error(f"DIAGNOSTIC query failed: {diag_err}")
 
             # Strictly enforce count constraints in-memory.
             results = self._filter_docs_by_count_constraint(results, parsed_filter)
+            
+            if len(results) == 0 and not is_zero_count_query:
+                print(f"[UnifiedRetrieval] After count constraint filtering: 0 results")
+                logger.debug(f"After count constraint filtering: 0 results")
             
             # FALLBACK: If detections are empty or insufficient, query vlm_frames
             # This handles uploaded videos that are indexed into vlm_frames but not detections
@@ -440,10 +794,28 @@ class UnifiedRetrieval:
             from_iso = ts_filter.get("$gte")
             to_iso = ts_filter.get("$lte")
         
-        # Lower confidence threshold for action queries (they need more lenient matching)
         has_action = parsed_filter.get("action") is not None
         min_confidence = 0.10 if has_action else 0.15
-        
+        expanded_queries: Optional[List[str]] = None
+        if getattr(settings, "ENABLE_CLIP_EXPANSION", True):
+            terms = parsed_filter.get("__expanded_terms") or {}
+            variants = [semantic_query]
+            if terms.get("objects") and len(terms["objects"]) > 1:
+                try:
+                    v = semantic_query.replace(terms["objects"][0], terms["objects"][1], 1)
+                    if v != semantic_query:
+                        variants.append(v)
+                except Exception:
+                    pass
+            if terms.get("action") and len(terms["action"]) > 1:
+                try:
+                    v = semantic_query.replace(terms["action"][0], terms["action"][1], 1)
+                    if v != semantic_query and v not in variants:
+                        variants.append(v)
+                except Exception:
+                    pass
+            if len(variants) > 1:
+                expanded_queries = variants
         try:
             result = search_unstructured(
                 query=semantic_query,
@@ -451,7 +823,9 @@ class UnifiedRetrieval:
                 camera_id=camera_id,
                 from_iso=from_iso,
                 to_iso=to_iso,
-                min_confidence=min_confidence
+                min_confidence=min_confidence,
+                has_action=has_action,
+                expanded_queries=expanded_queries,
             )
             logger.debug(f"Raw semantic results: {len(result.get('semantic_results', []))}")
             return result.get("semantic_results", [])
@@ -479,33 +853,23 @@ class UnifiedRetrieval:
             combined_tracks = self._build_count_constrained_segments(structured, parsed_filter)
             print(f"[UnifiedRetrieval] Count-constrained segments: {len(combined_tracks)}")
         else:
-            # Merge tracks from structured results
-            merged_tracks = self._merge_structured_tracks(structured, parsed_filter)
-            print(f"[UnifiedRetrieval] Merged structured tracks: {len(merged_tracks)}")
-
-            # Combine across track IDs into continuous segments
-            combined_tracks = self._coalesce_tracks(merged_tracks)
-            print(f"[UnifiedRetrieval] Coalesced tracks: {len(combined_tracks)}")
+            # Optional adaptive gap thresholds from detection timestamps
+            self._current_max_gap, self._current_join_gap = self._compute_adaptive_gaps(structured)
+            try:
+                merged_tracks = self._merge_structured_tracks(structured, parsed_filter)
+                print(f"[UnifiedRetrieval] Merged structured tracks: {len(merged_tracks)}")
+                combined_tracks = self._coalesce_tracks(merged_tracks)
+                print(f"[UnifiedRetrieval] Coalesced tracks: {len(combined_tracks)}")
+            finally:
+                self._current_max_gap = None
+                self._current_join_gap = None
         
-        # Score weighting based on intent and query characteristics
-        # Check if query requires semantic understanding (actions, complex behaviors)
+        # Score weighting: adaptive or fixed by intent
         has_action = parsed_filter.get("action") is not None
-        
-        if has_count_constraint:
-            # Strict count queries should be governed by structured evidence only
-            alpha = 1.0
-        elif has_action:
-            # Action queries MUST use semantic search since detections don't have action labels
-            alpha = 0.1  # 10% structured, 90% semantic
-        elif intent == "count":
-            # Heavily favor structured
-            alpha = 0.9  # 90% structured, 10% semantic
-        elif intent == "track":
-            # Balanced
-            alpha = 0.5
-        else:  # find
-            # Slightly favor structured but use semantic
-            alpha = 0.7
+        alpha = self._compute_adaptive_alpha(
+            parsed_filter, intent, has_count_constraint, has_action,
+            n_structured=len(combined_tracks), n_semantic=len(semantic),
+        )
         
         # Build unified result set
         results_map: Dict[str, Dict[str, Any]] = {}
@@ -525,22 +889,31 @@ class UnifiedRetrieval:
         
         # Add/merge semantic results (disabled for strict count constraints)
         if not has_count_constraint:
+            enable_temporal = getattr(settings, "ENABLE_TEMPORAL_OVERLAP", True)
             for sem in semantic:
-                # Try to match with existing structured results by clip
                 clip_url = sem.get("clip_url")
                 matched = False
-
                 for key, result in results_map.items():
                     if result.get("clip_url") == clip_url:
-                        # Merge semantic score
                         result["score_semantic"] = sem.get("score_norm", 0.0)
                         result["source"] = "hybrid"
                         result["frames"] = sem.get("frames", [])
                         matched = True
                         break
-
+                if not matched and enable_temporal:
+                    sem_start, sem_end = self._semantic_time_range(sem)
+                    if sem_start is not None and sem_end is not None:
+                        for key, result in results_map.items():
+                            r_start = result.get("start")
+                            r_end = result.get("end")
+                            if r_start and r_end and self._ranges_overlap(sem_start, sem_end, r_start, r_end):
+                                result["score_semantic"] = max(result.get("score_semantic", 0.0), sem.get("score_norm", 0.0))
+                                result["source"] = "hybrid"
+                                if not result.get("frames"):
+                                    result["frames"] = sem.get("frames", [])
+                                matched = True
+                                break
                 if not matched:
-                    # Add as new semantic-only result
                     key = f"sem_{sem.get('camera_id')}_{sem.get('clip_path', '')}"
                     results_map[key] = {
                         "camera_id": sem.get("camera_id"),
@@ -552,18 +925,35 @@ class UnifiedRetrieval:
                         "frames": sem.get("frames", [])
                     }
         
-        # Calculate final weighted scores
+        # Calculate final weighted scores and apply recency boost
         results = []
+        now = datetime.now()
+        halflife_hours = getattr(settings, "RECENCY_HALFLIFE_HOURS", 24.0) or 24.0
+        enable_recency = getattr(settings, "ENABLE_RECENCY_BOOST", True)
         for result in results_map.values():
             final_score = (
                 alpha * result["score_struct"] +
                 (1 - alpha) * result["score_semantic"]
             )
+            if enable_recency and halflife_hours > 0:
+                try:
+                    ts_str = result.get("start") or result.get("end") or result.get("timestamp")
+                    if ts_str:
+                        t = self._parse_ts(ts_str)
+                        age_hours = (now - t).total_seconds() / 3600.0
+                        recency_boost = math.exp(-age_hours * (0.693 / halflife_hours))  # 0.693 = ln(2)
+                        final_score *= (1.0 + 0.5 * recency_boost)  # up to 50% boost for very recent
+                except Exception:
+                    pass
             result["score"] = final_score
             results.append(result)
         
         # Sort by final score
         results.sort(key=lambda x: x["score"], reverse=True)
+        
+        # Apply result diversity (MMR) if enabled
+        if getattr(settings, "ENABLE_RESULT_DIVERSITY", True):
+            results = self._apply_mmr_diversity(results, parsed_filter)
         
         return results
     
@@ -624,7 +1014,8 @@ class UnifiedRetrieval:
             
             for i, t in enumerate(times[1:], start=1):
                 gap = (t - prev).total_seconds()
-                if gap <= self.max_gap_seconds:
+                max_gap = self._current_max_gap if self._current_max_gap is not None else self.max_gap_seconds
+                if gap <= max_gap:
                     prev = t
                 else:
                     # Close segment
@@ -688,8 +1079,8 @@ class UnifiedRetrieval:
                 s = self._parse_ts(seg["start"])
                 e = self._parse_ts(seg["end"])
                 gap = (s - cur_end).total_seconds()
-                
-                if gap <= self.join_gap_seconds:
+                join_gap = self._current_join_gap if self._current_join_gap is not None else self.join_gap_seconds
+                if gap <= join_gap:
                     if e > cur_end:
                         cur_end = e
                     # Accumulate objects and timestamps from this merged segment
@@ -975,9 +1366,23 @@ class UnifiedRetrieval:
         return True
 
     def _count_matching_objects_in_doc(self, doc: Dict[str, Any], parsed_filter: Dict[str, Any]) -> int:
-        # Fast-path: use pre-computed person_count when filtering only by name="person" (no color)
         obj_name = parsed_filter.get("objects.object_name")
         color = parsed_filter.get("objects.color")
+        zone_ids = parsed_filter.get("__zone_ids") or []
+        # Zone-aware: use zone_counts when zone_ids resolved and filtering by person (no color).
+        # Match MongoDB $or semantics: doc matches if any zone satisfies the count constraint.
+        if zone_ids and obj_name and str(obj_name).lower() == "person" and not color:
+            zc = doc.get("zone_counts") or {}
+            if isinstance(zc, dict):
+                counts = [int(zc.get(zid, 0)) for zid in zone_ids]
+                constraint = self._normalize_count_constraint(parsed_filter.get("count_constraint"))
+                if constraint:
+                    for c in counts:
+                        if self._count_matches_constraint(c, constraint):
+                            return c
+                    return 0
+                return max(counts) if counts else 0
+        # Fast-path: use pre-computed person_count when filtering only by name="person" (no color)
         if obj_name and str(obj_name).lower() == "person" and not color:
             pc = doc.get("person_count")
             if pc is not None:
@@ -1071,7 +1476,8 @@ class UnifiedRetrieval:
                     continue
 
                 gap = (ts - seg_end).total_seconds() if seg_end is not None else 0
-                if gap <= self.join_gap_seconds:
+                join_gap = self._current_join_gap if self._current_join_gap is not None else self.join_gap_seconds
+                if gap <= join_gap:
                     seg_end = ts
                     if cnt > seg_peak_count:
                         seg_peak_count = cnt
@@ -1163,6 +1569,129 @@ class UnifiedRetrieval:
         if max_score == 0:
             return [1.0] * len(scores)  # All equal = all get full score
         return [s / max_score for s in scores]
+
+    def _compute_adaptive_alpha(
+        self,
+        parsed_filter: Dict[str, Any],
+        intent: str,
+        has_count_constraint: bool,
+        has_action: bool,
+        n_structured: int,
+        n_semantic: int,
+    ) -> float:
+        """
+        Compute alpha (structured weight) adaptively from query and result characteristics.
+        Fallback: use fixed intent-based alpha if disabled or on error.
+        """
+        if not getattr(settings, "ENABLE_ADAPTIVE_ALPHA", True):
+            return self._fixed_alpha(intent, has_count_constraint, has_action)
+        try:
+            if has_count_constraint:
+                return 1.0
+            if has_action:
+                return 0.1
+            # Query complexity: more filters -> favor structured
+            filter_count = sum(1 for k in ("camera_id", "objects.object_name", "objects.color", "zone", "location_hint") if parsed_filter.get(k))
+            if parsed_filter.get("timestamp"):
+                filter_count += 1
+            complexity = min(1.0, filter_count / 4.0)  # 0..1
+            # Base alpha from intent
+            base = {"count": 0.9, "track": 0.5, "find": 0.7}.get(intent, 0.7)
+            # Adjust by structured result abundance: more structured results -> trust structured more
+            struct_ratio = n_structured / max(1, n_structured + n_semantic) if (n_structured or n_semantic) else 0.5
+            alpha = base * 0.6 + 0.2 * complexity + 0.2 * struct_ratio
+            return max(0.1, min(0.95, alpha))
+        except Exception as e:
+            logger.debug(f"Adaptive alpha failed: {e}, using fixed")
+            return self._fixed_alpha(intent, has_count_constraint, has_action)
+
+    def _fixed_alpha(self, intent: str, has_count_constraint: bool, has_action: bool) -> float:
+        """Fixed alpha by intent (original behavior)."""
+        if has_count_constraint:
+            return 1.0
+        if has_action:
+            return 0.1
+        if intent == "count":
+            return 0.9
+        if intent == "track":
+            return 0.5
+        return 0.7
+
+    def _semantic_time_range(self, sem: Dict[str, Any]) -> Tuple[Optional[datetime], Optional[datetime]]:
+        """Return (min_ts, max_ts) from semantic result frames, or (None, None)."""
+        try:
+            frames = sem.get("frames") or []
+            if not frames:
+                return None, None
+            times = []
+            for f in frames:
+                ts = f.get("frame_ts")
+                if ts:
+                    times.append(self._parse_ts(ts))
+            if not times:
+                return None, None
+            return min(times), max(times)
+        except Exception:
+            return None, None
+
+    def _ranges_overlap(self, a_start: datetime, a_end: datetime, b_start_str: str, b_end_str: str) -> bool:
+        """True if time ranges [a_start,a_end] and [b_start,b_end] overlap."""
+        try:
+            b_start = self._parse_ts(b_start_str)
+            b_end = self._parse_ts(b_end_str)
+            return a_start <= b_end and b_start <= a_end
+        except Exception:
+            return False
+
+    def _apply_mmr_diversity(
+        self, results: List[Dict[str, Any]], parsed_filter: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """
+        Re-rank with Maximal Marginal Relevance: balance relevance and diversity.
+        Penalize results too similar in (camera_id, time bucket) to spread results.
+        """
+        if len(results) <= 2:
+            return results
+        try:
+            lambda_ = getattr(settings, "MMR_DIVERSITY_LAMBDA", 0.3)
+            lambda_ = max(0.0, min(1.0, lambda_))
+            selected: List[Dict[str, Any]] = []
+            remaining = list(results)
+            while remaining:
+                best_idx = -1
+                best_mmr = -1.0
+                for i, r in enumerate(remaining):
+                    rel = r.get("score", 0.0)
+                    # Diversity: min similarity to already selected (by camera + time bucket)
+                    max_sim = 0.0
+                    ts_str = r.get("start") or r.get("end") or ""
+                    try:
+                        t = self._parse_ts(ts_str) if ts_str else None
+                        time_bucket = int(t.timestamp() / 3600) if t else 0
+                    except Exception:
+                        time_bucket = 0
+                    key_r = (r.get("camera_id"), time_bucket)
+                    for s in selected:
+                        ts_s = s.get("start") or s.get("end") or ""
+                        try:
+                            t_s = self._parse_ts(ts_s) if ts_s else None
+                            tb_s = int(t_s.timestamp() / 3600) if t_s else 0
+                        except Exception:
+                            tb_s = 0
+                        key_s = (s.get("camera_id"), tb_s)
+                        sim = 1.0 if key_r == key_s else 0.0
+                        max_sim = max(max_sim, sim)
+                    mmr = lambda_ * rel - (1.0 - lambda_) * max_sim
+                    if mmr > best_mmr:
+                        best_mmr = mmr
+                        best_idx = i
+                if best_idx < 0:
+                    break
+                selected.append(remaining.pop(best_idx))
+            return selected
+        except Exception as e:
+            logger.debug(f"MMR diversity failed: {e}, returning original order")
+            return results
     
     def _aggregate_objects(self, objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """

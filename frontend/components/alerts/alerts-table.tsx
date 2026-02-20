@@ -103,6 +103,11 @@ export function AlertsTable() {
       const condParts: string[] = [];
       if (obj) condParts.push(obj);
       if (color) condParts.push(color);
+      const zoneId = rule?.area?.zone_id;
+      if (zoneId) condParts.push(`in ${zoneId}`);
+      const count = rule?.count;
+      if (count && (count[">="] ?? count[">"])) condParts.push(`≥${count[">="] ?? count[">"]}`);
+      if (rule?.occupancy_pct?.[">="]) condParts.push(`occ≥${rule.occupancy_pct[">="]}%`);
       if (time) condParts.push(`(${time})`);
       const condition = condParts.join(" ");
       return {

@@ -54,29 +54,59 @@ function AlertModal({ onClose }: { onClose: () => void }) {
   const [objectName, setObjectName] = useState<string>("person")
   const [color, setColor] = useState<string>("")
   const [countThreshold, setCountThreshold] = useState<number>(0)
+  const [zoneId, setZoneId] = useState<string>("")
+  const [occupancyPct, setOccupancyPct] = useState<number>(0)
   const [severity, setSeverity] = useState<string>("info")
   const [cooldownSec, setCooldownSec] = useState<number>(60)
   const [nightHours, setNightHours] = useState<boolean>(false)
   const [enabled, setEnabled] = useState<boolean>(true)
   const [cameraIds, setCameraIds] = useState<number[]>([])
   const [cameras, setCameras] = useState<Array<{ camera_id: number; location?: string }>>([])
+  const [zonesByCamera, setZonesByCamera] = useState<Array<{ camera_id: number; zone_id: string; name: string }>>([])
+  const [loadingCameras, setLoadingCameras] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let mounted = true
+    setLoadingCameras(true)
+    setError(null)
     api
       .listCameras()
       .then((list) => {
         if (!mounted) return
         const cams = (list as any[]).map((c) => ({ camera_id: Number(c.camera_id), location: c.location }))
         setCameras(cams)
+        setLoadingCameras(false)
       })
-      .catch((e) => setError(e?.message || "Failed to load cameras"))
+      .catch((e) => {
+        if (!mounted) return
+        setError(e?.message || "Failed to load cameras")
+        setLoadingCameras(false)
+      })
     return () => {
       mounted = false
     }
   }, [])
+
+  // Load zones for selected cameras (or all) for zone picker
+  useEffect(() => {
+    if (cameras.length === 0) return
+    let mounted = true
+    const ids = cameraIds.length > 0 ? cameraIds : cameras.map((c) => c.camera_id)
+    const all: Array<{ camera_id: number; zone_id: string; name: string }> = []
+    Promise.all(
+      ids.map((cid) =>
+        api.listZones(cid).then((zones: any[]) => {
+          if (!mounted) return
+          zones.forEach((z: any) => all.push({ camera_id: cid, zone_id: z.zone_id, name: z.name || z.zone_id }))
+        }).catch(() => {})
+      )
+    ).then(() => {
+      if (mounted) setZonesByCamera(all)
+    })
+    return () => { mounted = false }
+  }, [cameraIds, cameras])
 
   const toggleCamera = (id: number) => {
     setCameraIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
@@ -97,6 +127,8 @@ function AlertModal({ onClose }: { onClose: () => void }) {
       if (objectName) rule.objects = [{ name: objectName }]
       if (color) rule.color = color
       if (countThreshold && countThreshold > 0) rule.count = { ">=": Number(countThreshold) }
+      if (zoneId) rule.area = { zone_id: zoneId }
+      if (occupancyPct > 0) rule.occupancy_pct = { ">=": Number(occupancyPct) }
       if ((nl || name).toLowerCase().includes("fight")) rule.behavior = "fight"
 
       const payload = {
@@ -149,6 +181,8 @@ function AlertModal({ onClose }: { onClose: () => void }) {
                   setName("Crowd > 3 people");
                   setObjectName("person");
                   setCountThreshold(3);
+                  setZoneId("");
+                  setOccupancyPct(0);
                   setSeverity("warning");
                   setCooldownSec(120);
                   setNightHours(false);
@@ -259,6 +293,38 @@ function AlertModal({ onClose }: { onClose: () => void }) {
               </div>
             </div>
 
+            {zonesByCamera.length > 0 && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Zone (optional)</label>
+                  <select
+                    value={zoneId}
+                    onChange={(e) => setZoneId(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background"
+                  >
+                    <option value="">Full frame</option>
+                    {zonesByCamera.map((z) => (
+                      <option key={`${z.camera_id}-${z.zone_id}`} value={z.zone_id}>
+                        {z.name} (cam {z.camera_id})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Occupancy % (&gt;=)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={occupancyPct}
+                    onChange={(e) => setOccupancyPct(parseInt(e.target.value || "0", 10))}
+                    className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Severity</label>
@@ -287,23 +353,29 @@ function AlertModal({ onClose }: { onClose: () => void }) {
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">Cameras (optional)</label>
               <div className="flex flex-wrap gap-2">
-                {cameras.map((c) => {
-                  const selected = cameraIds.includes(c.camera_id)
-                  return (
-                    <button
-                      key={c.camera_id}
-                      onClick={() => toggleCamera(c.camera_id)}
-                      className={`px-3 py-1 rounded-full text-xs border transition-colors ${
-                        selected
-                          ? "bg-primary/20 border-primary text-primary"
-                          : "bg-muted border-border text-muted-foreground hover:bg-muted/80"
-                      }`}
-                    >
-                      #{c.camera_id} {c.location ? `· ${c.location}` : ""}
-                    </button>
-                  )
-                })}
-                {cameras.length === 0 && <span className="text-xs text-muted-foreground">No cameras found</span>}
+                {loadingCameras ? (
+                  <span className="text-xs text-muted-foreground">Loading cameras...</span>
+                ) : cameras.length === 0 ? (
+                  <span className="text-xs text-muted-foreground">No cameras found</span>
+                ) : (
+                  cameras.map((c) => {
+                    const selected = cameraIds.includes(c.camera_id)
+                    return (
+                      <button
+                        key={c.camera_id}
+                        type="button"
+                        onClick={() => toggleCamera(c.camera_id)}
+                        className={`px-3 py-1 rounded-full text-xs border transition-colors cursor-pointer ${
+                          selected
+                            ? "bg-primary/20 border-primary text-primary"
+                            : "bg-muted border-border text-muted-foreground hover:bg-muted/80"
+                        }`}
+                      >
+                        #{c.camera_id} {c.location ? `· ${c.location}` : ""}
+                      </button>
+                    )
+                  })
+                )}
               </div>
             </div>
           </div>

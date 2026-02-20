@@ -21,6 +21,31 @@ def _norm_scores(scores: List[float]) -> List[float]:
     return [(s - mn) / (mx - mn) for s in scores]
 
 
+def _adaptive_min_confidence(
+    clip_max_scores: List[float],
+    has_action: bool = False,
+    base: float = 0.15,
+) -> float:
+    """
+    Compute minimum confidence threshold from score distribution.
+    Action queries get lower threshold; otherwise use percentile so we keep reasonable recall.
+    """
+    if not getattr(settings, "ENABLE_ADAPTIVE_CONFIDENCE", True):
+        return 0.10 if has_action else base
+    try:
+        if has_action:
+            return max(0.08, min(0.25, base - 0.05))
+        if not clip_max_scores:
+            return base
+        arr = np.array(clip_max_scores, dtype=float)
+        # Use 25th percentile so we keep top 75% of clips; floor 0.08, ceiling 0.35
+        p25 = float(np.percentile(arr, 25))
+        adaptive = max(0.08, min(0.35, p25))
+        return adaptive
+    except Exception:
+        return 0.10 if has_action else base
+
+
 def search_unstructured(
     query: str,
     top_k: int = 50,
@@ -28,6 +53,8 @@ def search_unstructured(
     from_iso: Optional[str] = None,
     to_iso: Optional[str] = None,
     min_confidence: float = 0.15,
+    has_action: bool = False,
+    expanded_queries: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     Semantic (vector-only) search using CLIP text embedding + FAISS.
@@ -40,11 +67,29 @@ def search_unstructured(
         from_iso: Start time filter (ISO format)
         to_iso: End time filter (ISO format)
         min_confidence: Minimum confidence threshold (0.0-1.0). Default 0.25 filters out low-quality matches.
+        expanded_queries: Optional list of query variants for embedding fusion (first = primary).
     """
     if not settings.ENABLE_SEMANTIC:
         return {"mode": "unstructured", "semantic_results": []}
 
-    emb = get_embedder().text_embed([query])
+    use_expansion = getattr(settings, "ENABLE_CLIP_EXPANSION", True) and expanded_queries and len(expanded_queries) > 1
+    if use_expansion:
+        try:
+            embedder = get_embedder()
+            embs = embedder.text_embed(expanded_queries)
+            n = len(embs)
+            w_primary = 0.6
+            w_rest = (1.0 - w_primary) / max(1, n - 1)
+            weights = [w_primary] + [w_rest] * (n - 1)
+            combined = np.average(embs, axis=0, weights=weights).astype(np.float32)
+            norm = np.linalg.norm(combined)
+            if norm > 1e-12:
+                combined = combined / norm
+            query_emb = combined
+        except Exception:
+            query_emb = get_embedder().text_embed([query])[0]
+    else:
+        query_emb = get_embedder().text_embed([query])[0]
     store = get_faiss_store(dim=512)
 
     def _filter_pred(meta: Dict[str, Any]) -> bool:
@@ -68,7 +113,7 @@ def search_unstructured(
 
     # Over-fetch to compensate for post-filtering losses (camera/time filters)
     fetch_multiplier = 4 if (camera_id is not None or from_iso or to_iso) else 1
-    hits = store.vector_search(emb[0], top_k=top_k * fetch_multiplier, filter_pred=_filter_pred)
+    hits = store.vector_search(query_emb, top_k=top_k * fetch_multiplier, filter_pred=_filter_pred)
 
     # Group by clip to form clip-level results
     by_clip: Dict[str, Dict[str, Any]] = {}
@@ -97,19 +142,20 @@ def search_unstructured(
             }
         )
 
-    # Aggregate clip scores: max over frames and keep top few frames
-    results: List[Dict[str, Any]] = []
+    # Aggregate clip scores: max over frames; then apply adaptive or fixed threshold
+    clip_scores: List[float] = []
     for clip, entry in by_clip.items():
         frames = sorted(entry["frames"], key=lambda x: float(x.get("score") or 0.0), reverse=True)
         max_score = float(frames[0]["score"]) if frames else 0.0
-        
-        # Filter by minimum confidence threshold
-        if max_score < min_confidence:
-            continue
-            
         entry["score"] = max_score
         entry["frames"] = frames[:5]
-        results.append(entry)
+        clip_scores.append(max_score)
+    # Adaptive threshold from distribution (or use fixed min_confidence)
+    if getattr(settings, "ENABLE_ADAPTIVE_CONFIDENCE", True) and clip_scores:
+        threshold = _adaptive_min_confidence(clip_scores, has_action=has_action, base=min_confidence)
+    else:
+        threshold = 0.10 if has_action else min_confidence
+    results = [entry for entry in by_clip.values() if entry["score"] >= threshold]
 
     # Normalize scores for consistent merging later
     normed = _norm_scores([r["score"] for r in results])
@@ -119,7 +165,7 @@ def search_unstructured(
     # Sort by normalized score desc
     results.sort(key=lambda x: x.get("score_norm", 0.0), reverse=True)
     
-    print(f"[SemanticSearch] Filtered results: {len(results)} clips with confidence >= {min_confidence}")
+    print(f"[SemanticSearch] Filtered results: {len(results)} clips with confidence >= {threshold}")
     
     return {"mode": "unstructured", "semantic_results": results}
 

@@ -11,6 +11,7 @@ db: Database = client[settings.MONGO_DB_NAME]
 
 # Collections
 cameras: Collection = db["cameras"]
+zones: Collection = db["zones"]  # ROIs per camera for crowd/zone-level counts
 detections: Collection = db["detections"]
 tracks: Collection = db["tracks"]
 events: Collection = db["events"]
@@ -26,6 +27,11 @@ anomaly_events: Collection = db["anomaly_events"]  # cached daily anomaly detect
 def init_indexes() -> None:
     # cameras
     cameras.create_index([("camera_id", ASCENDING)], unique=True)
+    # zones: ROIs per camera (bbox in normalized [0,1] coords)
+    try:
+        zones.create_index([("camera_id", ASCENDING), ("zone_id", ASCENDING)], unique=True)
+    except Exception:
+        pass
     # app settings
     try:
         app_settings.create_index([("key", ASCENDING)], unique=True)

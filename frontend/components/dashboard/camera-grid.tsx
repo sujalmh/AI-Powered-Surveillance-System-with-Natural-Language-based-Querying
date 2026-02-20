@@ -12,18 +12,27 @@ type CameraDoc = {
   running?: boolean;
 };
 
+type ZoneInfo = {
+  zone_id: string;
+  name: string;
+  count: number;
+  capacity?: number;
+  occupancy_pct?: number;
+};
+
 type Card = {
   id: number;
   name: string;
   status: "live" | "recording" | "stopped";
   people: number;
+  zones?: ZoneInfo[];
 };
 
 /* ────────────────────────────────── CameraTile ────────────────────────────────── */
 
-type CameraTileProps = { id: number; name: string; status: "live" | "recording" | "stopped"; people: number };
+type CameraTileProps = { id: number; name: string; status: "live" | "recording" | "stopped"; people: number; zones?: ZoneInfo[] };
 
-function CameraTile({ id, name, status, people }: CameraTileProps) {
+function CameraTile({ id, name, status, people, zones }: CameraTileProps) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [streamOk, setStreamOk] = useState(true);
   const retryTimer = useRef<NodeJS.Timeout | null>(null);
@@ -91,6 +100,23 @@ function CameraTile({ id, name, status, people }: CameraTileProps) {
           </span>
           <span className="text-xs text-white/90">{people} people</span>
         </div>
+        {zones && zones.length > 0 && (
+          <div className="mt-2 space-y-1">
+            {zones.map((z) => (
+              <div key={z.zone_id} className="flex items-center justify-between text-xs text-white/90">
+                <span>{z.name}: {z.count}{z.capacity != null ? ` / ${z.capacity}` : ""}</span>
+                {z.occupancy_pct != null && (
+                  <div className="w-12 h-1.5 bg-white/20 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-white/90 rounded-full"
+                      style={{ width: `${Math.min(100, z.occupancy_pct)}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -100,7 +126,7 @@ function CameraTile({ id, name, status, people }: CameraTileProps) {
 
 export function CameraGrid() {
   const [cards, setCards] = useState<Card[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
   const load = async () => {
@@ -116,22 +142,36 @@ export function CameraGrid() {
         people: 0,
       }));
 
-      // Enrich with quick people counts from last 5 minutes (best effort)
+      // Enrich with occupancy (people count + zone counts/capacity) or fallback to detections
       for (let i = 0; i < base.length; i++) {
         try {
-          const p = new URLSearchParams();
-          p.set("camera_id", String(base[i].id));
-          p.set("object", "person");
-          p.set("last_minutes", "5");
-          p.set("limit", "50");
-          const dets = (await api.listDetections(p)) as any[];
-          const count = dets.reduce((acc, d) => {
-            const objs = Array.isArray(d.objects) ? d.objects : [];
-            return acc + objs.filter((o: any) => o.object_name === "person").length;
-          }, 0);
-          base[i].people = count;
+          const occ = await api.getOccupancy(base[i].id) as any;
+          base[i].people = occ?.person_count ?? 0;
+          if (Array.isArray(occ?.zones) && occ.zones.length > 0) {
+            base[i].zones = occ.zones.map((z: any) => ({
+              zone_id: z.zone_id,
+              name: z.name,
+              count: z.count ?? 0,
+              capacity: z.capacity,
+              occupancy_pct: z.occupancy_pct,
+            }));
+          }
         } catch {
-          // ignore per-camera error
+          try {
+            const p = new URLSearchParams();
+            p.set("camera_id", String(base[i].id));
+            p.set("object", "person");
+            p.set("last_minutes", "5");
+            p.set("limit", "50");
+            const dets = (await api.listDetections(p)) as any[];
+            const count = dets.reduce((acc: number, d: any) => {
+              const objs = Array.isArray(d.objects) ? d.objects : [];
+              return acc + objs.filter((o: any) => o.object_name === "person").length;
+            }, 0);
+            base[i].people = count;
+          } catch {
+            // ignore per-camera error
+          }
         }
       }
 
@@ -168,6 +208,7 @@ export function CameraGrid() {
             name={camera.name}
             status={camera.status}
             people={camera.people}
+            zones={camera.zones}
           />
         ))}
         {cards.length === 0 && !loading && (

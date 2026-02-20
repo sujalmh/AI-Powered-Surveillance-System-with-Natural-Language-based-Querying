@@ -10,7 +10,7 @@ export function SummaryCards() {
   const [liveAlerts, setLiveAlerts] = useState<number>(0);
   const [anomalies, setAnomalies] = useState<number>(0);
   const [detectionsToday, setDetectionsToday] = useState<number>(0);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
   const load = async () => {

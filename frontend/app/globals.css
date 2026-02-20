@@ -294,6 +294,44 @@
     background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
   }
 
+  /* Glow button style */
+  .glow-button {
+    background: linear-gradient(135deg, var(--btn-primary) 0%, var(--btn-primary-hover) 100%);
+    color: var(--primary-foreground);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow:
+      0 4px 12px rgba(37, 99, 235, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    transition: all 0.25s ease;
+    cursor: pointer;
+    border-radius: var(--radius-lg);
+    font-weight: 500;
+  }
+
+  .glow-button:hover:not(:disabled) {
+    background: linear-gradient(135deg, var(--btn-primary-hover) 0%, var(--btn-primary-active) 100%);
+    box-shadow:
+      0 6px 20px rgba(37, 99, 235, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    transform: translateY(-1px);
+  }
+
+  .glow-button:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow:
+      0 2px 8px rgba(37, 99, 235, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .glow-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  .dark .glow-button {
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
   /* Glass glow effect */
   .glass-glow {
     box-shadow:

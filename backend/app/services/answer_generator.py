@@ -136,21 +136,51 @@ class AnswerGenerator:
         objects_found = []
         actions_found = []
         attributes_found = []
+        alert_summaries = []
+        camera_summaries = []
         
         # Collect detailed data from results
         for r in results:
+            r_type = r.get("type")
+
+            # Common camera/timestamp fields
             if r.get('camera_id') is not None:
                 camera_ids.append(r['camera_id'])
             if r.get('start'):
                 timestamps_list.append(r['start'])
             elif r.get('timestamp'):
                 timestamps_list.append(r['timestamp'])
+
+            # Visual detection style fields
             if r.get('object_name'):
                 objects_found.append(r['object_name'])
             if r.get('action'):
                 actions_found.append(r['action'])
             if r.get('color'):
                 attributes_found.append(f"color: {r['color']}")
+
+            # Alert-log specific summary
+            if r_type == "alert_log":
+                alert_summaries.append(
+                    {
+                        "alert_name": r.get("alert_name") or "",
+                        "camera_id": r.get("camera_id"),
+                        "triggered_at": r.get("triggered_at"),
+                        "severity": r.get("severity", "info"),
+                        "message": r.get("message", ""),
+                    }
+                )
+
+            # Camera-status specific summary
+            if r_type == "camera_status":
+                camera_summaries.append(
+                    {
+                        "camera_id": r.get("camera_id"),
+                        "location": r.get("location"),
+                        "status": r.get("status"),
+                        "running": r.get("running"),
+                    }
+                )
         
         # Format collected data
         unique_cameras = sorted(set(camera_ids))
@@ -160,9 +190,83 @@ class AnswerGenerator:
         structured_count = metadata.get('structured_count', 0) if metadata else 0
         semantic_count = metadata.get('semantic_count', 0) if metadata else 0
         intent = parsed_filter.get('__intent', 'unknown')
+        query_subtype = (metadata or {}).get("query_subtype", parsed_filter.get("__query_subtype"))
         
         if query_type == "informational":
-            prompt = f"""You are a surveillance system assistant. Generate a natural language answer STRICTLY from the data below.
+            # Tailor informational context based on subtype when available
+            if query_subtype == "alerts":
+                prompt = f"""You are a surveillance system assistant. Generate a natural language answer STRICTLY from the data below.
+
+USER QUERY: "{query}"
+
+QUERY TYPE: Informational (alerts summary)
+
+RAW ALERT LOG DATA:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Total Alert Logs: {clip_count}
+Query Intent: {intent}
+
+Filters Applied:
+{self._format_filters_detailed(parsed_filter)}
+
+Alert Logs (up to first 10):
+"""  # noqa: E501
+
+                for idx, a in enumerate(alert_summaries[:10], start=1):
+                    cam_str = f"Camera {a['camera_id']}" if a.get("camera_id") is not None else "Unknown camera"
+                    prompt += f"- {idx}. [{a.get('severity', 'info')}] {a.get('alert_name') or 'Unnamed alert'} at {a.get('triggered_at') or 'unknown time'} on {cam_str}: {a.get('message')}\n"  # noqa: E501
+
+                prompt += """
+
+CRITICAL INSTRUCTIONS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Answer ONLY from the alert log data above
+2. Summarize whether any alerts fired, and roughly when and on which cameras
+3. If no alerts: clearly state that no alerts were found in the searched time window
+4. Be concise, factual, and avoid inventing alerts.
+
+Generate Natural Language Answer:"""
+
+            elif query_subtype == "cameras":
+                running_count = sum(1 for c in camera_summaries if c.get("running"))
+                total_cams = len(camera_summaries) if camera_summaries else len(unique_cameras)
+                prompt = f"""You are a surveillance system assistant. Generate a natural language answer STRICTLY from the data below.
+
+USER QUERY: "{query}"
+
+QUERY TYPE: Informational (cameras/devices)
+
+RAW CAMERA STATUS DATA:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Total Cameras Matched: {total_cams}
+Currently Running: {running_count}
+
+Filters Applied:
+{self._format_filters_detailed(parsed_filter)}
+
+Camera Status (up to first 10):
+"""  # noqa: E501
+
+                for idx, c in enumerate(camera_summaries[:10], start=1):
+                    status = c.get("status") or "unknown"
+                    running = "running" if c.get("running") else "not running"
+                    prompt += f"- {idx}. Camera {c.get('camera_id')} at '{c.get('location')}' is {status}, currently {running}.\n"  # noqa: E501
+
+                prompt += """
+
+CRITICAL INSTRUCTIONS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Answer ONLY from the camera data above
+2. Clearly state how many cameras are active/running vs total
+3. Mention example camera IDs and locations when available
+4. If no cameras found: say that no cameras matched the query
+5. Be concise and factual.
+
+Generate Natural Language Answer:"""
+
+            else:
+                # Generic informational answer (existing behaviour)
+                prompt = f"""You are a surveillance system assistant. Generate a natural language answer STRICTLY from the data below.
 
 USER QUERY: "{query}"
 
@@ -233,9 +337,9 @@ CRITICAL INSTRUCTIONS:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 1. Generate answer ONLY from raw data above
 2. Start with "I found {clip_count} clip(s)..." IF clips > 0
-3. If empty: explain what was searched for
-4. Mention specific camera IDs from the list
-5. Include sample timestamps (first 2-3)
+3. If empty: say clearly that no detections matched (e.g. "No person detections found in the last 24 hours") and briefly suggest checking that the camera was running and that it had a view during the searched time window
+4. Mention specific camera IDs from the list when available
+5. Include sample timestamps (first 2-3) when available
 6. Reference objects/actions/attributes detected
 7. Be natural, conversational, FACTUAL
 8. Do NOT fabricate data not provided
@@ -295,9 +399,15 @@ Generate Natural Language Answer:"""
         else:
             if clip_count == 0:
                 obj = parsed_filter.get('objects.object_name', 'results')
+                zone = parsed_filter.get('zone')
+                if zone:
+                    return f"No clips found for {obj} in {zone}. (LLM unavailable for detailed answer)"
                 return f"No clips found for {obj}. (LLM unavailable for detailed answer)"
-            
+
             cameras = sorted(set(r.get('camera_id') for r in results if r.get('camera_id')))
             cam_str = ", ".join(f"Camera {c}" for c in cameras) if cameras else ""
+            zone = parsed_filter.get('zone')
             loc = f" from {cam_str}" if cam_str else ""
+            if zone:
+                loc = f" (zone: {zone}){loc}" if loc else f" (zone: {zone})"
             return f"Found {clip_count} clip(s){loc}. (LLM unavailable for detailed answer)"
