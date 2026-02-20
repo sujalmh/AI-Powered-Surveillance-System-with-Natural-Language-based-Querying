@@ -105,7 +105,7 @@ class AnomalyDetector:
                 "z_threshold": <float>,
             }
         """
-        now = datetime.utcnow()
+        now = datetime.now()
         target = target_date or now
         day_start = target.replace(hour=0, minute=0, second=0, microsecond=0)
         day_end = day_start + timedelta(days=1)
@@ -181,7 +181,7 @@ class AnomalyDetector:
             if isinstance(cached_at, str):
                 cached_at = datetime.fromisoformat(cached_at)
 
-            age_minutes = (datetime.utcnow() - cached_at).total_seconds() / 60.0
+            age_minutes = (datetime.now() - cached_at).total_seconds() / 60.0
             if age_minutes <= CACHE_TTL_MINUTES:
                 logger.info(f"Returning cached anomaly result for {date_str} (age {age_minutes:.1f}m)")
                 return doc
@@ -474,7 +474,7 @@ class AnomalyDetector:
     def _cache_result(self, result: Dict[str, Any]) -> None:
         """Upsert today's anomaly result to MongoDB for fast dashboard reads."""
         try:
-            payload = {**result, "cached_at": datetime.utcnow().isoformat()}
+            payload = {**result, "cached_at": datetime.now().isoformat()}
             anomaly_events.update_one(
                 {
                     "date": result["date"],

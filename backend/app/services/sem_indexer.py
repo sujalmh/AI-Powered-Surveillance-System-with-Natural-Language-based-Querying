@@ -300,7 +300,7 @@ def index_clip(
     images: List[np.ndarray] = []
     metas: List[Dict[str, object]] = []
 
-    now_iso = datetime.utcnow().isoformat()
+    now_iso = datetime.now().isoformat()
     added = 0
 
     for bundle in sample_frames_from_clip(clip_path, every_sec=every_sec):

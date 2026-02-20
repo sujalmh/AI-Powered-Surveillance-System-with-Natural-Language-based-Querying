@@ -87,7 +87,7 @@ class ChatSendResponse(BaseModel):
 
 
 def iso_now() -> str:
-    return datetime.utcnow().isoformat()
+    return datetime.now().isoformat()
 
 
 def save_message(session_id: str, role: str, content: str, payload: Optional[Dict[str, Any]] = None) -> None:
@@ -460,7 +460,7 @@ def send(req: ChatSendRequest) -> ChatSendResponse:
         if "__last_minutes" in parsed and not has_absolute_ts:
             try:
                 minutes = int(parsed["__last_minutes"])
-                now = datetime.utcnow()
+                now = datetime.now()
                 start = now - timedelta(minutes=minutes)
                 parsed["timestamp"] = {"$gte": start.isoformat(), "$lte": now.isoformat()}
             except Exception:
@@ -469,7 +469,7 @@ def send(req: ChatSendRequest) -> ChatSendResponse:
         # Default time window: if no time filter at all, default to last 24 hours
         # This prevents queries from searching the entire detection history
         if "timestamp" not in parsed and "__last_minutes" not in parsed:
-            now = datetime.utcnow()
+            now = datetime.now()
             start = now - timedelta(hours=24)
             parsed["timestamp"] = {"$gte": start.isoformat(), "$lte": now.isoformat()}
             parsed["__last_minutes"] = 1440

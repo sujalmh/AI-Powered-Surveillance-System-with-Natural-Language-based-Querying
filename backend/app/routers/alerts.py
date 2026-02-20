@@ -75,7 +75,7 @@ def oid_str(x: Any) -> str:
     return str(x)
 
 def now_iso() -> str:
-    return datetime.utcnow().isoformat()
+    return datetime.now().isoformat()
 
 def parse_time_window(rule_time: Optional[Dict[str, Any]]) -> Tuple[Optional[str], Optional[str]]:
     if not rule_time:
@@ -83,11 +83,11 @@ def parse_time_window(rule_time: Optional[Dict[str, Any]]) -> Tuple[Optional[str
     start_iso: Optional[str] = None
     end_iso: Optional[str] = None
     if "last_minutes" in rule_time:
-        end = datetime.utcnow()
+        end = datetime.now()
         start = end - timedelta(minutes=int(rule_time["last_minutes"]))
         start_iso, end_iso = start.isoformat(), end.isoformat()
     elif "last_hours" in rule_time:
-        end = datetime.utcnow()
+        end = datetime.now()
         start = end - timedelta(hours=int(rule_time["last_hours"]))
         start_iso, end_iso = start.isoformat(), end.isoformat()
     else:
@@ -171,7 +171,7 @@ def evaluate_rule(rule_doc: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     query = build_detection_query_from_rule(rule)
     # Limit scope: last 30 minutes default if no explicit time
     if "timestamp" not in query:
-        end = datetime.utcnow()
+        end = datetime.now()
         start = end - timedelta(minutes=30)
         query["timestamp"] = {"$gte": start.isoformat(), "$lte": end.isoformat()}
 
@@ -352,7 +352,7 @@ async def stream_alerts(
     """
     async def event_gen():
         # initialize cursor watermark
-        watermark = last_ts or datetime.utcnow().isoformat()
+        watermark = last_ts or datetime.now().isoformat()
         while True:
             try:
                 q: Dict[str, Any] = {"triggered_at": {"$gt": watermark}}
