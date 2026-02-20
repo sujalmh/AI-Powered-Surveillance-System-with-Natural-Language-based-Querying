@@ -181,7 +181,7 @@ class AnomalyDetector:
             if isinstance(cached_at, str):
                 try:
                     cached_at = datetime.fromisoformat(cached_at)
-                except Exception:
+                except ValueError:
                     return None
 
             # Normalize to UTC-aware datetime
@@ -486,7 +486,7 @@ class AnomalyDetector:
     def _cache_result(self, result: Dict[str, Any]) -> None:
         """Upsert today's anomaly result to MongoDB for fast dashboard reads."""
         try:
-            payload = {**result, "cached_at": datetime.now(timezone.utc).isoformat()}
+            payload = {**result, "cached_at": datetime.now(timezone.utc)}
             anomaly_events.update_one(
                 {
                     "date": result["date"],
