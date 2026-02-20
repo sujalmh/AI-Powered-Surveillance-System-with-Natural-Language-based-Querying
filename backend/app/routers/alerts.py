@@ -30,7 +30,8 @@ class AlertRuleSpec(BaseModel):
     objects: Optional[List[Dict[str, Any]]] = None  # e.g., [{"name":"person","attributes":{"bag_confidence":{">=":0.7}}}]
     color: Optional[str] = None  # standardized color name
     count: Optional[Dict[str, Any]] = None  # {">=": 1}
-    area: Optional[Dict[str, Any]] = None  # reserved for future polygon support
+    area: Optional[Dict[str, Any]] = None  # {"zone_id": "entrance"} for zone-based count
+    occupancy_pct: Optional[Dict[str, Any]] = None  # {">=": 80} for occupancy threshold when zone has capacity
 
 
 class CreateAlertRequest(BaseModel):

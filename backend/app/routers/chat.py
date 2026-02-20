@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import re
 
 from fastapi import APIRouter, HTTPException
@@ -454,8 +454,9 @@ def send(req: ChatSendRequest) -> ChatSendResponse:
                 logger.info(f"Regex parsed query: {parsed}")
 
         # If LLM suggested a relative window and absolute timestamp not provided, expand to [now-last_minutes, now]
+        # Use UTC to keep timestamps consistent across services
         tsf = parsed.get("timestamp")
-        # Fix: empty dict {} is truthy in Python, so check for actual content
+        # Check that tsf is a dict and contains $gte or $lte keys (empty dict is falsy in Python)
         has_absolute_ts = isinstance(tsf, dict) and (tsf.get("$gte") or tsf.get("$lte"))
         if "__last_minutes" in parsed and not has_absolute_ts:
             try:
@@ -466,8 +467,7 @@ def send(req: ChatSendRequest) -> ChatSendResponse:
             except Exception:
                 pass
 
-        # Default time window: if no time filter at all, default to last 24 hours
-        # This prevents queries from searching the entire detection history
+        # Default time window: if no time filter at all, default to last 24 hours (UTC)
         if "timestamp" not in parsed and "__last_minutes" not in parsed:
             now = datetime.now(timezone.utc)
             start = now - timedelta(hours=24)

@@ -24,7 +24,7 @@ type AlertLog = {
 export function AlertsMap() {
   const [cameras, setCameras] = useState<CameraDoc[]>([]);
   const [logs, setLogs] = useState<AlertLog[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
   const load = async () => {
