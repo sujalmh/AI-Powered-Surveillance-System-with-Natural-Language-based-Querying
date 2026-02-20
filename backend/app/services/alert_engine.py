@@ -28,7 +28,7 @@ _PER_CAMERA: Dict[int, Dict[str, Any]] = defaultdict(dict)
 
 
 def _now_utc_iso() -> str:
-  return datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
+  return datetime.now(timezone.utc).isoformat()
 
 
 def _load_active_rules() -> List[Dict[str, Any]]:
@@ -204,7 +204,7 @@ def evaluate_realtime(
   try:
     now_dt = datetime.fromisoformat(timestamp_iso.replace("Z", "+00:00"))
   except Exception:
-    now_dt = datetime.utcnow()
+    now_dt = datetime.now(timezone.utc)
 
   rules = _load_active_rules()
   for rd in rules:

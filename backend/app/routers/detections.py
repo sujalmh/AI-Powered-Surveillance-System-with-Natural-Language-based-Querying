@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from backend.app.db.mongo import detections as detections_col
 
@@ -57,7 +57,7 @@ def list_detections(
 
         time_filter: Dict[str, Any] = {}
         if last_minutes:
-            end = datetime.utcnow()
+            end = datetime.now(timezone.utc)
             start = end - timedelta(minutes=last_minutes)
             time_filter["$gte"] = start.isoformat()
             time_filter["$lte"] = end.isoformat()
@@ -104,7 +104,7 @@ def object_counts(
 
         time_filter: Dict[str, Any] = {}
         if last_minutes:
-            end = datetime.utcnow()
+            end = datetime.now(timezone.utc)
             start = end - timedelta(minutes=last_minutes)
             time_filter["$gte"] = start.isoformat()
             time_filter["$lte"] = end.isoformat()
@@ -153,7 +153,7 @@ def color_counts(
 
         time_filter: Dict[str, Any] = {}
         if last_minutes:
-            end = datetime.utcnow()
+            end = datetime.now(timezone.utc)
             start = end - timedelta(minutes=last_minutes)
             time_filter["$gte"] = start.isoformat()
             time_filter["$lte"] = end.isoformat()

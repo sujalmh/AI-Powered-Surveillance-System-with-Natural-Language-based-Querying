@@ -474,7 +474,7 @@ class AnomalyDetector:
     def _cache_result(self, result: Dict[str, Any]) -> None:
         """Upsert today's anomaly result to MongoDB for fast dashboard reads."""
         try:
-            payload = {**result, "cached_at": datetime.now().isoformat()}
+            payload = {**result, "cached_at": datetime.now(timezone.utc).isoformat()}
             anomaly_events.update_one(
                 {
                     "date": result["date"],
