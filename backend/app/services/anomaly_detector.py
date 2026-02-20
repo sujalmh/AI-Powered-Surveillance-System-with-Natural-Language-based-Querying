@@ -15,7 +15,7 @@ from __future__ import annotations
 import math
 import logging
 import time as _time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from backend.app.db.mongo import detections, anomaly_events
@@ -105,7 +105,7 @@ class AnomalyDetector:
                 "z_threshold": <float>,
             }
         """
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         target = target_date or now
         day_start = target.replace(hour=0, minute=0, second=0, microsecond=0)
         day_end = day_start + timedelta(days=1)
@@ -179,9 +179,21 @@ class AnomalyDetector:
                 return None  # no timestamp — treat as stale
 
             if isinstance(cached_at, str):
-                cached_at = datetime.fromisoformat(cached_at)
+                try:
+                    cached_at = datetime.fromisoformat(cached_at)
+                except Exception:
+                    return None
 
-            age_minutes = (datetime.now() - cached_at).total_seconds() / 60.0
+            # Normalize to UTC-aware datetime
+            if isinstance(cached_at, datetime):
+                if cached_at.tzinfo is None:
+                    cached_at = cached_at.replace(tzinfo=timezone.utc)
+                else:
+                    cached_at = cached_at.astimezone(timezone.utc)
+            else:
+                return None
+
+            age_minutes = (datetime.now(timezone.utc) - cached_at).total_seconds() / 60.0
             if age_minutes <= CACHE_TTL_MINUTES:
                 logger.info(f"Returning cached anomaly result for {date_str} (age {age_minutes:.1f}m)")
                 return doc

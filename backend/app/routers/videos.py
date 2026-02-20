@@ -52,7 +52,8 @@ def _walk_media(root_dir: str, base_url: str, prefix: Optional[str] = None, limi
             try:
                 stat = os.stat(fpath)
                 size = stat.st_size
-                mtime = datetime.fromtimestamp(stat.st_mtime).isoformat()
+                # Use UTC-aware ISO timestamps for consistency with fallback path
+                mtime = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat()
             except Exception:
                 size = 0
                 mtime = datetime.now(timezone.utc).isoformat()
