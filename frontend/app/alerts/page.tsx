@@ -42,15 +42,38 @@ export default function AlertsPage() {
 
   return (
     <MainLayout>
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div>
-            <AlertsTable onAddAlert={() => setShowModal(true)} />
-          </div>
-          <div>
-            <AlertsMap />
-          </div>
+      {/* Clean, Professional Header Area */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground mb-2 flex items-center gap-3">
+          Security Alerts
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium uppercase tracking-wider">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+            Active
+          </span>
+        </h1>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <p className="text-muted-foreground text-sm max-w-xl">
+            Manage natural language triggers and monitor your entire camera fleet in real time.
+          </p>
+          <Button 
+            onClick={() => setShowModal(true)}
+            className="shadow-sm"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Create Alert
+          </Button>
         </div>
+      </div>
+
+      <div className="space-y-6">
+        {/* Stacked Layout instead of grid */}
+        <div className="w-full">
+          <AlertsTable />
+        </div>
+        <div className="w-full">
+          <AlertsMap />
+        </div>
+        
         {showModal && <AlertModal onClose={() => setShowModal(false)} />}
       </div>
     </MainLayout>
@@ -160,10 +183,11 @@ function AlertModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-zinc-950/80 flex items-center justify-center z-50 p-4">
-      <Card className="max-w-xl w-full max-h-[90vh] flex flex-col shadow-sm border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-        <CardHeader className="border-b border-border py-4 shrink-0">
-          <CardTitle>Create Alert Rule</CardTitle>
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+      <Card className="max-w-2xl w-full max-h-[90vh] flex flex-col shadow-lg border border-border bg-card overflow-hidden animate-in zoom-in-95 duration-200">
+        <CardHeader className="border-b border-border py-4 px-6 shrink-0 bg-muted/20">
+          <CardTitle className="text-lg font-semibold">Create Alert Rule</CardTitle>
+          <p className="text-sm text-muted-foreground mt-1">Configure natural language triggers or explicit parameters.</p>
         </CardHeader>
         <CardContent className="overflow-y-auto flex-1 p-6 space-y-6">
           {error && (
@@ -182,12 +206,15 @@ function AlertModal({ onClose }: { onClose: () => void }) {
               />
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mr-2">Templates:</span>
+            <div className="flex flex-wrap items-center gap-2 bg-muted/30 p-3 rounded-xl border border-border/50">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mr-2 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary/70"></span>
+                Templates
+              </span>
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 text-xs px-2"
+                className="h-8 text-xs px-3 rounded-full hover:bg-green-500/10 hover:text-green-600 hover:border-green-500/30 transition-colors"
                 onClick={() => {
                   setName("Crowd > 3 people")
                   setObjectName("person")
@@ -204,7 +231,7 @@ function AlertModal({ onClose }: { onClose: () => void }) {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 text-xs px-2"
+                className="h-8 text-xs px-3 rounded-full hover:bg-blue-500/10 hover:text-blue-600 hover:border-blue-500/30 transition-colors"
                 onClick={() => {
                   setName("Car enters at night")
                   setObjectName("car")
@@ -219,7 +246,7 @@ function AlertModal({ onClose }: { onClose: () => void }) {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 text-xs px-2"
+                className="h-8 text-xs px-3 rounded-full hover:bg-rose-500/10 hover:text-rose-600 hover:border-rose-500/30 transition-colors"
                 onClick={() => {
                   setName("Possible fight")
                   setObjectName("person")
@@ -358,11 +385,11 @@ function AlertModal({ onClose }: { onClose: () => void }) {
               </div>
             </div>
 
-            <div className="space-y-3 pt-2">
-              <Label>Cameras (optional, leaving empty applies to all)</Label>
+            <div className="space-y-3 pt-4 border-t border-border/50">
+              <Label className="text-muted-foreground">Cameras (optional, leaving empty applies to all)</Label>
               <div className="flex flex-wrap gap-2">
                 {loadingCameras ? (
-                  <span className="text-xs text-muted-foreground">Loading cameras...</span>
+                  <span className="text-xs text-muted-foreground animate-pulse">Loading cameras...</span>
                 ) : cameras.length === 0 ? (
                   <span className="text-xs text-muted-foreground">No cameras found</span>
                 ) : (
@@ -371,8 +398,12 @@ function AlertModal({ onClose }: { onClose: () => void }) {
                     return (
                       <Badge
                         key={c.camera_id}
-                        variant={selected ? "default" : "secondary"}
-                        className="cursor-pointer hover:opacity-80 transition-opacity"
+                        variant={selected ? "default" : "outline"}
+                        className={`cursor-pointer px-3 py-1 text-xs transition-all ${
+                          selected 
+                            ? "bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/50 hover:bg-green-500/30" 
+                            : "hover:bg-muted font-normal text-muted-foreground"
+                        }`}
                         onClick={() => toggleCamera(c.camera_id)}
                       >
                         #{c.camera_id} {c.location ? `· ${c.location}` : ""}
@@ -384,8 +415,8 @@ function AlertModal({ onClose }: { onClose: () => void }) {
             </div>
           </div>
         </CardContent>
-        <div className="p-6 border-t border-border bg-muted/20 shrink-0 flex gap-3 justify-end items-center">
-          <Button variant="ghost" onClick={onClose} disabled={saving}>
+        <div className="p-4 px-6 border-t border-border bg-muted/20 shrink-0 flex gap-3 justify-end items-center">
+          <Button variant="outline" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
           <Button onClick={onCreate} disabled={saving}>
