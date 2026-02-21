@@ -320,7 +320,6 @@ def parse_simple_nl_to_filter(nl: str) -> Dict[str, Any]:
 
 
 def _guess_count_from_text(nl: str) -> Optional[int]:
-    import re
     m = re.search(r"(>=|more than|at least)\s*(\d+)", nl.lower())
     if m:
         try:
@@ -349,14 +348,22 @@ def _maybe_create_alert_from_nl(nl: str, parsed: Dict[str, Any]) -> Optional[Dic
     
     # Use count_constraint from parsed if available, otherwise guess
     count_constraint = parsed.get("count_constraint")
-    count_dict = {}
+    count_dict = None
     if count_constraint:
+        temp_dict = {}
         for k, v in count_constraint.items():
-            if k == "eq": count_dict["=="] = v
-            elif k == "gt": count_dict[">"] = v
-            elif k == "gte": count_dict[">="] = v
-            elif k == "lt": count_dict["<"] = v
-            elif k == "lte": count_dict["<="] = v
+            if k == "eq":
+                temp_dict["=="] = v
+            elif k == "gt":
+                temp_dict[">"] = v
+            elif k == "gte":
+                temp_dict[">="] = v
+            elif k == "lt":
+                temp_dict["<"] = v
+            elif k == "lte":
+                temp_dict["<="] = v
+        if temp_dict:
+            count_dict = temp_dict
     else:
         count = _guess_count_from_text(nl) or 1
         count_dict = {">=": count}

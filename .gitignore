@@ -4,6 +4,4 @@ Issue-1.md
 what.md
 backend/venv/*
 intel/
-temp_alert3.json
-temp_alert.json
-temp_alert2.json
+temp_alert*.json
