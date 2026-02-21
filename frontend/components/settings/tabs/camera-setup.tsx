@@ -8,10 +8,18 @@ type CameraDoc = {
   camera_id: number;
   source?: string;
   location?: string;
-  status?: string; // "active" | "inactive" | "error"
+  status?: string;
   last_seen?: string;
-  running?: boolean; // injected by backend runtime
+  running?: boolean;
   last_error?: string;
+};
+
+const inputStyle: React.CSSProperties = {
+  width: "100%", padding: "8px 11px",
+  border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)",
+  background: "var(--color-surface-raised)", color: "var(--color-text)",
+  fontSize: "0.875rem", fontFamily: "var(--font-ui)",
+  outline: "none", transition: "border-color 150ms",
 };
 
 export function CameraSetup() {
@@ -19,12 +27,9 @@ export function CameraSetup() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-
-  // form state
   const [cameraId, setCameraId] = useState<number | "">("");
   const [source, setSource] = useState<string>("");
   const [location, setLocation] = useState<string>("");
-
   const [saving, setSaving] = useState(false);
   const [startingId, setStartingId] = useState<number | null>(null);
   const [stoppingId, setStoppingId] = useState<number | null>(null);
@@ -34,358 +39,307 @@ export function CameraSetup() {
   const [cameraToDelete, setCameraToDelete] = useState<number | null>(null);
 
   const load = async () => {
-    setLoading(true);
-    setErr(null);
+    setLoading(true); setErr(null);
     try {
       const list = await api.listCameras();
-      const cams: CameraDoc[] = (list as any[]).map((c) => ({
-        camera_id: Number(c.camera_id),
-        source: c.source,
-        location: c.location,
-        status: c.status,
-        last_seen: c.last_seen,
-        running: Boolean(c.running),
-        last_error: c.last_error,
-      }));
-      setCameras(cams);
-    } catch (e: any) {
-      setErr(e?.message || "Failed to load cameras");
-    } finally {
-      setLoading(false);
-    }
+      setCameras((list as any[]).map((c) => ({
+        camera_id: Number(c.camera_id), source: c.source, location: c.location,
+        status: c.status, last_seen: c.last_seen, running: Boolean(c.running), last_error: c.last_error,
+      })));
+    } catch (e: any) { setErr(e?.message || "Failed to load cameras"); }
+    finally { setLoading(false); }
   };
 
-  useEffect(() => {
-    load();
-  }, []);
-
-  const canAdd = useMemo(() => {
-    return cameraId !== "" && String(source).trim().length > 0;
-  }, [cameraId, source]);
+  useEffect(() => { load(); }, []);
+  const canAdd = useMemo(() => cameraId !== "" && String(source).trim().length > 0, [cameraId, source]);
 
   const probeSource = async (src: string | number) => {
-    try {
-      const res = await api.probeCamera(src, 3);
-      return res;
-    } catch (e: any) {
-      return { ok: false, message: e?.message || "Probe request failed" };
-    }
+    try { return await api.probeCamera(src, 3); }
+    catch (e: any) { return { ok: false, message: e?.message || "Probe request failed" }; }
   };
 
   const onAddCamera = async () => {
     if (!canAdd) return;
-    setSaving(true);
-    setErr(null);
-    setInfo(null);
-    setProbingId("new");
+    setSaving(true); setErr(null); setInfo(null); setProbingId("new");
     try {
-      // 1) register camera in DB
-      await api.registerCamera({
-        camera_id: Number(cameraId),
-        source: source.trim(),
-        location: location.trim() || undefined,
-      });
-
-      // 2) probe source quickly
+      await api.registerCamera({ camera_id: Number(cameraId), source: source.trim(), location: location.trim() || undefined });
       const probe = await probeSource(source.trim());
-      if (!probe.ok) {
-        setErr(`Probe failed: ${probe.message}`);
-        setInfo(null);
-        // refresh list; backend may store last_error during /start, but probe doesn't. We still fetch fresh list.
-        await load();
-        return;
-      }
+      if (!probe.ok) { setErr(`Probe failed: ${probe.message}`); await load(); return; }
       setInfo("Probe OK: camera is reachable. Starting stream...");
-
-      // 3) start detection; backend checks by default (check=True)
-      await api.startCamera(Number(cameraId), {
-        source: source.trim(),
-        location: location.trim() || undefined,
-        show_window: false,
-      });
-
-      // 4) refresh list and reset form
-      await load();
-      setCameraId("");
-      setSource("");
-      setLocation("");
-      setInfo("Camera started successfully.");
-    } catch (e: any) {
-      setErr(e?.message || "Failed to add/start camera");
-    } finally {
-      setProbingId(null);
-      setSaving(false);
-    }
+      await api.startCamera(Number(cameraId), { source: source.trim(), location: location.trim() || undefined, show_window: false });
+      await load(); setCameraId(""); setSource(""); setLocation(""); setInfo("Camera started successfully.");
+    } catch (e: any) { setErr(e?.message || "Failed to add/start camera"); }
+    finally { setProbingId(null); setSaving(false); }
   };
 
   const onStart = async (id: number, src?: string, loc?: string) => {
-    setStartingId(id);
-    setErr(null);
-    setInfo(null);
+    setStartingId(id); setErr(null); setInfo(null);
     try {
-      // probe first for immediate feedback
-      setProbingId(id);
-      const probe = await probeSource(src ?? id);
-      setProbingId(null);
-      if (!probe.ok) {
-        setErr(`Probe failed: ${probe.message}`);
-        return;
-      }
-      await api.startCamera(id, {
-        // If a camera has no stored source, pass current source; otherwise rely on DB value
-        source: src,
-        location: loc,
-        show_window: false,
-      });
-      await load();
-      setInfo(`Camera #${id} started.`);
-    } catch (e: any) {
-      setErr(e?.message || "Failed to start camera");
-    } finally {
-      setStartingId(null);
-    }
+      setProbingId(id); const probe = await probeSource(src ?? id); setProbingId(null);
+      if (!probe.ok) { setErr(`Probe failed: ${probe.message}`); return; }
+      await api.startCamera(id, { source: src, location: loc, show_window: false });
+      await load(); setInfo(`Camera #${id} started.`);
+    } catch (e: any) { setErr(e?.message || "Failed to start camera"); }
+    finally { setStartingId(null); }
   };
 
   const onStop = async (id: number) => {
-    setStoppingId(id);
-    setErr(null);
-    setInfo(null);
-    try {
-      await api.stopCamera(id);
-      await load();
-      setInfo(`Camera #${id} stopped.`);
-    } catch (e: any) {
-      setErr(e?.message || "Failed to stop camera");
-    } finally {
-      setStoppingId(null);
-    }
+    setStoppingId(id); setErr(null); setInfo(null);
+    try { await api.stopCamera(id); await load(); setInfo(`Camera #${id} stopped.`); }
+    catch (e: any) { setErr(e?.message || "Failed to stop camera"); }
+    finally { setStoppingId(null); }
   };
 
   const onProbeExisting = async (id: number, src?: string) => {
-    setProbingId(id);
-    setErr(null);
-    setInfo(null);
+    setProbingId(id); setErr(null); setInfo(null);
     try {
       const probe = await probeSource(src ?? id);
-      if (probe.ok) {
-        setInfo(`Probe OK for camera #${id}: ${probe.message}`);
-      } else {
-        setErr(`Probe failed for camera #${id}: ${probe.message}`);
-      }
-    } catch (e: any) {
-      setErr(e?.message || "Probe failed");
-    } finally {
-      setProbingId(null);
-    }
-  };
-
-  const onDeleteClick = (id: number) => {
-    setCameraToDelete(id);
-    setShowDeleteModal(true);
+      if (probe.ok) setInfo(`Probe OK for camera #${id}: ${probe.message}`);
+      else setErr(`Probe failed for camera #${id}: ${probe.message}`);
+    } catch (e: any) { setErr(e?.message || "Probe failed"); }
+    finally { setProbingId(null); }
   };
 
   const onDeleteConfirm = async () => {
     if (cameraToDelete === null) return;
-    setDeletingId(cameraToDelete);
-    setErr(null);
-    setInfo(null);
-    setShowDeleteModal(false);
-    try {
-      await api.deleteCamera(cameraToDelete);
-      await load();
-      setInfo(`Camera #${cameraToDelete} deleted successfully.`);
-    } catch (e: any) {
-      setErr(e?.message || "Failed to delete camera");
-    } finally {
-      setDeletingId(null);
-      setCameraToDelete(null);
-    }
+    setDeletingId(cameraToDelete); setErr(null); setInfo(null); setShowDeleteModal(false);
+    try { await api.deleteCamera(cameraToDelete); await load(); setInfo(`Camera #${cameraToDelete} deleted successfully.`); }
+    catch (e: any) { setErr(e?.message || "Failed to delete camera"); }
+    finally { setDeletingId(null); setCameraToDelete(null); }
   };
 
+  const focusBorder = (e: React.FocusEvent<HTMLInputElement>) => (e.target.style.borderColor = "var(--color-primary)");
+  const blurBorder = (e: React.FocusEvent<HTMLInputElement>) => (e.target.style.borderColor = "var(--color-border)");
+
   return (
-    <div className="space-y-6">
-      <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-foreground">Add / Register Camera</h3>
-          {loading && <span className="text-xs text-muted-foreground">Loading…</span>}
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      {/* Add Camera island */}
+      <div style={{
+        background: "var(--color-surface)", border: "1px solid var(--color-border)",
+        borderRadius: "var(--radius-lg)", padding: "20px 24px", boxShadow: "var(--shadow-sm)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+          <h3 style={{ fontSize: "0.9375rem", fontWeight: 700, color: "var(--color-text)" }}>Add / Register Camera</h3>
+          {loading && <span style={{ fontSize: "0.75rem", color: "var(--color-text-faint)" }}>Loading…</span>}
         </div>
-        {err && <div className="mb-3 text-xs text-red-400">{err}</div>}
-        {info && <div className="mb-3 text-xs text-cyan-300">{info}</div>}
-        <div className="grid grid-cols-3 gap-4">
-          <input
-            type="number"
-            min={0}
-            placeholder="Camera ID (e.g., 1)"
-            value={cameraId}
+
+        {err && <div style={{ marginBottom: 10, padding: "8px 12px", background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: "var(--radius-md)", fontSize: "0.8125rem", color: "var(--color-danger)" }}>{err}</div>}
+        {info && <div style={{ marginBottom: 10, padding: "8px 12px", background: "var(--color-primary-light)", border: "1px solid rgba(22,163,74,0.2)", borderRadius: "var(--radius-md)", fontSize: "0.8125rem", color: "var(--color-primary)" }}>{info}</div>}
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1.5fr", gap: "10px" }}>
+          <input type="number" min={0} placeholder="Camera ID (e.g., 1)" value={cameraId}
             onChange={(e) => setCameraId(e.target.value === "" ? "" : Number(e.target.value))}
-            className="w-full bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl px-4 py-2 text-foreground bg-transparent outline-none"
-          />
-          <input
-            type="text"
-            placeholder="Source (RTSP/HTTP URL or index e.g., 0)"
-            value={source}
-            onChange={(e) => setSource(e.target.value)}
-            className="w-full bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl px-4 py-2 text-foreground bg-transparent outline-none"
-          />
-          <input
-            type="text"
-            placeholder="Location (optional)"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            className="w-full bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl px-4 py-2 text-foreground bg-transparent outline-none"
-          />
+            style={inputStyle} onFocus={focusBorder} onBlur={blurBorder} />
+          <input type="text" placeholder="Source (RTSP/HTTP URL or index)" value={source}
+            onChange={(e) => setSource(e.target.value)} style={inputStyle} onFocus={focusBorder} onBlur={blurBorder} />
+          <input type="text" placeholder="Location (optional)" value={location}
+            onChange={(e) => setLocation(e.target.value)} style={inputStyle} onFocus={focusBorder} onBlur={blurBorder} />
         </div>
-        <div className="flex gap-2 mt-4">
+
+        <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
           <button
             onClick={onAddCamera}
             disabled={!canAdd || saving || probingId === "new"}
-            className="glow-button flex-1 flex items-center justify-center gap-2 px-4 py-2.5"
-            title="Register, probe, then start camera"
+            style={{
+              flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+              padding: "9px 16px", borderRadius: "var(--radius-md)", border: "none",
+              background: "var(--color-primary)", color: "#fff",
+              fontSize: "0.875rem", fontWeight: 600, cursor: "pointer",
+              opacity: (!canAdd || saving || probingId === "new") ? 0.5 : 1, transition: "opacity 150ms",
+            }}
           >
-            <Plus className="w-4 h-4" />
+            <Plus style={{ width: 14, height: 14 }} />
             {probingId === "new" ? "Probing..." : saving ? "Registering..." : "Register & Start"}
           </button>
           <button
             onClick={async () => {
               if (!canAdd) return;
-              setErr(null);
-              setInfo(null);
-              setProbingId("new");
-              const res = await probeSource(source.trim());
-              setProbingId(null);
+              setErr(null); setInfo(null); setProbingId("new");
+              const res = await probeSource(source.trim()); setProbingId(null);
               if (res.ok) setInfo(`Probe OK: ${res.message}`);
               else setErr(`Probe failed: ${res.message}`);
             }}
             disabled={!canAdd || probingId === "new" || saving}
-            className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-xs text-foreground hover:bg-white/15 disabled:opacity-60 flex items-center gap-2"
-            title="Only probe without starting"
+            style={{
+              display: "flex", alignItems: "center", gap: "6px",
+              padding: "9px 14px", borderRadius: "var(--radius-md)",
+              border: "1px solid var(--color-border)", background: "var(--color-surface-raised)",
+              color: "var(--color-text-muted)", fontSize: "0.8125rem", fontWeight: 500,
+              cursor: "pointer", opacity: (!canAdd || probingId === "new" || saving) ? 0.5 : 1,
+              transition: "all 150ms",
+            }}
           >
-            {probingId === "new" ? <WifiOff className="w-4 h-4" /> : <Wifi className="w-4 h-4" />}
+            {probingId === "new" ? <WifiOff style={{ width: 14, height: 14 }} /> : <Wifi style={{ width: 14, height: 14 }} />}
             Probe Only
           </button>
         </div>
       </div>
 
-      <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-foreground">Registered Cameras</h3>
+      {/* Registered cameras island */}
+      <div style={{
+        background: "var(--color-surface)", border: "1px solid var(--color-border)",
+        borderRadius: "var(--radius-lg)", padding: "20px 24px", boxShadow: "var(--shadow-sm)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+          <h3 style={{ fontSize: "0.9375rem", fontWeight: 700, color: "var(--color-text)" }}>Registered Cameras</h3>
           <button
             onClick={load}
-            className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/20 text-xs text-foreground hover:bg-white/15"
-          >
-            Refresh
-          </button>
+            style={{
+              padding: "6px 12px", borderRadius: "var(--radius-md)",
+              border: "1px solid var(--color-border)", background: "var(--color-surface-raised)",
+              color: "var(--color-text-muted)", fontSize: "0.8125rem", cursor: "pointer", transition: "all 150ms",
+            }}
+          >Refresh</button>
         </div>
-        <div className="space-y-3">
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {cameras.map((camera) => {
             const isRunning = !!camera.running;
             const isError = camera.status === "error" || !!camera.last_error;
+            const statusColor = isRunning ? "#16A34A" : isError ? "var(--color-danger)" : "var(--color-text-faint)";
+            const statusBg = isRunning ? "rgba(22,163,74,0.10)" : isError ? "rgba(220,38,38,0.10)" : "var(--color-surface-raised)";
+
             return (
-              <div
-                key={camera.camera_id}
-                className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-4"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-foreground">
-                      Camera #{camera.camera_id} {camera.location ? <span className="text-muted-foreground">· {camera.location}</span> : null}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">{camera.source || "-"}</p>
-                    <p className="text-xs mt-1 flex items-center gap-2">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          isRunning
-                            ? "bg-green-500/20 text-green-400 border border-green-500/50"
-                            : isError
-                            ? "bg-red-500/20 text-red-400 border border-red-500/50"
-                            : "bg-gray-500/20 text-gray-400 border border-gray-500/50"
-                        }`}
-                      >
-                        {isRunning ? "Running" : isError ? "Error" : "Stopped"}
+              <div key={camera.camera_id} style={{
+                padding: "12px 14px", borderRadius: "var(--radius-md)",
+                border: "1px solid var(--color-border)", background: "var(--color-surface-raised)",
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text)" }}>
+                    Camera #{camera.camera_id}
+                    {camera.location && <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}> · {camera.location}</span>}
+                  </p>
+                  <p style={{ fontSize: "0.75rem", color: "var(--color-text-faint)", marginTop: 2 }}>{camera.source || "–"}</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: 4 }}>
+                    <span style={{
+                      padding: "2px 8px", borderRadius: "var(--radius-full)",
+                      fontSize: "0.6875rem", fontWeight: 700,
+                      color: statusColor, background: statusBg,
+                    }}>
+                      {isRunning ? "Running" : isError ? "Error" : "Stopped"}
+                    </span>
+                    {camera.last_seen && (
+                      <span style={{ fontSize: "0.6875rem", color: "var(--color-text-faint)" }}>
+                        Last seen: {new Date(camera.last_seen).toLocaleString()}
                       </span>
-                      {camera.last_seen && (
-                        <span className="text-muted-foreground">Last seen: {new Date(camera.last_seen).toLocaleString()}</span>
-                      )}
+                    )}
+                  </div>
+                  {camera.last_error && (
+                    <p style={{ fontSize: "0.75rem", color: "var(--color-danger)", marginTop: 3, wordBreak: "break-all" }}>
+                      Error: {camera.last_error}
                     </p>
-                    {camera.last_error && (
-                      <p className="text-xs text-red-400 mt-1 break-words">Last error: {camera.last_error}</p>
-                    )}
-                  </div>
-                  <div className="flex gap-2">
+                  )}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+                  <button
+                    onClick={() => onProbeExisting(camera.camera_id, camera.source)}
+                    disabled={probingId === camera.camera_id}
+                    title="Probe connectivity"
+                    style={{
+                      display: "flex", alignItems: "center", gap: "4px",
+                      padding: "6px 10px", borderRadius: "var(--radius-sm)",
+                      border: "1px solid var(--color-border)", background: "transparent",
+                      color: "var(--color-text-muted)", fontSize: "0.75rem", cursor: "pointer",
+                      opacity: probingId === camera.camera_id ? 0.6 : 1, transition: "all 150ms",
+                    }}
+                  >
+                    {probingId === camera.camera_id ? <WifiOff style={{ width: 13, height: 13 }} /> : <Wifi style={{ width: 13, height: 13 }} />}
+                    {probingId === camera.camera_id ? "Probing…" : "Probe"}
+                  </button>
+
+                  {isRunning ? (
                     <button
-                      onClick={() => onProbeExisting(camera.camera_id, camera.source)}
-                      disabled={probingId === camera.camera_id}
-                      className="p-2 hover:bg-white/10 rounded transition-colors disabled:opacity-60 flex items-center gap-1"
-                      title="Probe connectivity"
+                      onClick={() => onStop(camera.camera_id)}
+                      disabled={stoppingId === camera.camera_id}
+                      style={{
+                        display: "flex", alignItems: "center", gap: "4px",
+                        padding: "6px 12px", borderRadius: "var(--radius-sm)",
+                        border: "1px solid rgba(220,38,38,0.25)", background: "rgba(220,38,38,0.08)",
+                        color: "var(--color-danger)", fontSize: "0.75rem", fontWeight: 600,
+                        cursor: "pointer", opacity: stoppingId === camera.camera_id ? 0.6 : 1, transition: "all 150ms",
+                      }}
                     >
-                      {probingId === camera.camera_id ? <WifiOff className="w-4 h-4 text-yellow-400" /> : <Wifi className="w-4 h-4 text-cyan-400" />}
-                      {probingId === camera.camera_id ? "Probing..." : "Probe"}
+                      <Square style={{ width: 12, height: 12 }} />
+                      {stoppingId === camera.camera_id ? "Stopping…" : "Stop"}
                     </button>
-                    {isRunning ? (
-                      <button
-                        onClick={() => onStop(camera.camera_id)}
-                        disabled={stoppingId === camera.camera_id}
-                        className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 hover:border-red-500/50 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5 font-medium text-sm"
-                        title="Stop"
-                      >
-                        <Square className="w-4 h-4" />
-                        {stoppingId === camera.camera_id ? "Stopping..." : "Stop"}
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => onStart(camera.camera_id, camera.source, camera.location)}
-                        disabled={startingId === camera.camera_id}
-                        className="px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 hover:border-green-500/50 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5 font-medium text-sm"
-                        title="Start"
-                      >
-                        <Play className="w-4 h-4" />
-                        {startingId === camera.camera_id ? "Starting..." : "Start"}
-                      </button>
-                    )}
+                  ) : (
                     <button
-                      onClick={() => onDeleteClick(camera.camera_id)}
-                      disabled={deletingId === camera.camera_id}
-                      className="p-2 hover:bg-red-500/10 rounded transition-colors disabled:opacity-60 flex items-center gap-1"
-                      title="Delete camera"
+                      onClick={() => onStart(camera.camera_id, camera.source, camera.location)}
+                      disabled={startingId === camera.camera_id}
+                      style={{
+                        display: "flex", alignItems: "center", gap: "4px",
+                        padding: "6px 12px", borderRadius: "var(--radius-sm)",
+                        border: "1px solid rgba(22,163,74,0.25)", background: "rgba(22,163,74,0.08)",
+                        color: "var(--color-primary)", fontSize: "0.75rem", fontWeight: 600,
+                        cursor: "pointer", opacity: startingId === camera.camera_id ? 0.6 : 1, transition: "all 150ms",
+                      }}
                     >
-                      <Trash2 className="w-4 h-4 text-red-400" />
-                      {deletingId === camera.camera_id ? "Deleting..." : ""}
+                      <Play style={{ width: 12, height: 12 }} />
+                      {startingId === camera.camera_id ? "Starting…" : "Start"}
                     </button>
-                  </div>
+                  )}
+
+                  <button
+                    onClick={() => { setCameraToDelete(camera.camera_id); setShowDeleteModal(true); }}
+                    disabled={deletingId === camera.camera_id}
+                    title="Delete camera"
+                    style={{
+                      width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center",
+                      borderRadius: "var(--radius-sm)", border: "none", background: "transparent",
+                      color: "var(--color-text-faint)", cursor: "pointer",
+                      opacity: deletingId === camera.camera_id ? 0.6 : 1, transition: "all 150ms",
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.color = "var(--color-danger)"; e.currentTarget.style.background = "rgba(220,38,38,0.08)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = "var(--color-text-faint)"; e.currentTarget.style.background = "transparent"; }}
+                  >
+                    <Trash2 style={{ width: 13, height: 13 }} />
+                  </button>
                 </div>
               </div>
             );
           })}
           {cameras.length === 0 && !loading && (
-            <div className="text-sm text-muted-foreground">No cameras registered yet.</div>
+            <div style={{ padding: "32px 16px", textAlign: "center", color: "var(--color-text-faint)", fontSize: "0.875rem" }}>
+              No cameras registered yet.
+            </div>
           )}
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/60 backdrop-blur-sm">
-          <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-900/95 dark:to-black/95 backdrop-blur-xl border border-gray-300 dark:border-white/20 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Delete Camera</h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 50,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: "rgba(0,0,0,0.45)", backdropFilter: "blur(2px)",
+        }}>
+          <div style={{
+            background: "var(--color-surface)", border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius-lg)", padding: "24px 28px",
+            maxWidth: 420, width: "90%", boxShadow: "var(--shadow-lg)",
+          }}>
+            <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--color-text)", marginBottom: 8 }}>Delete Camera</h3>
+            <p style={{ fontSize: "0.875rem", color: "var(--color-text-muted)", marginBottom: "24px" }}>
               Are you sure you want to delete Camera #{cameraToDelete}? This action cannot be undone.
             </p>
-            <div className="flex gap-3 justify-end">
+            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
               <button
-                onClick={() => {
-                  setShowDeleteModal(false);
-                  setCameraToDelete(null);
+                onClick={() => { setShowDeleteModal(false); setCameraToDelete(null); }}
+                style={{
+                  padding: "8px 16px", borderRadius: "var(--radius-md)",
+                  border: "1px solid var(--color-border)", background: "var(--color-surface-raised)",
+                  color: "var(--color-text)", fontSize: "0.875rem", fontWeight: 500, cursor: "pointer",
                 }}
-                className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-white/10 border border-gray-300 dark:border-white/20 text-gray-700 dark:text-white hover:bg-gray-300 dark:hover:bg-white/15 transition-colors"
-              >
-                Cancel
-              </button>
+              >Cancel</button>
               <button
                 onClick={onDeleteConfirm}
-                className="px-4 py-2 rounded-lg bg-red-100 dark:bg-red-500/20 border border-red-300 dark:border-red-500/50 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-500/30 transition-colors"
-              >
-                Delete
-              </button>
+                style={{
+                  padding: "8px 16px", borderRadius: "var(--radius-md)",
+                  border: "1px solid rgba(220,38,38,0.3)", background: "rgba(220,38,38,0.1)",
+                  color: "var(--color-danger)", fontSize: "0.875rem", fontWeight: 600, cursor: "pointer",
+                }}
+              >Delete</button>
             </div>
           </div>
         </div>

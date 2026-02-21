@@ -2,13 +2,8 @@
 
 import React, { useState, useRef } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import { Loader2, Trash2, Video, MessageSquare, FileVideo, CheckCircle2, AlertCircle } from "lucide-react";
+import { Loader2, Trash2, Video, MessageSquare, FileVideo, CheckCircle2, AlertCircle, FlaskConical } from "lucide-react";
 import { api, API_BASE } from "@/lib/api";
 import { ChatInterface } from "@/components/conversation/chat-interface";
 
@@ -30,6 +25,36 @@ type VideoItem = {
   frames?: Array<Record<string, any>>;
 };
 
+const TABS = [
+  { id: "videos", label: "Videos", icon: Video },
+  { id: "results", label: "Indexing Results", icon: FileVideo },
+  { id: "conversation", label: "Conversation", icon: MessageSquare },
+];
+
+const statusPill = (status: VideoItem["status"]) => {
+  const map: Record<string, { label: string; color: string; bg: string; spin?: boolean }> = {
+    pending:   { label: "Pending",   color: "var(--color-text-muted)",  bg: "var(--color-surface-raised)" },
+    uploading: { label: "Uploading", color: "#16A34A",                  bg: "rgba(22,163,74,0.12)", spin: true },
+    indexing:  { label: "Indexing",  color: "#7C3AED",                  bg: "rgba(124,58,237,0.10)", spin: true },
+    completed: { label: "Done",      color: "#16A34A",                  bg: "rgba(22,163,74,0.12)" },
+    error:     { label: "Error",     color: "var(--color-danger)",      bg: "rgba(220,38,38,0.10)" },
+  };
+  const s = map[status];
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: "4px",
+      padding: "3px 10px", borderRadius: "var(--radius-full)",
+      fontSize: "0.75rem", fontWeight: 600,
+      color: s.color, background: s.bg,
+    }}>
+      {s.spin && <Loader2 style={{ width: 11, height: 11, animation: "spin 1s linear infinite" }} />}
+      {status === "completed" && <CheckCircle2 style={{ width: 11, height: 11 }} />}
+      {status === "error"     && <AlertCircle  style={{ width: 11, height: 11 }} />}
+      {s.label}
+    </span>
+  );
+};
+
 export default function TestDashboardPage() {
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [globalEverySec, setGlobalEverySec] = useState<number>(1.0);
@@ -41,74 +66,34 @@ export default function TestDashboardPage() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const newVideos: VideoItem[] = Array.from(e.target.files).map((file) => ({
-        id: crypto.randomUUID(),
-        file,
-        cameraId: 99, // Default camera ID
-        status: 'pending',
+        id: crypto.randomUUID(), file, cameraId: 99, status: 'pending',
       }));
       setVideos((prev) => [...prev, ...newVideos]);
-      // Reset input
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
-  const removeVideo = (id: string) => {
-    setVideos((prev) => prev.filter((v) => v.id !== id));
-  };
-
-  const updateVideoCameraId = (id: string, cameraId: number) => {
+  const removeVideo = (id: string) => setVideos((prev) => prev.filter((v) => v.id !== id));
+  const updateVideoCameraId = (id: string, cameraId: number) =>
     setVideos((prev) => prev.map((v) => (v.id === id ? { ...v, cameraId } : v)));
-  };
 
   const startProcessing = async () => {
     setIsProcessing(true);
     const pendingVideos = videos.filter(v => v.status === 'pending' || v.status === 'error');
-
     for (const video of pendingVideos) {
-      // Update status to uploading
       setVideos(prev => prev.map(v => v.id === video.id ? { ...v, status: 'uploading', error: undefined } : v));
-
       try {
-        // Upload & Index
-        const res = await api.uploadVideo(video.file, {
-          camera_id: video.cameraId,
-          every_sec: globalEverySec,
-          with_captions: globalWithCaptions,
-        });
-
-        // Update status to indexing (fetching frames)
+        const res = await api.uploadVideo(video.file, { camera_id: video.cameraId, every_sec: globalEverySec, with_captions: globalWithCaptions });
         setVideos(prev => prev.map(v => v.id === video.id ? { ...v, status: 'indexing', result: res } : v));
-
-        // Fetch frames
         let frames: any[] = [];
-        try {
-          frames = await api.listClipFrames(res.clip_path, 1000, "yolo");
-        } catch (err) {
-          console.error("Failed to fetch frames for", video.file.name, err);
-        }
-
-        // Complete
-        setVideos(prev => prev.map(v => v.id === video.id ? { 
-          ...v, 
-          status: 'completed', 
-          result: res,
-          frames: frames || []
-        } : v));
-
+        try { frames = await api.listClipFrames(res.clip_path, 1000, "yolo"); } catch {}
+        setVideos(prev => prev.map(v => v.id === video.id ? { ...v, status: 'completed', result: res, frames: frames || [] } : v));
       } catch (err: any) {
-        setVideos(prev => prev.map(v => v.id === video.id ? { 
-          ...v, 
-          status: 'error', 
-          error: err?.message || String(err) 
-        } : v));
+        setVideos(prev => prev.map(v => v.id === video.id ? { ...v, status: 'error', error: err?.message || String(err) } : v));
       }
     }
-
     setIsProcessing(false);
-    // Auto-switch to results if any completed
-    if (videos.some(v => v.status === 'completed')) {
-      setActiveTab("results");
-    }
+    if (videos.some(v => v.status === 'completed')) setActiveTab("results");
   };
 
   const completedCount = videos.filter(v => v.status === 'completed').length;
@@ -116,272 +101,359 @@ export default function TestDashboardPage() {
 
   return (
     <MainLayout>
-      <div className="h-full flex flex-col space-y-3">
-        <div className="flex items-center justify-between shrink-0">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Test Dashboard</h1>
-            <p className="text-sm text-muted-foreground">Batch process videos and query results</p>
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--gap-island)", height: "100%" }}>
+
+        {/* Page header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: "var(--radius-md)",
+              background: "var(--color-primary-light)", display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <FlaskConical style={{ width: 16, height: 16, color: "var(--color-primary)" }} />
+            </div>
+            <div>
+              <h1 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--color-text)", lineHeight: 1.2 }}>Test Dashboard</h1>
+              <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginTop: 1 }}>Batch process videos and query results</p>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-             <a
-                className="text-sm text-primary hover:underline"
-                target="_blank"
-                href={`${API_BASE.replace(/\/+$/, "")}/docs`}
-                rel="noreferrer"
-              >
-                Backend Docs
-              </a>
-          </div>
+          <a
+            href={`${API_BASE.replace(/\/+$/, "")}/docs`}
+            target="_blank"
+            rel="noreferrer"
+            style={{ fontSize: "0.8125rem", color: "var(--color-primary)", textDecoration: "none", fontWeight: 500 }}
+            onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
+            onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
+          >
+            Backend Docs →
+          </a>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-3 shrink-0">
-            <TabsTrigger value="videos" className="gap-2">
-              <Video className="w-4 h-4" />
-              Videos
-              {videos.length > 0 && <Badge variant="secondary" className="ml-1">{videos.length}</Badge>}
-            </TabsTrigger>
-            <TabsTrigger value="results" className="gap-2">
-              <FileVideo className="w-4 h-4" />
-              Indexing Results
-              {completedCount > 0 && <Badge variant="secondary" className="ml-1">{completedCount}</Badge>}
-            </TabsTrigger>
-            <TabsTrigger value="conversation" disabled={!canChat} className="gap-2">
-              <MessageSquare className="w-4 h-4" />
-              Conversation
-            </TabsTrigger>
-          </TabsList>
+        {/* Tab bar */}
+        <div style={{
+          display: "flex", gap: "4px",
+          background: "var(--color-surface)", border: "1px solid var(--color-border)",
+          borderRadius: "var(--radius-lg)", padding: "4px", boxShadow: "var(--shadow-sm)",
+          flexShrink: 0,
+        }}>
+          {TABS.map(({ id, label, icon: Icon }) => {
+            const active = activeTab === id;
+            const disabled = id === "conversation" && !canChat;
+            return (
+              <button
+                key={id}
+                disabled={disabled}
+                onClick={() => !disabled && setActiveTab(id)}
+                style={{
+                  flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                  padding: "8px 12px", borderRadius: "var(--radius-md)", border: "none",
+                  fontSize: "0.8125rem", fontWeight: active ? 600 : 500, cursor: disabled ? "not-allowed" : "pointer",
+                  background: active ? "var(--color-primary-light)" : "transparent",
+                  color: active ? "var(--color-primary)" : disabled ? "var(--color-text-faint)" : "var(--color-text-muted)",
+                  transition: "all 150ms ease",
+                  fontFamily: "var(--font-ui)",
+                }}
+                className="test-tab-btn"
+                data-active={active ? "true" : undefined}
+              >
+                <Icon style={{ width: 14, height: 14 }} />
+                {label}
+                {id === "videos" && videos.length > 0 && (
+                  <span style={{
+                    background: "var(--color-primary)", color: "#fff",
+                    borderRadius: "var(--radius-full)", fontSize: "0.6875rem", fontWeight: 700,
+                    padding: "0 6px", lineHeight: "18px", minWidth: 18, textAlign: "center",
+                  }}>{videos.length}</span>
+                )}
+                {id === "results" && completedCount > 0 && (
+                  <span style={{
+                    background: "var(--color-primary)", color: "#fff",
+                    borderRadius: "var(--radius-full)", fontSize: "0.6875rem", fontWeight: 700,
+                    padding: "0 6px", lineHeight: "18px", minWidth: 18, textAlign: "center",
+                  }}>{completedCount}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-          <TabsContent value="videos" className="flex-1 overflow-hidden flex flex-col gap-3 mt-3">
-            <Card className="flex-1 flex flex-col overflow-hidden">
-              <CardHeader className="shrink-0">
-                <CardTitle>Video Queue</CardTitle>
-                <CardDescription>Add videos to the queue, configure settings, and start indexing.</CardDescription>
-              </CardHeader>
-              <CardContent className="flex-1 overflow-hidden flex flex-col gap-3">
-                {/* Global Settings */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 bg-muted/30 rounded-lg shrink-0">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Sample Every (sec)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      min={0.1}
-                      value={globalEverySec}
-                      onChange={(e) => setGlobalEverySec(parseFloat(e.target.value || "1.0"))}
-                      className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2 pt-8">
-                    <input
-                      id="withCaptions"
-                      type="checkbox"
-                      checked={globalWithCaptions}
-                      onChange={(e) => setGlobalWithCaptions(e.target.checked)}
-                      className="h-4 w-4"
-                    />
-                    <label htmlFor="withCaptions" className="text-sm text-foreground">
-                      Generate captions
-                    </label>
-                  </div>
-                  <div className="flex items-end justify-end">
-                     <Button 
-                        onClick={() => fileInputRef.current?.click()} 
-                        variant="outline"
-                        disabled={isProcessing}
-                      >
-                        + Add Videos
-                      </Button>
-                      <input
-                        type="file"
-                        multiple
-                        accept="video/mp4"
-                        ref={fileInputRef}
-                        className="hidden"
-                        onChange={handleFileSelect}
-                      />
-                  </div>
+        {/* Tab: Videos */}
+        {activeTab === "videos" && (
+          <div style={{
+            flex: 1, display: "flex", flexDirection: "column", gap: "var(--gap-inner)",
+            background: "var(--color-surface)", border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-sm)",
+            padding: "16px", overflow: "hidden", minHeight: 0,
+          }}>
+            {/* Settings row */}
+            <div style={{
+              display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: "12px", alignItems: "end",
+              background: "var(--color-surface-raised)", border: "1px solid var(--color-border)",
+              borderRadius: "var(--radius-md)", padding: "12px 14px", flexShrink: 0,
+            }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  Sample every (sec)
+                </label>
+                <input
+                  type="number" step="0.1" min={0.1} value={globalEverySec}
+                  onChange={(e) => setGlobalEverySec(parseFloat(e.target.value || "1.0"))}
+                  style={{
+                    padding: "7px 10px", border: "1px solid var(--color-border)",
+                    borderRadius: "var(--radius-md)", background: "var(--color-surface)",
+                    color: "var(--color-text)", fontSize: "0.875rem", fontFamily: "var(--font-ui)",
+                    outline: "none", transition: "border-color 150ms",
+                  }}
+                  onFocus={e => (e.target.style.borderColor = "var(--color-primary)")}
+                  onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
+                />
+              </div>
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", paddingBottom: "8px" }}>
+                <input
+                  type="checkbox" checked={globalWithCaptions}
+                  onChange={(e) => setGlobalWithCaptions(e.target.checked)}
+                  style={{ width: 15, height: 15, accentColor: "var(--color-primary)", cursor: "pointer" }}
+                />
+                <span style={{ fontSize: "0.875rem", color: "var(--color-text)", fontWeight: 500 }}>Generate captions</span>
+              </label>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isProcessing}
+                className="add-videos-btn"
+                style={{
+                  padding: "8px 16px", borderRadius: "var(--radius-md)",
+                  border: "1.5px solid var(--color-border)", background: "var(--color-surface)",
+                  color: "var(--color-text)", fontSize: "0.8125rem", fontWeight: 600,
+                  cursor: isProcessing ? "not-allowed" : "pointer",
+                  opacity: isProcessing ? 0.5 : 1, transition: "all 150ms", fontFamily: "var(--font-ui)",
+                }}
+              >
+                + Add Videos
+              </button>
+              <input type="file" multiple accept="video/mp4" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileSelect} />
+            </div>
+
+            {/* Video list */}
+            <ScrollArea style={{ flex: 1, minHeight: 0 }}>
+              {videos.length === 0 ? (
+                <div style={{ padding: "48px 16px", textAlign: "center", color: "var(--color-text-faint)" }}>
+                  <Video style={{ width: 36, height: 36, margin: "0 auto 10px", opacity: 0.3 }} />
+                  <p style={{ fontSize: "0.875rem" }}>No videos added yet</p>
                 </div>
-
-                {/* Video List */}
-                <ScrollArea className="flex-1 border rounded-md p-3">
-                  {videos.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-50">
-                      <Video className="w-12 h-12 mb-2" />
-                      <p>No videos added yet</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {videos.map((video) => (
-                        <div key={video.id} className="flex items-center gap-3 p-2 border rounded-lg bg-card hover:bg-accent/5 transition-colors">
-                          <div className="h-10 w-10 rounded bg-muted flex items-center justify-center shrink-0">
-                            <FileVideo className="w-5 h-5 text-muted-foreground" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate" title={video.file.name}>{video.file.name}</p>
-                            <p className="text-xs text-muted-foreground">{Math.round(video.file.size / 1024)} KB</p>
-                          </div>
-                          
-                          <div className="flex items-center gap-4">
-                             <div className="flex flex-col">
-                                <label className="text-[10px] uppercase text-muted-foreground font-bold">Camera ID</label>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={video.cameraId}
-                                  onChange={(e) => updateVideoCameraId(video.id, parseInt(e.target.value || "0", 10))}
-                                  className="w-20 px-2 py-1 text-sm border border-input rounded bg-background"
-                                  disabled={video.status !== 'pending' && video.status !== 'error'}
-                                />
-                             </div>
-
-                             <div className="w-32 flex justify-center">
-                                {video.status === 'pending' && <Badge variant="outline">Pending</Badge>}
-                                {video.status === 'uploading' && <Badge className="bg-blue-500"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Uploading</Badge>}
-                                {video.status === 'indexing' && <Badge className="bg-purple-500"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Indexing</Badge>}
-                                {video.status === 'completed' && <Badge className="bg-green-500"><CheckCircle2 className="w-3 h-3 mr-1" /> Done</Badge>}
-                                {video.status === 'error' && <Badge variant="destructive"><AlertCircle className="w-3 h-3 mr-1" /> Error</Badge>}
-                             </div>
-
-                             <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => removeVideo(video.id)}
-                                disabled={isProcessing && video.status !== 'pending' && video.status !== 'error'}
-                                className="text-muted-foreground hover:text-destructive"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                          </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", padding: "2px 2px" }}>
+                  {videos.map((video) => (
+                    <div key={video.id} style={{
+                      display: "flex", alignItems: "center", gap: "12px",
+                      padding: "10px 12px", borderRadius: "var(--radius-md)",
+                      border: "1px solid var(--color-border)", background: "var(--color-surface-raised)",
+                    }}>
+                      <div style={{
+                        width: 36, height: 36, borderRadius: "var(--radius-sm)",
+                        background: "var(--color-surface)", border: "1px solid var(--color-border)",
+                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                      }}>
+                        <FileVideo style={{ width: 16, height: 16, color: "var(--color-text-faint)" }} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={video.file.name}>
+                          {video.file.name}
+                        </p>
+                        <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginTop: 1 }}>
+                          {Math.round(video.file.size / 1024)} KB
+                        </p>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                          <label style={{ fontSize: "0.625rem", fontWeight: 700, color: "var(--color-text-faint)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Camera ID</label>
+                          <input
+                            type="number" min={0} value={video.cameraId}
+                            onChange={(e) => updateVideoCameraId(video.id, parseInt(e.target.value || "0", 10))}
+                            disabled={video.status !== 'pending' && video.status !== 'error'}
+                            style={{
+                              width: 72, padding: "5px 8px", fontSize: "0.8125rem",
+                              border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)",
+                              background: "var(--color-surface)", color: "var(--color-text)",
+                              fontFamily: "var(--font-ui)", outline: "none",
+                              opacity: (video.status !== 'pending' && video.status !== 'error') ? 0.5 : 1,
+                            }}
+                          />
                         </div>
-                      ))}
+                        <div style={{ width: 90, display: "flex", justifyContent: "center" }}>
+                          {statusPill(video.status)}
+                        </div>
+                        <button
+                          onClick={() => removeVideo(video.id)}
+                          disabled={isProcessing && video.status !== 'pending' && video.status !== 'error'}
+                          className="delete-video-btn"
+                          style={{
+                            width: 30, height: 30, borderRadius: "var(--radius-sm)",
+                            border: "none", background: "transparent",
+                            color: "var(--color-text-faint)", cursor: "pointer",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            transition: "all 150ms",
+                          }}
+                        >
+                          <Trash2 style={{ width: 14, height: 14 }} />
+                        </button>
+                      </div>
                     </div>
-                  )}
-                </ScrollArea>
-
-                <div className="flex justify-end pt-2">
-                  <Button 
-                    onClick={startProcessing} 
-                    disabled={isProcessing || videos.filter(v => v.status === 'pending' || v.status === 'error').length === 0}
-                    className="w-full md:w-auto"
-                  >
-                    {isProcessing ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Processing Queue...
-                      </>
-                    ) : (
-                      <>Start Indexing Queue</>
-                    )}
-                  </Button>
+                  ))}
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+              )}
+            </ScrollArea>
 
-          <TabsContent value="results" className="flex-1 overflow-hidden mt-3">
-             <ScrollArea className="h-full">
-                <div className="space-y-6 pb-10">
-                  {videos.filter(v => v.status === 'completed').length === 0 ? (
-                     <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-                        <FileVideo className="w-16 h-16 mb-4 opacity-20" />
-                        <p>No indexing results yet.</p>
-                        <p className="text-sm">Process some videos to see results here.</p>
-                     </div>
-                  ) : (
-                    videos.filter(v => v.status === 'completed').map((video) => (
-                      <Card key={video.id}>
-                        <CardHeader>
-                          <div className="flex items-start justify-between">
-                            <div>
-                               <CardTitle className="text-base break-all">{video.file.name}</CardTitle>
-                               <CardDescription>Camera ID: {video.cameraId}</CardDescription>
-                            </div>
-                            <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">Indexed</Badge>
+            {/* Start button */}
+            <div style={{ flexShrink: 0, display: "flex", justifyContent: "flex-end" }}>
+              <button
+                onClick={startProcessing}
+                disabled={isProcessing || videos.filter(v => v.status === 'pending' || v.status === 'error').length === 0}
+                style={{
+                  padding: "9px 22px", borderRadius: "var(--radius-md)", border: "none",
+                  background: "var(--color-primary)", color: "#fff",
+                  fontSize: "0.875rem", fontWeight: 600, cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: "8px",
+                  opacity: (isProcessing || videos.filter(v => v.status === 'pending' || v.status === 'error').length === 0) ? 0.5 : 1,
+                  transition: "opacity 150ms", fontFamily: "var(--font-ui)",
+                }}
+              >
+                {isProcessing && <Loader2 style={{ width: 14, height: 14, animation: "spin 1s linear infinite" }} />}
+                {isProcessing ? "Processing Queue…" : "Start Indexing Queue"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Tab: Results */}
+        {activeTab === "results" && (
+          <ScrollArea style={{ flex: 1, minHeight: 0 }}>
+            {videos.filter(v => v.status === 'completed').length === 0 ? (
+              <div style={{ padding: "64px 16px", textAlign: "center", color: "var(--color-text-faint)" }}>
+                <FileVideo style={{ width: 40, height: 40, margin: "0 auto 12px", opacity: 0.2 }} />
+                <p style={{ fontSize: "0.875rem" }}>No indexing results yet.</p>
+                <p style={{ fontSize: "0.8125rem", marginTop: 4, color: "var(--color-text-faint)" }}>Process some videos to see results here.</p>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px", paddingBottom: "24px" }}>
+                {videos.filter(v => v.status === 'completed').map((video) => (
+                  <div key={video.id} style={{
+                    background: "var(--color-surface)", border: "1px solid var(--color-border)",
+                    borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-sm)",
+                    overflow: "hidden",
+                  }}>
+                    {/* card header */}
+                    <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div>
+                        <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text)", wordBreak: "break-all" }}>{video.file.name}</p>
+                        <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginTop: 2 }}>Camera ID: {video.cameraId}</p>
+                      </div>
+                      <span style={{
+                        padding: "3px 10px", borderRadius: "var(--radius-full)",
+                        fontSize: "0.75rem", fontWeight: 600,
+                        color: "var(--color-success)", background: "rgba(22,163,74,0.10)",
+                      }}>Indexed</span>
+                    </div>
+                    {/* card body */}
+                    <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                      {/* Stats */}
+                      <div style={{
+                        display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px",
+                        background: "var(--color-surface-raised)", borderRadius: "var(--radius-md)", padding: "12px",
+                      }}>
+                        {[
+                          { label: "Clip Path", value: <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", wordBreak: "break-all" }}>{video.result?.clip_path}</span> },
+                          { label: "Clip URL", value: video.result?.clip_url ? (
+                            <a href={API_BASE.replace(/\/+$/, "") + video.result.clip_url} target="_blank" rel="noreferrer"
+                              style={{ color: "var(--color-primary)", fontSize: "0.8125rem", textDecoration: "none", fontWeight: 500 }}>Open Video</a>
+                          ) : "N/A" },
+                          { label: "Frames", value: <span style={{ fontWeight: 600, color: "var(--color-text)" }}>{video.frames?.length || 0}</span> },
+                          { label: "Raw Data", value: <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.8125rem" }}>{Object.keys(video.result?.indexing || {}).length} keys</span> },
+                        ].map(({ label, value }) => (
+                          <div key={label}>
+                            <p style={{ fontSize: "0.6875rem", color: "var(--color-text-faint)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>{label}</p>
+                            <div style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>{value}</div>
                           </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                           {/* Summary Stats */}
-                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm bg-muted/50 p-3 rounded-lg">
-                              <div>
-                                <span className="text-muted-foreground block text-xs">Clip Path</span>
-                                <span className="font-mono text-xs break-all">{video.result?.clip_path}</span>
-                              </div>
-                              <div>
-                                <span className="text-muted-foreground block text-xs">Clip URL</span>
-                                {video.result?.clip_url ? (
-                                  <a href={API_BASE.replace(/\/+$/, "") + video.result.clip_url} target="_blank" rel="noreferrer" className="text-primary hover:underline text-xs">
-                                    Open Video
-                                  </a>
-                                ) : "N/A"}
-                              </div>
-                              <div>
-                                <span className="text-muted-foreground block text-xs">Frames</span>
-                                <span className="font-medium">{video.frames?.length || 0}</span>
-                              </div>
-                              <div>
-                                <span className="text-muted-foreground block text-xs">Raw Data</span>
-                                <span className="font-mono text-xs">{Object.keys(video.result?.indexing || {}).length} keys</span>
-                              </div>
-                           </div>
+                        ))}
+                      </div>
+                      {/* Frames table */}
+                      {video.frames && video.frames.length > 0 && (
+                        <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", overflow: "hidden" }}>
+                          <div style={{ maxHeight: 300, overflow: "auto" }}>
+                            <table style={{ width: "100%", fontSize: "0.75rem", borderCollapse: "collapse" }}>
+                              <thead>
+                                <tr style={{ background: "var(--color-surface-raised)" }}>
+                                  {["Idx", "Time", "Caption", "Objects"].map(h => (
+                                    <th key={h} style={{ padding: "8px 10px", fontWeight: 600, color: "var(--color-text-muted)", textAlign: "left", position: "sticky", top: 0, background: "var(--color-surface-raised)", borderBottom: "1px solid var(--color-border)" }}>{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {video.frames.slice(0, 50).map((fr, i) => (
+                                  <tr key={i} style={{ borderBottom: "1px solid var(--color-border)" }} className="result-row">
+                                    <td style={{ padding: "7px 10px", color: "var(--color-text-muted)" }}>{fr.frame_index}</td>
+                                    <td style={{ padding: "7px 10px", color: "var(--color-text-muted)" }}>{fr.frame_ts}</td>
+                                    <td style={{ padding: "7px 10px", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--color-text)" }} title={fr.caption}>{fr.caption || "-"}</td>
+                                    <td style={{ padding: "7px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--color-text-muted)" }}>
+                                      {Array.isArray((fr as any).object_captions) ? ((fr as any).object_captions as string[]).join(", ") : "-"}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          {video.frames.length > 50 && (
+                            <div style={{ padding: "8px", textAlign: "center", fontSize: "0.75rem", color: "var(--color-text-faint)", background: "var(--color-surface-raised)", borderTop: "1px solid var(--color-border)" }}>
+                              Showing first 50 of {video.frames.length} frames
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        )}
 
-                           {/* Frames Table Preview */}
-                           {video.frames && video.frames.length > 0 && (
-                             <div className="border rounded-md overflow-hidden">
-                                <div className="max-h-[300px] overflow-auto">
-                                  <table className="w-full text-xs text-left">
-                                    <thead className="bg-muted sticky top-0 z-10">
-                                      <tr>
-                                        <th className="p-2 font-medium">Idx</th>
-                                        <th className="p-2 font-medium">Time</th>
-                                        <th className="p-2 font-medium">Caption</th>
-                                        <th className="p-2 font-medium">Objects</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y">
-                                      {video.frames.slice(0, 50).map((fr, i) => (
-                                        <tr key={i} className="hover:bg-muted/50">
-                                          <td className="p-2">{fr.frame_index}</td>
-                                          <td className="p-2">{fr.frame_ts}</td>
-                                          <td className="p-2 max-w-[200px] truncate" title={fr.caption}>{fr.caption || "-"}</td>
-                                          <td className="p-2 max-w-[150px] truncate">
-                                            {Array.isArray((fr as any).object_captions) 
-                                              ? ((fr as any).object_captions as string[]).join(", ") 
-                                              : "-"}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                                {video.frames.length > 50 && (
-                                  <div className="p-2 text-center text-xs text-muted-foreground bg-muted/20 border-t">
-                                    Showing first 50 of {video.frames.length} frames
-                                  </div>
-                                )}
-                             </div>
-                           )}
-                        </CardContent>
-                      </Card>
-                    ))
-                  )}
-                </div>
-             </ScrollArea>
-          </TabsContent>
+        {/* Tab: Conversation */}
+        {activeTab === "conversation" && (
+          <div style={{
+            flex: 1, minHeight: 0,
+            background: "var(--color-surface)", border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-sm)", overflow: "hidden",
+            display: "flex", flexDirection: "column",
+          }}>
+            {canChat ? (
+              <ChatInterface onShowSteps={() => {}} />
+            ) : (
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--color-text-faint)" }}>
+                <MessageSquare style={{ width: 40, height: 40, marginBottom: 12, opacity: 0.2 }} />
+                <p style={{ fontSize: "0.875rem" }}>Conversation unavailable</p>
+                <p style={{ fontSize: "0.8125rem", marginTop: 4 }}>Index at least one video to start chatting.</p>
+              </div>
+            )}
+          </div>
+        )}
 
-          <TabsContent value="conversation" className="flex-1 overflow-hidden mt-3 flex flex-col">
-             {canChat ? (
-               <ChatInterface onShowSteps={() => {}} />
-             ) : (
-               <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
-                  <MessageSquare className="w-16 h-16 mb-4 opacity-20" />
-                  <p>Conversation unavailable.</p>
-                  <p className="text-sm">Please index at least one video to start chatting.</p>
-               </div>
-             )}
-          </TabsContent>
-        </Tabs>
       </div>
+
+      <style>{`
+        .test-tab-btn:hover:not([data-active]):not(:disabled) {
+          background: var(--color-surface-raised) !important;
+          color: var(--color-text) !important;
+        }
+        .add-videos-btn:hover:not(:disabled) {
+          background: var(--color-surface-raised) !important;
+          border-color: var(--color-border-strong) !important;
+        }
+        .delete-video-btn:hover:not(:disabled) {
+          color: var(--color-danger) !important;
+          background: rgba(220,38,38,0.08) !important;
+        }
+        .result-row:hover { background: var(--color-surface-raised); }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
     </MainLayout>
   );
 }
