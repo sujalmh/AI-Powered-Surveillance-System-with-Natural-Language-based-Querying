@@ -393,7 +393,7 @@ Generate Natural Language Answer:"""
                 end_fmt = end.strftime("%Y-%m-%d %I:%M:%S %p")
                 duration_min = int((end - start).total_seconds() / 60)
                 parts.append(f"  Time Range: {start_fmt} to {end_fmt} ({duration_min} min)")
-            except Exception as e:
+            except Exception:
                 logger.debug("Timestamp formatting failed for ts=%r", ts, exc_info=True)
                 parts.append(f"  Time: {ts}")
         elif ts:
@@ -403,7 +403,7 @@ Generate Natural Language Answer:"""
                     parts.append(f"  Time: {dt.strftime('%Y-%m-%d %I:%M:%S %p')}")
                 else:
                     parts.append(f"  Time: {ts}")
-            except Exception as e:
+            except Exception:
                 logger.debug("Timestamp formatting failed for ts=%r", ts, exc_info=True)
                 parts.append(f"  Time: {ts}")
         elif parsed_filter.get("__last_minutes"):

@@ -136,10 +136,17 @@ def build_detection_query_from_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
         
         if start_t <= end_t:
             # Normal range (e.g. 09:00 to 17:00)
-            tod_cond = {"$and": [{"$gte": [dt_expr, start_t]}, {"$lte": [dt_expr, end_t]}]}
+            range_cond = {"$and": [{"$gte": ["$$time", start_t]}, {"$lte": ["$$time", end_t]}]}
         else:
             # Wraparound range (e.g. 20:00 to 06:00)
-            tod_cond = {"$or": [{"$gte": [dt_expr, start_t]}, {"$lte": [dt_expr, end_t]}]}
+            range_cond = {"$or": [{"$gte": ["$$time", start_t]}, {"$lte": ["$$time", end_t]}]}
+            
+        tod_cond = {
+            "$let": {
+                "vars": {"time": dt_expr},
+                "in": range_cond
+            }
+        }
             
         if "$expr" not in q:
             q["$expr"] = tod_cond

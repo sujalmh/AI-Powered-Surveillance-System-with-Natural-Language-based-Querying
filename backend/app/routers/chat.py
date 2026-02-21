@@ -421,8 +421,8 @@ def _maybe_create_alert_from_nl(nl: str, parsed: Dict[str, Any]) -> Optional[Dic
             elif unit.startswith("h"):
                 val *= 3600.0
             cooldown_sec = val
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to parse cooldown duration from %r, falling back to 60.0s: %s", m_cd.group(0), e)
     
     doc = {
         "name": f"NL: {nl[:60]}",
@@ -438,8 +438,8 @@ def _maybe_create_alert_from_nl(nl: str, parsed: Dict[str, Any]) -> Optional[Dic
     try:
         ins = alerts_col.insert_one(doc)
         return {"id": str(ins.inserted_id), "name": doc["name"], "enabled": True}
-    except Exception as e:
-        logger.exception("Failed to insert NL alert `%s`: %s", doc.get("name"), e)
+    except Exception:
+        logger.exception("Failed to insert NL alert `%s`", doc.get("name"))
         return None
 
 

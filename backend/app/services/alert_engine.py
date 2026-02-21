@@ -231,7 +231,20 @@ def evaluate_realtime(
         tod = rule.get("time_of_day")
         if tod:
             win = _parse_local_time_window(tod)
-            if win and not _in_local_window(win, now_dt):
+            if not win:
+                _log.warning("Skipping rule %s due to malformed time_of_day: %r", rid, tod)
+                continue
+            
+            # Apply the requested timezone to the UTC `now_dt`
+            try:
+                import zoneinfo
+                tz_name = win[2]
+                local_dt = now_dt.astimezone(zoneinfo.ZoneInfo(tz_name))
+            except Exception as e:
+                _log.warning("Timezone conversion failed for rule %s (tz=%s): %s", rid, win[2] if win else None, e)
+                continue
+
+            if not _in_local_window(win, local_dt):
                 continue
 
         # ---------------- Crowd Density ----------------
