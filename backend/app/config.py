@@ -82,6 +82,20 @@ class Settings:
         self.HF_TOKEN: str = os.getenv("HF_TOKEN", "")
         self.HF_HOME: str = os.getenv("HF_HOME", "")
 
+        # Retrieval accuracy improvements (all default True; set false to disable)
+        self.ENABLE_QUERY_EXPANSION: bool = os.getenv("ENABLE_QUERY_EXPANSION", "true").lower() == "true"
+        self.ENABLE_ADAPTIVE_ALPHA: bool = os.getenv("ENABLE_ADAPTIVE_ALPHA", "true").lower() == "true"
+        self.ENABLE_RECENCY_BOOST: bool = os.getenv("ENABLE_RECENCY_BOOST", "true").lower() == "true"
+        self.ENABLE_ADAPTIVE_CONFIDENCE: bool = os.getenv("ENABLE_ADAPTIVE_CONFIDENCE", "true").lower() == "true"
+        self.ENABLE_RESULT_DIVERSITY: bool = os.getenv("ENABLE_RESULT_DIVERSITY", "true").lower() == "true"
+        self.ENABLE_ADAPTIVE_GAPS: bool = os.getenv("ENABLE_ADAPTIVE_GAPS", "true").lower() == "true"
+        self.ENABLE_TEMPORAL_OVERLAP: bool = os.getenv("ENABLE_TEMPORAL_OVERLAP", "true").lower() == "true"
+        self.ENABLE_CLIP_EXPANSION: bool = os.getenv("ENABLE_CLIP_EXPANSION", "true").lower() == "true"
+        # Recency boost: half-life in hours (score multiplier decays with age)
+        self.RECENCY_HALFLIFE_HOURS: float = float(os.getenv("RECENCY_HALFLIFE_HOURS", "24.0"))
+        # MMR diversity: 0 = no diversity, 1 = max diversity
+        self.MMR_DIVERSITY_LAMBDA: float = float(os.getenv("MMR_DIVERSITY_LAMBDA", "0.3"))
+
     def get_active_llm_config(self) -> dict:
         """Fetch active LLM configuration from MongoDB (overrides .env if present)."""
         try:

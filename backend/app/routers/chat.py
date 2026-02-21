@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import re
 
 from fastapi import APIRouter, HTTPException
@@ -87,7 +87,7 @@ class ChatSendResponse(BaseModel):
 
 
 def iso_now() -> str:
-    return datetime.utcnow().isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def save_message(session_id: str, role: str, content: str, payload: Optional[Dict[str, Any]] = None) -> None:
@@ -275,7 +275,7 @@ def parse_simple_nl_to_filter(nl: str) -> Dict[str, Any]:
         f["camera_id"] = camera_id
 
     # time range
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     ts_filter: Dict[str, Any] = {}
     if last_minutes:
         start = now - timedelta(minutes=last_minutes)
@@ -454,22 +454,22 @@ def send(req: ChatSendRequest) -> ChatSendResponse:
                 logger.info(f"Regex parsed query: {parsed}")
 
         # If LLM suggested a relative window and absolute timestamp not provided, expand to [now-last_minutes, now]
+        # Use UTC to keep timestamps consistent across services
         tsf = parsed.get("timestamp")
-        # Fix: empty dict {} is truthy in Python, so check for actual content
+        # Check that tsf is a dict and contains $gte or $lte keys (empty dict is falsy in Python)
         has_absolute_ts = isinstance(tsf, dict) and (tsf.get("$gte") or tsf.get("$lte"))
         if "__last_minutes" in parsed and not has_absolute_ts:
             try:
                 minutes = int(parsed["__last_minutes"])
-                now = datetime.utcnow()
+                now = datetime.now(timezone.utc)
                 start = now - timedelta(minutes=minutes)
                 parsed["timestamp"] = {"$gte": start.isoformat(), "$lte": now.isoformat()}
             except Exception:
                 pass
 
-        # Default time window: if no time filter at all, default to last 24 hours
-        # This prevents queries from searching the entire detection history
+        # Default time window: if no time filter at all, default to last 24 hours (UTC)
         if "timestamp" not in parsed and "__last_minutes" not in parsed:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             start = now - timedelta(hours=24)
             parsed["timestamp"] = {"$gte": start.isoformat(), "$lte": now.isoformat()}
             parsed["__last_minutes"] = 1440

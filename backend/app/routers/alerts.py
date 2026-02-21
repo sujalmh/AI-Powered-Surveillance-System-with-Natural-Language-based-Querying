@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -11,6 +11,7 @@ import asyncio
 import json
 
 from backend.app.db.mongo import alerts as alerts_col, alert_logs as alert_logs_col, detections as detections_col
+from backend.app.services.alert_engine import _now_utc_iso
 
 router = APIRouter()
 
@@ -29,7 +30,8 @@ class AlertRuleSpec(BaseModel):
     objects: Optional[List[Dict[str, Any]]] = None  # e.g., [{"name":"person","attributes":{"bag_confidence":{">=":0.7}}}]
     color: Optional[str] = None  # standardized color name
     count: Optional[Dict[str, Any]] = None  # {">=": 1}
-    area: Optional[Dict[str, Any]] = None  # reserved for future polygon support
+    area: Optional[Dict[str, Any]] = None  # {"zone_id": "entrance"} for zone-based count
+    occupancy_pct: Optional[Dict[str, Any]] = None  # {">=": 80} for occupancy threshold when zone has capacity
 
 
 class CreateAlertRequest(BaseModel):
@@ -74,20 +76,17 @@ def oid_str(x: Any) -> str:
         return str(x)
     return str(x)
 
-def now_iso() -> str:
-    return datetime.utcnow().isoformat()
-
 def parse_time_window(rule_time: Optional[Dict[str, Any]]) -> Tuple[Optional[str], Optional[str]]:
     if not rule_time:
         return None, None
     start_iso: Optional[str] = None
     end_iso: Optional[str] = None
     if "last_minutes" in rule_time:
-        end = datetime.utcnow()
+        end = datetime.now(timezone.utc)
         start = end - timedelta(minutes=int(rule_time["last_minutes"]))
         start_iso, end_iso = start.isoformat(), end.isoformat()
     elif "last_hours" in rule_time:
-        end = datetime.utcnow()
+        end = datetime.now(timezone.utc)
         start = end - timedelta(hours=int(rule_time["last_hours"]))
         start_iso, end_iso = start.isoformat(), end.isoformat()
     else:
@@ -171,7 +170,7 @@ def evaluate_rule(rule_doc: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     query = build_detection_query_from_rule(rule)
     # Limit scope: last 30 minutes default if no explicit time
     if "timestamp" not in query:
-        end = datetime.utcnow()
+        end = datetime.now(timezone.utc)
         start = end - timedelta(minutes=30)
         query["timestamp"] = {"$gte": start.isoformat(), "$lte": end.isoformat()}
 
@@ -194,7 +193,7 @@ def evaluate_rule(rule_doc: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         # Triggered
         log = {
             "alert_id": rule_doc["_id"],
-            "triggered_at": now_iso(),
+            "triggered_at": _now_utc_iso(),
             "camera_id": docs[0]["camera_id"] if docs else None,
             "event_id": None,
             "detection_ids": [str(d["_id"]) for d in docs[:10]],  # sample first N
@@ -235,7 +234,7 @@ def list_alerts() -> List[AlertResponse]:
 @router.post("/", response_model=AlertResponse)
 def create_alert(req: CreateAlertRequest) -> AlertResponse:
     try:
-        now = now_iso()
+        now = _now_utc_iso()
         doc = {
             "name": req.name,
             "nl": req.nl,
@@ -351,8 +350,8 @@ async def stream_alerts(
     Polls MongoDB every interval_sec and emits new alerts as they arrive.
     """
     async def event_gen():
-        # initialize cursor watermark
-        watermark = last_ts or datetime.utcnow().isoformat()
+        # initialize cursor watermark - use UTC-aware timestamp to match triggered_at format
+        watermark = last_ts or _now_utc_iso()
         while True:
             try:
                 q: Dict[str, Any] = {"triggered_at": {"$gt": watermark}}

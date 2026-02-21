@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import StreamingResponse, Response
@@ -52,10 +52,11 @@ def _walk_media(root_dir: str, base_url: str, prefix: Optional[str] = None, limi
             try:
                 stat = os.stat(fpath)
                 size = stat.st_size
-                mtime = datetime.fromtimestamp(stat.st_mtime).isoformat()
-            except Exception:
+                # Use UTC-aware ISO timestamps for consistency with fallback path
+                mtime = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat()
+            except OSError:
                 size = 0
-                mtime = datetime.utcnow().isoformat()
+                mtime = datetime.now(timezone.utc).isoformat()
             url = f"{base_url}/{rel}"
             result.append(MediaItem(path=rel, size_bytes=size, modified_at=mtime, url=url))
             count += 1
@@ -165,7 +166,7 @@ async def upload_clip(
 
         # Create/update camera metadata in cameras collection
         try:
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             camera_doc = cameras_col.find_one({"camera_id": int(camera_id)})
             
             if camera_doc:

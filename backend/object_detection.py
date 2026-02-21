@@ -1,4 +1,5 @@
 import cv2
+import logging
 import numpy as np
 import datetime
 from ultralytics import YOLO
@@ -26,6 +27,69 @@ from backend.app.services.attribute_encoder import get_attribute_encoder
 from backend.app.services.person_store import get_person_store
 from backend.app.services.fusion import MultimodalFusion
 from backend.app.services.alert_engine import evaluate_realtime
+
+logger = logging.getLogger(__name__)
+
+
+def _get_zones_for_camera(zones_collection: Any, camera_id: int) -> List[Dict[str, Any]]:
+    """Return list of zone docs for camera, with short TTL cache."""
+    global _ZONES_CACHE
+    now = datetime.datetime.now().timestamp()
+    entry = _ZONES_CACHE.get(camera_id)
+    if entry is not None and (now - entry[1]) < _ZONES_CACHE_TTL_SEC:
+        return entry[0]
+    try:
+        zone_list = list(zones_collection.find({"camera_id": camera_id}))
+        _ZONES_CACHE[camera_id] = (zone_list, now)
+        return zone_list
+    except Exception:
+        return []
+
+
+def _compute_zone_counts(
+    objects: List[Dict[str, Any]],
+    zones_list: List[Dict[str, Any]],
+    frame_width: int,
+    frame_height: int,
+) -> Dict[str, int]:
+    """
+    Count persons per zone. Zone bbox is normalized [0,1].
+    Person bbox in objects is pixel [x1,y1,x2,y2]. Use centroid and normalize.
+    """
+    zone_counts: Dict[str, int] = {}
+    if not frame_width or not frame_height:
+        return zone_counts
+    for z in zones_list:
+        zid = z.get("zone_id")
+        if not zid:
+            continue
+        zone_counts[str(zid)] = 0
+    for obj in objects:
+        if not isinstance(obj, dict):
+            continue
+        if str(obj.get("object_name", "")).strip().lower() != "person":
+            continue
+        bbox = obj.get("bbox")
+        if not bbox or len(bbox) < 4:
+            continue
+        x1, y1, x2, y2 = bbox[0], bbox[1], bbox[2], bbox[3]
+        cx = (float(x1) + float(x2)) / 2.0
+        cy = (float(y1) + float(y2)) / 2.0
+        nx = cx / float(frame_width)
+        ny = cy / float(frame_height)
+        for z in zones_list:
+            zid = z.get("zone_id")
+            if not zid:
+                continue
+            b = z.get("bbox") or {}
+            x_min = float(b.get("x_min", 0))
+            y_min = float(b.get("y_min", 0))
+            x_max = float(b.get("x_max", 1))
+            y_max = float(b.get("y_max", 1))
+            if x_min <= nx <= x_max and y_min <= ny <= y_max:
+                zone_counts[str(zid)] = zone_counts.get(str(zid), 0) + 1
+    return zone_counts
+
 
 def to_numpy(x):
     if x is None:
@@ -55,6 +119,10 @@ MIN_PERSON_WIDTH_PIXELS = 60 # NEW: Minimum width of a person to trigger attribu
 mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 client = MongoClient(mongo_uri)
 db = client[os.getenv("MONGO_DB_NAME", "ai_surveillance")]
+
+# Zones cache for crowd/ROI counts: camera_id -> (list of zone docs, cache_time)
+_ZONES_CACHE: Dict[int, Tuple[List[Dict[str, Any]], float]] = {}
+_ZONES_CACHE_TTL_SEC = 60.0
 
 # =========================================
 # LOAD MODELS
@@ -437,6 +505,7 @@ def process_live_stream(
     global db
     cameras_collection = db["cameras"]
     detections_collection = db["detections"]
+    zones_collection = db["zones"]
 
     # Use DirectShow for local webcams on Windows to improve reliability
     if isinstance(source, int):
@@ -793,6 +862,22 @@ def process_live_stream(
                 # Keep detection loop resilient if summary bookkeeping fails
                 pass
 
+            # Zone-level counts for crowd management (when zones exist for this camera)
+            try:
+                zones_list = _get_zones_for_camera(zones_collection, int(camera_id))
+                if zones_list and doc.get("objects"):
+                    h, w = frame.shape[0], frame.shape[1]
+                    doc["zone_counts"] = _compute_zone_counts(
+                        doc["objects"], zones_list, w, h
+                    )
+            except Exception as e:
+                logger.exception(
+                    "Zone-counting failed for camera_id=%s timestamp=%s: %s",
+                    camera_id,
+                    timestamp,
+                    e,
+                )
+
             if doc["objects"]:
                 try:
                     safe_ts = timestamp.replace(":", "-").replace(".", "-")
@@ -806,7 +891,7 @@ def process_live_stream(
                 ins = detections_collection.insert_one(doc)
                 det_id = ins.inserted_id if ins is not None else None
 
-                # Evaluate real-time alert rules with current frame context
+                # Evaluate real-time alert rules with current frame context (incl. zone_counts for zone-based rules)
                 try:
                     evaluate_realtime(
                         camera_id=int(camera_id),
@@ -814,6 +899,7 @@ def process_live_stream(
                         objects=doc.get("objects", []),
                         frame_bgr=frame,
                         snapshot_url=doc.get("snapshot"),
+                        zone_counts=doc.get("zone_counts"),
                     )
                 except Exception as _e:
                     # Do not interrupt detection loop on alert evaluation errors
