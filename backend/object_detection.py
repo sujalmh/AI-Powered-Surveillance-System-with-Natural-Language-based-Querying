@@ -14,7 +14,8 @@ from backend.app.config import settings
 import torch
 try:
     import boxmot  # type: ignore
-    BoTSORT = getattr(boxmot, "BoTSORT", None)  # BoT-SORT tracker
+    # Try BoTSORT (all caps) first, then falling back to BotSort (PascalCase)
+    BoTSORT = getattr(boxmot, "BoTSORT", getattr(boxmot, "BotSort", None))
 except Exception:  # pragma: no cover
     BoTSORT = None  # type: ignore
 from backend.app.services.frame_store import update_frame
