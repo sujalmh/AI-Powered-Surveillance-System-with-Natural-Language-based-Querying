@@ -152,7 +152,8 @@ function AlertModal({ onClose }: { onClose: () => void }) {
         time: { last_minutes: lastMinutes },
       }
       if (nightHours) {
-        rule.time_of_day = { start: "22:00", end: "06:00", tz: "Asia/Kolkata" }
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+        rule.time_of_day = { start: "22:00", end: "06:00", tz }
         rule.event = "class_enter_during_time"
       }
       if (cameraIds.length > 0) rule.cameras = cameraIds
@@ -161,7 +162,7 @@ function AlertModal({ onClose }: { onClose: () => void }) {
       if (countThreshold && countThreshold > 0) rule.count = { ">=": Number(countThreshold) }
       if (zoneId && zoneId !== "_all") rule.area = { zone_id: zoneId }
       if (occupancyPct > 0) rule.occupancy_pct = { ">=": Number(occupancyPct) }
-      if ((nl || name).toLowerCase().includes("fight")) rule.behavior = "fight"
+      if ((nl && nl.toLowerCase().includes("fight")) || (name && name.toLowerCase().includes("fight"))) rule.behavior = "fight"
 
       const payload = {
         name: name || "New Alert",
@@ -399,12 +400,21 @@ function AlertModal({ onClose }: { onClose: () => void }) {
                       <Badge
                         key={c.camera_id}
                         variant={selected ? "default" : "outline"}
+                        role="button"
+                        tabIndex={0}
+                        aria-pressed={selected}
                         className={`cursor-pointer px-3 py-1 text-xs transition-all ${
                           selected 
                             ? "bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/50 hover:bg-green-500/30" 
                             : "hover:bg-muted font-normal text-muted-foreground"
                         }`}
                         onClick={() => toggleCamera(c.camera_id)}
+                        onKeyDown={(e: React.KeyboardEvent) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault()
+                            toggleCamera(c.camera_id)
+                          }
+                        }}
                       >
                         #{c.camera_id} {c.location ? `· ${c.location}` : ""}
                       </Badge>

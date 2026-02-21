@@ -5,6 +5,17 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime, timedelta, timezone
 import re
 
+_ALERT_CREATION_RE = re.compile(
+    r'\b(?:create|set|make|add|new|schedule)\b.*\balerts?\b'
+    r'|\balerts?\b.*\b(?:create|set|make|add|new|schedule)\b',
+    re.IGNORECASE,
+)
+_ALERT_RETRIEVAL_RE = re.compile(
+    r'\b(?:show|list|get|find|are\s+there|display|view)\b.*\balerts?\b'
+    r'|\balerts?\b.*\b(?:show|list|get|find|display|view)\b',
+    re.IGNORECASE,
+)
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -336,10 +347,15 @@ def _maybe_create_alert_from_nl(nl: str, parsed: Dict[str, Any]) -> Optional[Dic
     """
     Heuristic NL→alert creation: if the user asks to "alert"/"notify" etc., compile a basic rule and save it.
     """
-    low = nl.lower()
-    intent = any(k in low for k in ["alert", "notify", "create alert", "set alert", "make alert"])
+    # Require an explicit creation verb near "alert"; reject retrieval verbs
+    intent = bool(_ALERT_CREATION_RE.search(nl)) and not bool(_ALERT_RETRIEVAL_RE.search(nl))
+    # Also accept "notify me" as creation intent
+    if not intent:
+        low = nl.lower()
+        intent = "notify" in low and not bool(_ALERT_RETRIEVAL_RE.search(nl))
     if not intent:
         return None
+    low = nl.lower()
     obj = parsed.get("objects.object_name") or "person"
     color = parsed.get("objects.color")
     cam = parsed.get("camera_id")
@@ -380,8 +396,16 @@ def _maybe_create_alert_from_nl(nl: str, parsed: Dict[str, Any]) -> Optional[Dic
     zone = parsed.get("zone")
     area = {"zone_id": zone} if zone else None
     
+    # Safely parse camera_id — may be non-numeric string from NLP
+    cam_list = None
+    if cam is not None:
+        try:
+            cam_list = [int(cam)]
+        except (ValueError, TypeError):
+            cam_list = None
+
     rule = {
-        "cameras": [int(cam)] if cam is not None else None,
+        "cameras": cam_list,
         "objects": [{"name": obj}],
         "color": color,
         "count": count_dict,
@@ -549,16 +573,16 @@ def send(req: ChatSendRequest) -> ChatSendResponse:
             semantic_query=semantic_query,
             limit=req.limit
         )
-        logger.info(f"Retrieval complete. Metadata: {search_result.get('metadata')}")
+        logger.info("Retrieval complete. Metadata: %s", search_result.get("metadata"))
         
         results = search_result["results"]
         answer = search_result["answer"]
-        metadata = search_result["metadata"]
+        metadata = search_result.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
 
-        # Maybe create alert from NL
+        # Maybe create alert from NL — attach to response, not to metadata
         alert_info = _maybe_create_alert_from_nl(req.message, parsed)
-        if alert_info:
-            metadata["alert_created"] = alert_info
 
         # Save assistant message
         save_message(
