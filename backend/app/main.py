@@ -1,6 +1,7 @@
 import atexit
 import logging
 import os
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -29,7 +30,20 @@ except Exception:
 # NOTE: uvicorn installs its own SIGTERM handler, so no application-level
 # SIGTERM registration is performed here.  Cleanup relies on atexit/_force_exit.
 def _force_exit():
-    """Last-resort exit: kill the process even if stray threads linger."""
+    """Last-resort exit: kill the process only if stray non-daemon threads linger."""
+    stray = [
+        t for t in threading.enumerate()
+        if t is not threading.current_thread() and not t.daemon and t.is_alive()
+    ]
+    if not stray:
+        return  # clean exit — no stray threads
+    # Flush logging before hard-kill so we don't lose messages
+    for h in logging.root.handlers:
+        try:
+            h.flush()
+            h.close()
+        except Exception:
+            pass
     os._exit(0)
 
 
@@ -40,6 +54,7 @@ atexit.register(_force_exit)
 try:
     from backend.app.routers.detections import router as detections_router  # type: ignore
 except Exception:
+    logger.exception("Failed to import detections router")
     detections_router = None  # type: ignore
 
 try:
@@ -51,26 +66,31 @@ except Exception:
 try:
     from backend.app.routers.alerts import router as alerts_router  # type: ignore
 except Exception:
+    logger.exception("Failed to import alerts router")
     alerts_router = None  # type: ignore
 
 try:
     from backend.app.routers.videos import router as videos_router  # type: ignore
 except Exception:
+    logger.exception("Failed to import videos router")
     videos_router = None  # type: ignore
 
 try:
     from backend.app.routers.semantic import router as semantic_router  # type: ignore
 except Exception:
+    logger.exception("Failed to import semantic router")
     semantic_router = None  # type: ignore
 
 try:
     from backend.app.routers.settings import router as settings_router  # type: ignore
 except Exception:
+    logger.exception("Failed to import settings router")
     settings_router = None  # type: ignore
 
 try:
     from backend.app.routers.dashboard import router as dashboard_router  # type: ignore
 except Exception:
+    logger.exception("Failed to import dashboard router")
     dashboard_router = None  # type: ignore
 
 

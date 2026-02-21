@@ -14,6 +14,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -73,14 +81,18 @@ export default function AlertsPage() {
         <div className="w-full">
           <AlertsMap />
         </div>
-        
-        {showModal && <AlertModal onClose={() => setShowModal(false)} />}
       </div>
+
+      <AlertModal open={showModal} onClose={() => setShowModal(false)} />
     </MainLayout>
   )
 }
 
-function AlertModal({ onClose }: { onClose: () => void }) {
+// Night window constants — extract so they can later become user-configurable
+const NIGHT_START = "22:00"
+const NIGHT_END = "06:00"
+
+function AlertModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [name, setName] = useState("")
   const [nl, setNl] = useState("")
   const [lastMinutes, setLastMinutes] = useState<number>(60)
@@ -101,6 +113,7 @@ function AlertModal({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!open) return
     let mounted = true
     setLoadingCameras(true)
     setError(null)
@@ -120,7 +133,7 @@ function AlertModal({ onClose }: { onClose: () => void }) {
     return () => {
       mounted = false
     }
-  }, [])
+  }, [open])
 
   useEffect(() => {
     if (cameras.length === 0) return
@@ -153,7 +166,7 @@ function AlertModal({ onClose }: { onClose: () => void }) {
       }
       if (nightHours) {
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
-        rule.time_of_day = { start: "22:00", end: "06:00", tz }
+        rule.time_of_day = { start: NIGHT_START, end: NIGHT_END, tz }
         rule.event = "class_enter_during_time"
       }
       if (cameraIds.length > 0) rule.cameras = cameraIds
@@ -162,7 +175,7 @@ function AlertModal({ onClose }: { onClose: () => void }) {
       if (countThreshold && countThreshold > 0) rule.count = { ">=": Number(countThreshold) }
       if (zoneId && zoneId !== "_all") rule.area = { zone_id: zoneId }
       if (occupancyPct > 0) rule.occupancy_pct = { ">=": Number(occupancyPct) }
-      if ((nl && nl.toLowerCase().includes("fight")) || (name && name.toLowerCase().includes("fight"))) rule.behavior = "fight"
+      // behavior is determined by backend NLP — no client-side heuristic
 
       const payload = {
         name: name || "New Alert",
@@ -184,13 +197,16 @@ function AlertModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-      <Card className="max-w-2xl w-full max-h-[90vh] flex flex-col shadow-lg border border-border bg-card overflow-hidden animate-in zoom-in-95 duration-200">
-        <CardHeader className="border-b border-border py-4 px-6 shrink-0 bg-muted/20">
-          <CardTitle className="text-lg font-semibold">Create Alert Rule</CardTitle>
-          <p className="text-sm text-muted-foreground mt-1">Configure natural language triggers or explicit parameters.</p>
-        </CardHeader>
-        <CardContent className="overflow-y-auto flex-1 p-6 space-y-6">
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden" showCloseButton={false}>
+        <DialogHeader className="border-b border-border py-4 px-6 shrink-0 bg-muted/20">
+          <DialogTitle className="text-lg font-semibold">Create Alert Rule</DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground mt-1">
+            Configure natural language triggers or explicit parameters.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="overflow-y-auto flex-1 p-6 space-y-6">
           {error && (
              <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-lg text-sm">
                {error}
@@ -326,7 +342,7 @@ function AlertModal({ onClose }: { onClose: () => void }) {
                   checked={nightHours} 
                   onCheckedChange={(checked) => setNightHours(checked as boolean)} 
                 />
-                <Label htmlFor="nightHours">Night hours (22:00–06:00)</Label>
+                <Label htmlFor="nightHours">Night hours ({NIGHT_START}–{NIGHT_END})</Label>
               </div>
             </div>
 
@@ -424,16 +440,17 @@ function AlertModal({ onClose }: { onClose: () => void }) {
               </div>
             </div>
           </div>
-        </CardContent>
-        <div className="p-4 px-6 border-t border-border bg-muted/20 shrink-0 flex gap-3 justify-end items-center">
+        </div>
+
+        <DialogFooter className="p-4 px-6 border-t border-border bg-muted/20 shrink-0">
           <Button variant="outline" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
           <Button onClick={onCreate} disabled={saving}>
             {saving ? "Creating..." : "Create Alert"}
           </Button>
-        </div>
-      </Card>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

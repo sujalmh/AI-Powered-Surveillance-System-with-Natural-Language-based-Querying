@@ -347,15 +347,14 @@ def _maybe_create_alert_from_nl(nl: str, parsed: Dict[str, Any]) -> Optional[Dic
     """
     Heuristic NL→alert creation: if the user asks to "alert"/"notify" etc., compile a basic rule and save it.
     """
+    low = nl.lower()
     # Require an explicit creation verb near "alert"; reject retrieval verbs
     intent = bool(_ALERT_CREATION_RE.search(nl)) and not bool(_ALERT_RETRIEVAL_RE.search(nl))
-    # Also accept "notify me" as creation intent
+    # Also accept "notify me" (word-boundary) as creation intent
     if not intent:
-        low = nl.lower()
-        intent = "notify" in low and not bool(_ALERT_RETRIEVAL_RE.search(nl))
+        intent = bool(re.search(r"\bnotify\b", low)) and not bool(_ALERT_RETRIEVAL_RE.search(nl))
     if not intent:
         return None
-    low = nl.lower()
     obj = parsed.get("objects.object_name") or "person"
     color = parsed.get("objects.color")
     cam = parsed.get("camera_id")
@@ -581,10 +580,18 @@ def send(req: ChatSendRequest) -> ChatSendResponse:
         if not isinstance(metadata, dict):
             metadata = {}
 
-        # Maybe create alert from NL — attach to response, not to metadata
-        alert_info = _maybe_create_alert_from_nl(req.message, parsed)
+        # Maybe create alert from NL — only if parsed intent suggests creation
+        alert_info = None
+        parsed_intent = parsed.get("__intent", "")
+        parsed_subtype = parsed.get("__query_subtype", "")
+        if parsed_intent in ("create", "update", "delete", "") or parsed_subtype in ("alerts", ""):
+            alert_info = _maybe_create_alert_from_nl(req.message, parsed)
 
-        # Save assistant message
+        # Save assistant message (compact payload — store count + preview IDs, not full results)
+        result_ids = [
+            r.get("_id") or r.get("clip_url") or r.get("track_id")
+            for r in results[:5]
+        ]
         save_message(
             req.session_id,
             "assistant",
@@ -592,7 +599,8 @@ def send(req: ChatSendRequest) -> ChatSendResponse:
             {
                 "session_id": req.session_id,
                 "parsed_filter": parsed,
-                "results": results,
+                "results_count": len(results),
+                "results_preview": result_ids,
                 "metadata": metadata,
                 "answer": answer,
             },
