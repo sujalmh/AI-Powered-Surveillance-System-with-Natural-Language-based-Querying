@@ -1,21 +1,51 @@
+import atexit
+import os
+import signal
+import sys
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.app.config import settings
-from backend.app.db.mongo import get_db_info
+from backend.app.db.mongo import get_db_info, client as mongo_client
 from backend.app.routers.cameras import router as cameras_router
 
-# Optional future routers (to be added as files are created)
+try:
+    from backend.app.services.detection_runner import runner
+except Exception:
+    runner = None
+
+
+# ── Force-exit handler ──────────────────────────────────────────────
+# PyTorch, OpenCLIP, PyMongo, and other ML libraries create non-daemon
+# background threads.  On Windows, when uvicorn --reload tries to shut
+# down the worker process, those threads keep the process alive forever.
+# This atexit handler runs AFTER the asyncio loop and lifespan shutdown
+# have completed and forcibly terminates the process so it doesn't hang.
+def _force_exit():
+    """Last-resort exit: kill the process even if stray threads linger."""
+    os._exit(0)
+
+
+atexit.register(_force_exit)
+
+# Also handle SIGTERM (sent by uvicorn reloader on Unix; on Windows
+# this is a no-op but doesn't hurt).
+try:
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+except (OSError, ValueError):
+    pass  # signal only works in main thread
+
+
+# ── Router imports ──────────────────────────────────────────────────
 try:
     from backend.app.routers.detections import router as detections_router  # type: ignore
 except Exception:
     detections_router = None  # type: ignore
 
-try:
-    from backend.app.routers.chat import router as chat_router  # type: ignore
-except Exception:
-    chat_router = None  # type: ignore
+from backend.app.routers.chat import router as chat_router
 
 try:
     from backend.app.routers.alerts import router as alerts_router  # type: ignore
@@ -43,7 +73,25 @@ except Exception:
     dashboard_router = None  # type: ignore
 
 
-app = FastAPI(title=settings.APP_NAME, version=settings.VERSION)
+# ── Lifespan ────────────────────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    yield
+    # Shutdown — best-effort graceful cleanup before atexit fires
+    if runner is not None:
+        try:
+            for cid in list(runner.list_running().keys()):
+                runner.stop_camera(cid, timeout=2)
+        except Exception:
+            pass
+    try:
+        mongo_client.close()
+    except Exception:
+        pass
+
+
+app = FastAPI(title=settings.APP_NAME, version=settings.VERSION, lifespan=lifespan)
 
 # CORS
 app.add_middleware(
@@ -106,3 +154,4 @@ def root():
             "snapshots": "/media/snapshots",
         },
     }
+

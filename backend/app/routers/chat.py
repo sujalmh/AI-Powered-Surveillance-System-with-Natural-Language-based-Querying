@@ -9,8 +9,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.app.db.mongo import chat_messages as chat_col, detections as detections_col, alerts as alerts_col
-from backend.app.services.nl_parser import parse_nl_with_llm
-from backend.app.services.unified_retrieval import UnifiedRetrieval
 import logging
 
 logger = logging.getLogger(__name__)
@@ -500,6 +498,9 @@ def sessions(limit: int = 20) -> List[ChatSession]:
 @router.post("/send", response_model=ChatSendResponse)
 def send(req: ChatSendRequest) -> ChatSendResponse:
     try:
+        from backend.app.services.nl_parser import parse_nl_with_llm
+        from backend.app.services.unified_retrieval import UnifiedRetrieval
+        
         logger.info("Received chat request. Session: %s, Message length: %d", req.session_id, len(req.message))
         logger.debug("Full message payload omitted for PII; session: %s", req.session_id)
         # Save user message
