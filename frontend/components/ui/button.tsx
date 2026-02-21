@@ -9,24 +9,24 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-[var(--btn-primary)] text-[color:var(--primary-foreground)] hover:bg-[var(--btn-primary-hover)] active:bg-[var(--btn-primary-active)] focus-visible:ring-[color:var(--ring)]',
+        default: 'bg-gradient-to-br from-green-800 to-green-700 text-white shadow-md hover:shadow-lg active:scale-95 transition-all focus-visible:ring-[color:var(--ring)]',
         destructive:
-          'bg-[color:var(--destructive)] text-white hover:bg-[color-mix(in oklab,var(--destructive) 90%,black)] focus-visible:ring-[color:var(--destructive)]',
+          'bg-[color:var(--destructive)] text-white hover:bg-[color-mix(in oklab,var(--destructive) 90%,black)] shadow-sm focus-visible:ring-[color:var(--destructive)]',
         outline:
           'border border-[color:var(--accent)] text-[color:var(--accent)] bg-transparent hover:bg-[color-mix(in oklab,var(--accent) 12%,transparent)] focus-visible:ring-[color:var(--ring)]',
         secondary:
-          'border border-[color:var(--border)] text-[color:var(--foreground)] bg-transparent hover:bg-[color-mix(in oklab,var(--foreground) 6%,transparent)] focus-visible:ring-[color:var(--ring)]',
+          'bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white hover:bg-stone-100 dark:hover:bg-stone-700 shadow-sm focus-visible:ring-[color:var(--ring)] transition-colors',
         ghost:
-          'text-[color:var(--foreground)] hover:bg-[color-mix(in oklab,var(--accent) 10%,transparent)]',
-        link: 'text-[#1D4ED8] dark:text-[#93C5FD] underline-offset-4 hover:underline focus-visible:ring-[color:var(--ring)]',
+          'text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-900 dark:hover:text-white transition-colors',
+        link: 'text-[#1B4332] dark:text-[#86EFAC] underline-offset-4 hover:underline focus-visible:ring-[color:var(--ring)]',
       },
       size: {
-        default: 'h-9 px-4 py-2 has-[>svg]:px-3',
+        default: 'h-10 px-4 py-2 has-[>svg]:px-3 rounded-lg',
         sm: 'h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5',
-        lg: 'h-10 rounded-md px-6 has-[>svg]:px-4',
-        icon: 'size-9',
-        'icon-sm': 'size-8',
-        'icon-lg': 'size-10',
+        lg: 'h-11 rounded-lg px-6 has-[>svg]:px-4',
+        icon: 'size-10 rounded-full shadow-sm bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700 transition-colors',
+        'icon-sm': 'size-8 rounded-full',
+        'icon-lg': 'size-12 rounded-full',
       },
     },
     defaultVariants: {

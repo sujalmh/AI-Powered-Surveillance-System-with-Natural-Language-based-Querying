@@ -3,6 +3,19 @@
 import { useState } from "react"
 import { Save, Check } from "lucide-react"
 
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "8px 11px",
+  border: "1px solid var(--color-border)",
+  borderRadius: "var(--radius-md)",
+  background: "var(--color-surface-raised)",
+  color: "var(--color-text)",
+  fontSize: "0.875rem",
+  fontFamily: "var(--font-ui)",
+  outline: "none",
+  transition: "border-color 150ms",
+}
+
 export function UserSettings() {
   const [formData, setFormData] = useState({
     fullName: "Admin User",
@@ -18,60 +31,69 @@ export function UserSettings() {
   }
 
   return (
-    <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6 max-w-2xl space-y-6">
-      <div>
-        <label className="text-sm text-muted-foreground block mb-2">Full Name</label>
-        <input
-          type="text"
-          value={formData.fullName}
-          onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-          className="w-full bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl px-4 py-2 text-foreground bg-transparent outline-none focus:border-cyan-400/50 transition-colors"
-        />
-      </div>
+    <div style={{
+      background: "var(--color-surface)", border: "1px solid var(--color-border)",
+      borderRadius: "var(--radius-lg)", padding: "20px 24px",
+      boxShadow: "var(--shadow-sm)", maxWidth: 640,
+      display: "flex", flexDirection: "column", gap: "16px",
+    }}>
+      {[
+        { label: "Full Name", key: "fullName", type: "text" },
+        { label: "Email Address", key: "email", type: "email" },
+        { label: "Phone Number", key: "phone", type: "tel" },
+      ].map(({ label, key, type }) => (
+        <div key={key}>
+          <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase" as const, letterSpacing: "0.04em", display: "block", marginBottom: "6px" }}>{label}</label>
+          <input
+            type={type}
+            value={(formData as any)[key]}
+            onChange={(e) => setFormData({ ...formData, [key]: e.target.value })}
+            style={inputStyle}
+            onFocus={e => (e.target.style.borderColor = "var(--color-primary)")}
+            onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
+          />
+        </div>
+      ))}
 
-      <div>
-        <label className="text-sm text-muted-foreground block mb-2">Email Address</label>
-        <input
-          type="email"
-          value={formData.email}
-          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-          className="w-full bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl px-4 py-2 text-foreground bg-transparent outline-none focus:border-cyan-400/50 transition-colors"
-        />
-      </div>
-
-      <div>
-        <label className="text-sm text-muted-foreground block mb-2">Phone Number</label>
-        <input
-          type="tel"
-          value={formData.phone}
-          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-          className="w-full bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl px-4 py-2 text-foreground bg-transparent outline-none focus:border-cyan-400/50 transition-colors"
-        />
-      </div>
-
-      <div className="flex items-center gap-3">
+      <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
         <input
           type="checkbox"
           id="notifications"
           checked={formData.notifications}
           onChange={(e) => setFormData({ ...formData, notifications: e.target.checked })}
-          className="w-4 h-4 rounded"
+          style={{ width: 15, height: 15, accentColor: "var(--color-primary)", cursor: "pointer" }}
         />
-        <label htmlFor="notifications" className="text-sm text-foreground cursor-pointer">
-          Enable email notifications
-        </label>
-      </div>
+        <span style={{ fontSize: "0.875rem", color: "var(--color-text)" }}>Enable email notifications</span>
+      </label>
 
-      <div className="flex gap-3 pt-4">
+      <div style={{
+        display: "flex", justifyContent: "flex-end", gap: "8px",
+        paddingTop: "16px", borderTop: "1px solid var(--color-border)", marginTop: "4px",
+      }}>
+        <button
+          style={{
+            padding: "8px 16px", borderRadius: "var(--radius-md)",
+            border: "1px solid var(--color-border)", background: "transparent",
+            color: "var(--color-text-muted)", fontSize: "0.875rem", fontWeight: 500,
+            cursor: "pointer", fontFamily: "var(--font-ui)", transition: "all 150ms",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = "var(--color-surface-raised)"; e.currentTarget.style.color = "var(--color-text)"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-text-muted)"; }}
+        >
+          Reset Password
+        </button>
         <button
           onClick={handleSave}
-          className={`glow-button flex items-center gap-2 transition-all ${saved ? "opacity-75" : ""}`}
+          style={{
+            display: "flex", alignItems: "center", gap: "6px",
+            padding: "8px 18px", borderRadius: "var(--radius-md)", border: "none",
+            background: saved ? "#16A34A" : "var(--color-primary)",
+            color: "#fff", fontSize: "0.875rem", fontWeight: 600,
+            cursor: "pointer", transition: "all 150ms", fontFamily: "var(--font-ui)",
+          }}
         >
-          {saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-          {saved ? "Saved" : "Save Changes"}
-        </button>
-        <button className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl px-6 py-2 text-foreground transition-all duration-300 hover:bg-white/15 hover:border-white/30 hover:shadow-lg">
-          Reset Password
+          {saved ? <Check style={{ width: 14, height: 14 }} /> : <Save style={{ width: 14, height: 14 }} />}
+          {saved ? "Saved!" : "Save Changes"}
         </button>
       </div>
     </div>

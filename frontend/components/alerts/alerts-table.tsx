@@ -1,8 +1,34 @@
 "use client";
 
-import { MoreVertical, Trash2, Edit2, RefreshCw, Play } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import useSWR from "swr";
+import {
+  ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
+import { MoreVertical, Trash2, Play, Edit2, Plus } from "lucide-react";
+
 import { api } from "@/lib/api";
+import { Switch } from "@/components/ui/switch";
+import { toast } from "@/hooks/use-toast";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 type AlertItem = {
   id: string;
@@ -13,208 +39,192 @@ type AlertItem = {
   actions: string[];
   created_at: string;
   updated_at: string;
+  condition?: string;
 };
 
-export function AlertsTable() {
-  const [alerts, setAlerts] = useState<AlertItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const [evaluatingId, setEvaluatingId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+const fetchAlerts = async (): Promise<AlertItem[]> => {
+  const data = await api.listAlerts();
+  return (data as any[]).map((a) => {
+    const rule = a.rule || {};
+    const obj = Array.isArray(rule.objects) && rule.objects.length > 0 ? rule.objects[0]?.name : undefined;
+    const color = rule.color;
+    const time =
+      rule?.time?.last_minutes
+        ? `last ${rule.time.last_minutes}m`
+        : rule?.time?.last_hours
+        ? `last ${rule.time.last_hours}h`
+        : rule?.time?.from || rule?.time?.to
+        ? `${rule.time.from || ""} ${rule.time.to || ""}`.trim()
+        : "";
+    const condParts: string[] = [];
+    if (obj) condParts.push(obj);
+    if (color) condParts.push(color);
+    const count = rule?.count;
+    if (count && (count[">="] ?? count[">"])) condParts.push(`≥${count[">="] ?? count[">"]}`);
+    if (time) condParts.push(`(${time})`);
+    
+    return {
+      id: String(a.id),
+      name: a.name,
+      nl: a.nl,
+      rule: a.rule ?? {},
+      enabled: Boolean(a.enabled),
+      actions: a.actions ?? [],
+      created_at: a.created_at ?? "",
+      updated_at: a.updated_at ?? "",
+      condition: condParts.join(" "),
+    };
+  });
+};
 
-  const load = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await api.listAlerts();
-      // normalize id field to string
-      const list: AlertItem[] = (data as any[]).map((a) => ({
-        id: String(a.id),
-        name: a.name,
-        nl: a.nl,
-        rule: a.rule ?? {},
-        enabled: Boolean(a.enabled),
-        actions: a.actions ?? [],
-        created_at: a.created_at ?? "",
-        updated_at: a.updated_at ?? "",
-      }));
-      setAlerts(list);
-    } catch (e: any) {
-      setError(e?.message || "Failed to load alerts");
-    } finally {
-      setLoading(false);
-    }
-  };
+export function AlertsTable({ onAddAlert }: { onAddAlert: () => void }) {
+  const { data: alerts, error, isLoading, mutate } = useSWR("alerts", fetchAlerts, { refreshInterval: 10000 });
 
   useEffect(() => {
-    load();
-  }, []);
-
-  // Listen for external refresh requests (e.g., after creating an alert)
-  useEffect(() => {
-    const handler = () => load();
-    // CustomEvent name: 'alerts:refresh'
+    const handler = () => mutate();
     document.addEventListener("alerts:refresh", handler as any);
     return () => document.removeEventListener("alerts:refresh", handler as any);
-  }, []);
+  }, [mutate]);
 
   const onDelete = async (id: string) => {
-    setDeletingId(id);
-    setError(null);
     try {
       await api.deleteAlert(id);
-      setAlerts((prev: AlertItem[]) => prev.filter((a: AlertItem) => a.id !== id));
+      toast({ title: "Alert deleted", description: "Successfully removed alert rule." });
+      mutate();
     } catch (e: any) {
-      setError(e?.message || "Delete failed");
-    } finally {
-      setDeletingId(null);
-      setOpenMenu(null);
+      toast({ title: "Delete Failed", description: e?.message || "Could not delete alert.", variant: "destructive" });
     }
   };
 
   const onEvaluate = async (id: string) => {
-    setEvaluatingId(id);
-    setError(null);
     try {
+      toast({ title: "Evaluating...", description: "Testing the alert rule..." });
       await api.evaluateAlert(id);
+      toast({ title: "Evaluate Complete", description: "Triggered active evaluation cycle." });
     } catch (e: any) {
-      setError(e?.message || "Evaluate failed");
-    } finally {
-      setEvaluatingId(null);
-      setOpenMenu(null);
+      toast({ title: "Evaluation Failed", description: e?.message || "Failed to test alert.", variant: "destructive" });
     }
   };
 
-  type Row = AlertItem & { condition?: string };
-  const rows: Row[] = useMemo(() => {
-    return alerts.map((a: AlertItem) => {
-      const rule = a.rule || {};
-      const obj = Array.isArray(rule.objects) && rule.objects.length > 0 ? rule.objects[0]?.name : undefined;
-      const color = rule.color;
-      const time =
-        rule?.time?.last_minutes
-          ? `last ${rule.time.last_minutes}m`
-          : rule?.time?.last_hours
-          ? `last ${rule.time.last_hours}h`
-          : rule?.time?.from || rule?.time?.to
-          ? `${rule.time.from || ""} ${rule.time.to || ""}`.trim()
-          : "";
-      const condParts: string[] = [];
-      if (obj) condParts.push(obj);
-      if (color) condParts.push(color);
-      const zoneId = rule?.area?.zone_id;
-      if (zoneId) condParts.push(`in ${zoneId}`);
-      const count = rule?.count;
-      if (count && (count[">="] ?? count[">"])) condParts.push(`≥${count[">="] ?? count[">"]}`);
-      if (rule?.occupancy_pct?.[">="]) condParts.push(`occ≥${rule.occupancy_pct[">="]}%`);
-      if (time) condParts.push(`(${time})`);
-      const condition = condParts.join(" ");
-      return {
-        ...a,
-        condition,
-      };
-    });
-  }, [alerts]);
+  const columns = useMemo<ColumnDef<AlertItem>[]>(() => [
+    {
+      accessorKey: "name",
+      header: "Name",
+      cell: ({ row }) => <span className="font-medium">{row.getValue("name")}</span>,
+    },
+    {
+      accessorKey: "condition",
+      header: "Condition",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground text-sm">
+          {row.getValue("condition") || row.original.nl || <span className="italic">n/a</span>}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "enabled",
+      header: "Status",
+      cell: ({ row }) => (
+        <Switch
+          checked={row.getValue("enabled")}
+          onCheckedChange={() => toast({ title: "Not Supported", description: "Edit functionality not implemented on backend." })}
+        />
+      ),
+    },
+    {
+      accessorKey: "updated_at",
+      header: "Updated",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground text-xs">
+          {row.getValue("updated_at") ? new Date(row.getValue("updated_at") as string).toLocaleString() : "-"}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      cell: ({ row }) => {
+        const id = row.original.id;
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="h-8 w-8 p-0">
+                <span className="sr-only">Open menu</span>
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-[160px]">
+              <DropdownMenuItem onClick={() => onEvaluate(id)}>
+                <Play className="mr-2 h-4 w-4" /> Evaluate
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled>
+                <Edit2 className="mr-2 h-4 w-4" /> Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onDelete(id)} className="text-rose-500 focus:text-rose-500">
+                <Trash2 className="mr-2 h-4 w-4" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        );
+      },
+    },
+  ], []);
+
+  const table = useReactTable({
+    data: alerts || [],
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+  });
 
   return (
-    <div className="bg-card border border-border rounded-2xl p-6 overflow-x-auto shadow-[0_2px_10px_rgba(25,24,59,0.1)]">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold text-card-foreground">Configured Alerts</h2>
-          {loading && <span className="text-xs text-muted-foreground">Loading…</span>}
-          {error && <span className="text-xs text-destructive">{error}</span>}
+    <Card className="shadow-sm border-border bg-card overflow-hidden">
+      <CardHeader className="pb-4 flex flex-row items-center justify-between shadow-none">
+        <CardTitle className="text-lg">Configured Alerts</CardTitle>
+        <div className="flex items-center gap-4">
+          {isLoading && !alerts && <span className="text-xs text-muted-foreground animate-pulse">Loading...</span>}
+          <Button onClick={onAddAlert} className="rounded-full h-8 px-4 text-xs font-semibold shadow-sm">
+            <Plus className="w-3.5 h-3.5 mr-1" />
+            Add Alert
+          </Button>
         </div>
-        <button
-          onClick={load}
-          className="px-3 py-1.5 rounded-lg bg-accent/10 border border-accent text-xs text-accent-foreground flex items-center gap-2 hover:bg-accent/20 transition-colors"
-          title="Refresh"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          Refresh
-        </button>
-      </div>
-
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-border">
-            <th className="text-left py-3 px-4 text-sm font-semibold text-muted-foreground">Name</th>
-            <th className="text-left py-3 px-4 text-sm font-semibold text-muted-foreground">Condition</th>
-            <th className="text-left py-3 px-4 text-sm font-semibold text-muted-foreground">Enabled</th>
-            <th className="text-left py-3 px-4 text-sm font-semibold text-muted-foreground">Updated</th>
-            <th className="text-left py-3 px-4 text-sm font-semibold text-muted-foreground">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((alert: Row) => (
-            <tr key={alert.id} className="border-b border-border/50 hover:bg-accent/5 transition-colors">
-              <td className="py-3 px-4 text-sm text-card-foreground font-medium">{alert.name}</td>
-              <td className="py-3 px-4 text-sm text-muted-foreground">
-                {alert.condition || alert.nl || <span className="italic text-muted-foreground">n/a</span>}
-              </td>
-              <td className="py-3 px-4 text-sm">
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                    alert.enabled
-                      ? "bg-accent/20 text-accent border border-accent"
-                      : "bg-muted/20 text-muted-foreground border border-border"
-                  }`}
-                >
-                  {alert.enabled ? "Enabled" : "Disabled"}
-                </span>
-              </td>
-              <td className="py-3 px-4 text-xs text-muted-foreground">
-                {alert.updated_at ? new Date(alert.updated_at).toLocaleString() : "-"}
-              </td>
-              <td className="py-3 px-4 text-sm">
-                <div className="relative">
-                  <button
-                    onClick={() => setOpenMenu(openMenu === alert.id ? null : alert.id)}
-                    className="p-1 hover:bg-accent/10 rounded transition-colors"
-                  >
-                    <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                  {openMenu === alert.id && (
-                    <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-2xl p-2 space-y-1 z-10 min-w-[150px] shadow-[0_4px_12px_rgba(25,24,59,0.15)]">
-                      <button
-                        disabled={evaluatingId === alert.id}
-                        onClick={() => onEvaluate(alert.id)}
-                        className="flex items-center gap-2 px-3 py-2 text-sm text-card-foreground hover:bg-accent/10 rounded w-full disabled:opacity-60 transition-colors"
-                      >
-                        <Play className="w-4 h-4" />
-                        {evaluatingId === alert.id ? "Evaluating…" : "Evaluate"}
-                      </button>
-                      <button
-                        className="flex items-center gap-2 px-3 py-2 text-sm text-card-foreground hover:bg-accent/10 rounded w-full transition-colors"
-                        disabled
-                        title="Edit not implemented"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                        Edit
-                      </button>
-                      <button
-                        disabled={deletingId === alert.id}
-                        onClick={() => onDelete(alert.id)}
-                        className="flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded w-full disabled:opacity-60 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        {deletingId === alert.id ? "Deleting…" : "Delete"}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </td>
-            </tr>
-          ))}
-          {rows.length === 0 && !loading && (
-            <tr>
-              <td colSpan={5} className="py-6 text-center text-sm text-muted-foreground">
-                No alerts configured yet.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+      </CardHeader>
+      <CardContent className="p-0 border-t border-border">
+        {error ? (
+          <div className="p-6 text-sm text-rose-500">Failed to load alerts: {error.message}</div>
+        ) : (
+          <Table>
+            <TableHeader className="bg-muted/40 hover:bg-muted/40">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <TableHead key={header.id} className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">
+                      {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row) => (
+                  <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id} className="py-3 px-4">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={columns.length} className="h-24 text-center text-sm text-muted-foreground">
+                    {isLoading ? "Loading rules..." : "No alert rules configured."}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }

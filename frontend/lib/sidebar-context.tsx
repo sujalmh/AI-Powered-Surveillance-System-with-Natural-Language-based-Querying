@@ -3,16 +3,20 @@
 import { createContext, useContext, useState, type ReactNode } from "react"
 
 interface SidebarContextType {
-  hovered: boolean
-  setHovered: (hovered: boolean) => void
+  expanded: boolean
+  setExpanded: (expanded: boolean) => void
 }
 
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined)
 
 export function SidebarProvider({ children }: { children: ReactNode }) {
-  const [hovered, setHovered] = useState(false)
+  const [expanded] = useState(true)
 
-  return <SidebarContext.Provider value={{ hovered, setHovered }}>{children}</SidebarContext.Provider>
+  return (
+    <SidebarContext.Provider value={{ expanded, setExpanded: () => {} }}>
+      {children}
+    </SidebarContext.Provider>
+  )
 }
 
 export function useSidebar() {
