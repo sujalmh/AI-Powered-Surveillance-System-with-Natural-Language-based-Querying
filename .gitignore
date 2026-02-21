@@ -5,3 +5,4 @@ what.md
 backend/venv/*
 intel/
 temp_alert*.json
+osnet_x0_25_msmt17.pt
