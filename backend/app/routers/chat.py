@@ -365,7 +365,8 @@ def _maybe_create_alert_from_nl(nl: str, parsed: Dict[str, Any]) -> Optional[Dic
         if temp_dict:
             count_dict = temp_dict
     else:
-        count = _guess_count_from_text(nl) or 1
+        guessed = _guess_count_from_text(nl)
+        count = guessed if guessed is not None else 1
         count_dict = {">=": count}
 
     # event enter detection
@@ -398,21 +399,47 @@ def _maybe_create_alert_from_nl(nl: str, parsed: Dict[str, Any]) -> Optional[Dic
         if "$gte" in ts and "$lte" in ts:
             rule["time"] = {"from": ts["$gte"], "to": ts["$lte"]}
 
+    actions = ["store_clip", "snapshot", "push_ws"]
+    
+    severity = "info"
+    if any(k in low for k in ["critical", "severe", "urgent"]):
+        severity = "critical"
+    elif any(k in low for k in ["high", "important"]):
+        severity = "high"
+    elif any(k in low for k in ["warning", "warn", "moderate"]):
+        severity = "warning"
+        
+    cooldown_sec = 60.0
+    import re
+    m_cd = re.search(r"\bcooldown\s+(?:of\s+)?(\d+(?:\.\d+)?)\s*(sec|s|minute|m|hour|h)\b", low)
+    if m_cd:
+        try:
+            val = float(m_cd.group(1))
+            unit = m_cd.group(2)
+            if unit.startswith("m"):
+                val *= 60.0
+            elif unit.startswith("h"):
+                val *= 3600.0
+            cooldown_sec = val
+        except Exception:
+            pass
+    
     doc = {
         "name": f"NL: {nl[:60]}",
         "nl": nl,
         "rule": {k: v for k, v in rule.items() if v is not None},
         "enabled": True,
-        "actions": ["store_clip", "snapshot", "push_ws"],
-        "severity": "info",
-        "cooldown_sec": 60.0,
+        "actions": actions,
+        "severity": severity,
+        "cooldown_sec": cooldown_sec,
         "created_at": iso_now(),
         "updated_at": iso_now(),
     }
     try:
         ins = alerts_col.insert_one(doc)
         return {"id": str(ins.inserted_id), "name": doc["name"], "enabled": True}
-    except Exception:
+    except Exception as e:
+        logger.exception("Failed to insert NL alert `%s`: %s", doc.get("name"), e)
         return None
 
 
@@ -474,7 +501,8 @@ def sessions(limit: int = 20) -> List[ChatSession]:
 @router.post("/send", response_model=ChatSendResponse)
 def send(req: ChatSendRequest) -> ChatSendResponse:
     try:
-        logger.info(f"Received chat request. Session: {req.session_id}, Message: {req.message}")
+        logger.info(f"Received chat request. Session: {req.session_id}, Message length: {len(req.message)}")
+        logger.debug(f"Full message payload for session {req.session_id}: {req.message}")
         # Save user message
         save_message(req.session_id, "user", req.message, None)
 
@@ -501,8 +529,8 @@ def send(req: ChatSendRequest) -> ChatSendResponse:
                 now = datetime.now(timezone.utc)
                 start = now - timedelta(minutes=minutes)
                 parsed["timestamp"] = {"$gte": start.isoformat(), "$lte": now.isoformat()}
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to parse __last_minutes value %r: %s", parsed.get("__last_minutes"), e, exc_info=True)
 
         # Default time window: if no time filter at all, default to last 24 hours (UTC)
         if "timestamp" not in parsed and "__last_minutes" not in parsed:

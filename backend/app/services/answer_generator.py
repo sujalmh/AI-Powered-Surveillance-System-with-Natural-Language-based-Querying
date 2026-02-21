@@ -53,8 +53,8 @@ class AnswerGenerator:
                     api_key=api_key,
                     temperature=0.3,
                 )
-            except Exception as e:
-                print(f"Failed to initialize OpenAI: {e}")
+            except Exception:
+                logger.error("Failed to initialize OpenAI", exc_info=True)
                 self.llm = None
         elif provider == "openrouter":
             try:
@@ -65,8 +65,8 @@ class AnswerGenerator:
                     openai_api_key=api_key or settings.OPENAI_API_KEY,
                     temperature=0.3,
                 )
-            except Exception as e:
-                print(f"Failed to initialize OpenRouter: {e}")
+            except Exception:
+                logger.error("Failed to initialize OpenRouter", exc_info=True)
                 self.llm = None
         elif provider == "ollama":
             try:
@@ -76,8 +76,8 @@ class AnswerGenerator:
                     base_url=settings.OLLAMA_BASE_URL,
                     temperature=0.3
                 )
-            except Exception as e:
-                print(f"Failed to initialize Ollama: {e}")
+            except Exception:
+                logger.error("Failed to initialize Ollama", exc_info=True)
                 self.llm = None
     
     def generate(
@@ -115,9 +115,9 @@ class AnswerGenerator:
             
             response = self.llm.invoke([HumanMessage(content=context)])
             return response.content.strip()
-        except Exception as e:
-            print(f"LLM answer generation failed: {e}")
-            return self._fallback_answer(query_type, results, parsed_filter)
+        except Exception:
+            logger.error("LLM answering generation failed", exc_info=True)
+            return "I apologize, but I encountered an error while trying to generate an answer."
     
     def _build_context(
         self,
@@ -393,7 +393,8 @@ Generate Natural Language Answer:"""
                 end_fmt = end.strftime("%Y-%m-%d %I:%M:%S %p")
                 duration_min = int((end - start).total_seconds() / 60)
                 parts.append(f"  Time Range: {start_fmt} to {end_fmt} ({duration_min} min)")
-            except Exception:
+            except Exception as e:
+                logger.debug("Timestamp formatting failed for ts=%r", ts, exc_info=True)
                 parts.append(f"  Time: {ts}")
         elif ts:
             try:
@@ -402,7 +403,8 @@ Generate Natural Language Answer:"""
                     parts.append(f"  Time: {dt.strftime('%Y-%m-%d %I:%M:%S %p')}")
                 else:
                     parts.append(f"  Time: {ts}")
-            except Exception:
+            except Exception as e:
+                logger.debug("Timestamp formatting failed for ts=%r", ts, exc_info=True)
                 parts.append(f"  Time: {ts}")
         elif parsed_filter.get("__last_minutes"):
             parts.append(f"  Time Window: Last {parsed_filter['__last_minutes']} minutes")

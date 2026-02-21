@@ -118,6 +118,34 @@ def build_detection_query_from_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
         if end_iso:
             q["timestamp"]["$lte"] = end_iso
 
+    # Handle time_of_day filter using MongoDB $expr with $dateToString
+    tod = rule.get("time_of_day")
+    if tod and isinstance(tod, dict) and "start" in tod and "end" in tod:
+        # Convert timestamp to HH:MM format using default UTC timezone
+        tz = tod.get("tz", "UTC")
+        dt_expr = {
+            "$dateToString": {
+                "format": "%H:%M",
+                "date": {"$toDate": "$timestamp"},
+                "timezone": tz
+            }
+        }
+        
+        start_t = tod["start"]
+        end_t = tod["end"]
+        
+        if start_t <= end_t:
+            # Normal range (e.g. 09:00 to 17:00)
+            tod_cond = {"$and": [{"$gte": [dt_expr, start_t]}, {"$lte": [dt_expr, end_t]}]}
+        else:
+            # Wraparound range (e.g. 20:00 to 06:00)
+            tod_cond = {"$or": [{"$gte": [dt_expr, start_t]}, {"$lte": [dt_expr, end_t]}]}
+            
+        if "$expr" not in q:
+            q["$expr"] = tod_cond
+        else:
+            q["$expr"] = {"$and": [q["$expr"], tod_cond]}
+
     # object / color
     objects = rule.get("objects")
     if objects and isinstance(objects, list) and len(objects) > 0:

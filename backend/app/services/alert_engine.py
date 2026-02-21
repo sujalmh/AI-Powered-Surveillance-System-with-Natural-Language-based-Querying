@@ -226,6 +226,13 @@ def evaluate_realtime(
 
         area = rule.get("area") or {}
         zone_id = area.get("zone_id")
+        
+        # ---------------- Time of Day check ----------------
+        tod = rule.get("time_of_day")
+        if tod:
+            win = _parse_local_time_window(tod)
+            if win and not _in_local_window(win, now_dt):
+                continue
 
         # ---------------- Crowd Density ----------------
         if event_type == "crowd_density" and want_name:
