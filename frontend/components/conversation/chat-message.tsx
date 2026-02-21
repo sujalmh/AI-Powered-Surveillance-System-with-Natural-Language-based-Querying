@@ -1,4 +1,5 @@
-import { User, Bot } from "lucide-react"
+import React from "react"
+import { Bot, User } from "lucide-react"
 import { QueryResults } from "./query-results"
 import type { ChatSendResponse } from "@/lib/api"
 
@@ -12,7 +13,7 @@ interface ChatMessageProps {
   onShowSteps?: () => void
 }
 
-export function ChatMessage({ message, onShowSteps }: ChatMessageProps) {
+export const ChatMessage = React.memo(({ message, onShowSteps }: ChatMessageProps) => {
   const resp = (message?.payload || null) as ChatSendResponse | null
   const hasMedia =
     !!resp &&
@@ -20,43 +21,70 @@ export function ChatMessage({ message, onShowSteps }: ChatMessageProps) {
      ((resp.merged_tracks?.length || 0) > 0) ||
      ((resp.results?.length || 0) > 0))
 
+  const isUser = message.type === "user"
+
   return (
-    <div className={`flex gap-4 ${message.type === "user" ? "justify-end" : "justify-start"} group`}>
-      {message.type === "assistant" && (
-        <div className="w-8 h-8 rounded-lg gradient-button flex items-center justify-center flex-shrink-0 shadow-md group-hover:shadow-lg group-hover:scale-110 transition-all duration-300 relative">
-          <Bot className="w-5 h-5 text-primary-foreground" />
-          <div className="absolute inset-0 bg-accent/20 rounded-lg blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10" />
+    <div style={{ display: "flex", gap: "10px", justifyContent: isUser ? "flex-end" : "flex-start" }}>
+      {/* Avatar — assistant only */}
+      {!isUser && (
+        <div style={{
+          width: "28px", height: "28px",
+          borderRadius: "var(--radius-full)",
+          background: "var(--color-surface-raised)",
+          border: "1px solid var(--color-border)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          flexShrink: 0,
+          marginTop: "2px",
+        }}>
+          <Bot style={{ width: "13px", height: "13px", color: "var(--color-text-muted)" }} />
         </div>
       )}
 
-      <div
-        className={`max-w-md relative rounded-2xl p-4 border transition-colors group-hover:glass-glow ${
-          message.type === "user"
-            ? "bg-[#3B82F6]/10 border-[#3B82F6]/25 text-[color:var(--foreground)]"
-            : "bg-[color-mix(in oklab,var(--foreground) 4%,transparent)] border-[color:var(--border)]"
-        }`}
-      >
-        {/* Message accent line */}
-        <div className={`absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl ${
-          message.type === "user" 
-            ? "bg-gradient-to-r from-transparent via-primary to-transparent opacity-60" 
-            : "bg-gradient-to-r from-transparent via-accent to-transparent opacity-60"
-        }`} />
-        
-        <p className="text-sm text-foreground relative z-10">{message.content}</p>
-        {message.type === "assistant" && hasMedia && (
-          <div className="mt-3 -mx-2 relative z-10">
+      {/* Bubble */}
+      <div style={{
+        maxWidth: "72%",
+        background: isUser
+          ? "linear-gradient(135deg, #15803D 0%, #16A34A 100%)"
+          : "var(--color-surface-raised)",
+        border: isUser
+          ? "none"
+          : "1px solid var(--color-border)",
+        borderRadius: "var(--radius-lg)",
+        borderTopLeftRadius: isUser ? "var(--radius-lg)" : "4px",
+        borderTopRightRadius: isUser ? "4px" : "var(--radius-lg)",
+        padding: "10px 14px",
+        boxShadow: isUser ? "var(--shadow-sm)" : "var(--shadow-xs)",
+      }}>
+        <p style={{
+          fontSize: "0.875rem",
+          color: isUser ? "white" : "var(--color-text)",
+          lineHeight: 1.55,
+          whiteSpace: "pre-wrap",
+          margin: 0,
+        }}>
+          {message.content}
+        </p>
+        {!isUser && hasMedia && (
+          <div style={{ marginTop: "12px" }}>
             <QueryResults onShowSteps={onShowSteps || (() => {})} response={resp} />
           </div>
         )}
       </div>
 
-      {message.type === "user" && (
-        <div className="w-8 h-8 rounded-lg gradient-button flex items-center justify-center flex-shrink-0 shadow-md group-hover:shadow-lg group-hover:scale-110 transition-all duration-300 relative">
-          <User className="w-5 h-5 text-primary-foreground" />
-          <div className="absolute inset-0 bg-primary/20 rounded-lg blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10" />
+      {/* Avatar — user only */}
+      {isUser && (
+        <div style={{
+          width: "28px", height: "28px",
+          borderRadius: "var(--radius-full)",
+          background: "linear-gradient(135deg, #15803D 0%, #16A34A 100%)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          flexShrink: 0,
+          marginTop: "2px",
+        }}>
+          <User style={{ width: "13px", height: "13px", color: "white" }} />
         </div>
       )}
     </div>
   )
-}
+})
+ChatMessage.displayName = "ChatMessage"

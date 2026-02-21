@@ -11,7 +11,7 @@ export function AlertsHeader({ onAddAlert }: AlertsHeaderProps) {
   return (
     <div className="flex items-center justify-between">
       <div>
-        <h1 className="text-4xl font-bold text-foreground mb-2">Alerts</h1>
+        <h1 className="text-2xl font-semibold text-foreground mb-1">Alerts</h1>
         <p className="text-muted-foreground">Manage and monitor system alerts</p>
       </div>
       <Button onClick={onAddAlert}>

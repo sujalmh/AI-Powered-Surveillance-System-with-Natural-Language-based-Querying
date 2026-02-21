@@ -1,14 +1,25 @@
 "use client"
 
 import { MainLayout } from "@/components/layout/main-layout"
+import { Badge } from "@/components/ui/badge"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { AlertsHeader } from "@/components/alerts/alerts-header"
+import { Plus } from "lucide-react"
 import { AlertsTable } from "@/components/alerts/alerts-table"
 import { AlertsMap } from "@/components/alerts/alerts-map"
 import { useEffect, useState } from "react"
 import { api } from "@/lib/api"
 import { toast } from "@/hooks/use-toast"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 export default function AlertsPage() {
   const [showModal, setShowModal] = useState(false)
@@ -32,10 +43,9 @@ export default function AlertsPage() {
   return (
     <MainLayout>
       <div className="space-y-6">
-        <AlertsHeader onAddAlert={() => setShowModal(true)} />
-        <div className="grid grid-cols-3 gap-6">
-          <div className="col-span-2">
-            <AlertsTable />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div>
+            <AlertsTable onAddAlert={() => setShowModal(true)} />
           </div>
           <div>
             <AlertsMap />
@@ -54,7 +64,7 @@ function AlertModal({ onClose }: { onClose: () => void }) {
   const [objectName, setObjectName] = useState<string>("person")
   const [color, setColor] = useState<string>("")
   const [countThreshold, setCountThreshold] = useState<number>(0)
-  const [zoneId, setZoneId] = useState<string>("")
+  const [zoneId, setZoneId] = useState<string>("_all")
   const [occupancyPct, setOccupancyPct] = useState<number>(0)
   const [severity, setSeverity] = useState<string>("info")
   const [cooldownSec, setCooldownSec] = useState<number>(60)
@@ -89,7 +99,6 @@ function AlertModal({ onClose }: { onClose: () => void }) {
     }
   }, [])
 
-  // Load zones for selected cameras (or all) for zone picker
   useEffect(() => {
     if (cameras.length === 0) return
     let mounted = true
@@ -127,7 +136,7 @@ function AlertModal({ onClose }: { onClose: () => void }) {
       if (objectName) rule.objects = [{ name: objectName }]
       if (color) rule.color = color
       if (countThreshold && countThreshold > 0) rule.count = { ">=": Number(countThreshold) }
-      if (zoneId) rule.area = { zone_id: zoneId }
+      if (zoneId && zoneId !== "_all") rule.area = { zone_id: zoneId }
       if (occupancyPct > 0) rule.occupancy_pct = { ">=": Number(occupancyPct) }
       if ((nl || name).toLowerCase().includes("fight")) rule.behavior = "fight"
 
@@ -141,7 +150,6 @@ function AlertModal({ onClose }: { onClose: () => void }) {
         cooldown_sec: Number(cooldownSec),
       }
       await api.createAlert(payload)
-      // notify other components to refresh
       document.dispatchEvent(new CustomEvent("alerts:refresh"))
       onClose()
     } catch (e: any) {
@@ -152,206 +160,206 @@ function AlertModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <Card className="max-w-md w-full">
-        <CardHeader>
-          <CardTitle>Create Alert</CardTitle>
+    <div className="fixed inset-0 bg-zinc-950/80 flex items-center justify-center z-50 p-4">
+      <Card className="max-w-xl w-full max-h-[90vh] flex flex-col shadow-sm border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+        <CardHeader className="border-b border-border py-4 shrink-0">
+          <CardTitle>Create Alert Rule</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {error && <p className="text-sm text-destructive">{error}</p>}
+        <CardContent className="overflow-y-auto flex-1 p-6 space-y-6">
+          {error && (
+             <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-lg text-sm">
+               {error}
+             </div>
+          )}
 
-          <div className="space-y-4">
+          <div className="space-y-5">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Name</label>
-              <input
-                type="text"
-                placeholder="My Alert"
+              <Label>Name</Label>
+              <Input
+                placeholder="My Alert..."
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background"
               />
             </div>
 
-            <div className="flex flex-wrap gap-2 pt-1">
-              <span className="text-xs text-muted-foreground pr-2">Quick templates:</span>
-              <button
-                type="button"
-                className="px-2 py-1 text-xs rounded border border-border hover:bg-accent/10"
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mr-2">Templates:</span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs px-2"
                 onClick={() => {
-                  setName("Crowd > 3 people");
-                  setObjectName("person");
-                  setCountThreshold(3);
-                  setZoneId("");
-                  setOccupancyPct(0);
-                  setSeverity("warning");
-                  setCooldownSec(120);
-                  setNightHours(false);
+                  setName("Crowd > 3 people")
+                  setObjectName("person")
+                  setCountThreshold(3)
+                  setZoneId("_all")
+                  setOccupancyPct(0)
+                  setSeverity("warning")
+                  setCooldownSec(120)
+                  setNightHours(false)
                 }}
               >
                 Crowd &gt; 3
-              </button>
-              <button
-                type="button"
-                className="px-2 py-1 text-xs rounded border border-border hover:bg-accent/10"
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs px-2"
                 onClick={() => {
-                  setName("Car enters at night");
-                  setObjectName("car");
-                  setCountThreshold(1);
-                  setSeverity("warning");
-                  setCooldownSec(300);
-                  setNightHours(true);
+                  setName("Car enters at night")
+                  setObjectName("car")
+                  setCountThreshold(1)
+                  setSeverity("warning")
+                  setCooldownSec(300)
+                  setNightHours(true)
                 }}
               >
                 Car at night
-              </button>
-              <button
-                type="button"
-                className="px-2 py-1 text-xs rounded border border-border hover:bg-accent/10"
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs px-2"
                 onClick={() => {
-                  setName("Possible fight");
-                  setObjectName("person");
-                  setCountThreshold(0);
-                  setSeverity("critical");
-                  setCooldownSec(180);
-                  setNightHours(false);
-                  setNl("People fighting");
+                  setName("Possible fight")
+                  setObjectName("person")
+                  setCountThreshold(0)
+                  setSeverity("critical")
+                  setCooldownSec(180)
+                  setNightHours(false)
+                  setNl("People fighting")
                 }}
               >
                 Fight
-              </button>
+              </Button>
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Natural Language (optional)</label>
-              <input
-                type="text"
-                placeholder="People wearing red backpacks after 6 PM"
+              <Label>Natural Language (optional)</Label>
+              <Input
+                placeholder="E.g. People wearing red backpacks after 6 PM"
                 value={nl}
                 onChange={(e) => setNl(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Time window (minutes)</label>
-                <input
+                <Label>Time window (minutes)</Label>
+                <Input
                   type="number"
                   min={1}
                   value={lastMinutes}
                   onChange={(e) => setLastMinutes(parseInt(e.target.value || "0", 10))}
-                  className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background"
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Object</label>
-                <input
-                  type="text"
-                  placeholder="person"
+                <Label>Object Class</Label>
+                <Input
+                  placeholder="person, car, truck..."
                   value={objectName}
                   onChange={(e) => setObjectName(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Color (optional)</label>
-                <input
-                  type="text"
-                  placeholder="Red"
+                <Label>Color (optional)</Label>
+                <Input
+                  placeholder="Red, Blue..."
                   value={color}
                   onChange={(e) => setColor(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background"
                 />
               </div>
-              <div className="flex items-center gap-2 pt-6">
-                <input id="enabled" type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-                <label htmlFor="enabled" className="text-sm text-foreground">
-                  Enabled
-                </label>
+              <div className="flex items-center gap-2 pt-8">
+                <Checkbox 
+                  id="enabled" 
+                  checked={enabled} 
+                  onCheckedChange={(checked) => setEnabled(checked as boolean)} 
+                />
+                <Label htmlFor="enabled">Enabled</Label>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Count threshold (&gt;=)</label>
-                <input
+                <Label>Count threshold (&gt;=)</Label>
+                <Input
                   type="number"
                   min={0}
                   value={countThreshold}
                   onChange={(e) => setCountThreshold(parseInt(e.target.value || "0", 10))}
-                  className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background"
                 />
               </div>
-              <div className="flex items-center gap-2 pt-6">
-                <input id="nightHours" type="checkbox" checked={nightHours} onChange={(e) => setNightHours(e.target.checked)} />
-                <label htmlFor="nightHours" className="text-sm text-foreground">
-                  Night hours 22:00–06:00
-                </label>
+              <div className="flex items-center gap-2 pt-8">
+                <Checkbox 
+                  id="nightHours" 
+                  checked={nightHours} 
+                  onCheckedChange={(checked) => setNightHours(checked as boolean)} 
+                />
+                <Label htmlFor="nightHours">Night hours (22:00–06:00)</Label>
               </div>
             </div>
 
             {zonesByCamera.length > 0 && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Zone (optional)</label>
-                  <select
-                    value={zoneId}
-                    onChange={(e) => setZoneId(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background"
-                  >
-                    <option value="">Full frame</option>
-                    {zonesByCamera.map((z) => (
-                      <option key={`${z.camera_id}-${z.zone_id}`} value={z.zone_id}>
-                        {z.name} (cam {z.camera_id})
-                      </option>
-                    ))}
-                  </select>
+                  <Label>Zone Restriction</Label>
+                  <Select value={zoneId} onValueChange={setZoneId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Full frame" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_all">Full frame</SelectItem>
+                      {zonesByCamera.map((z) => (
+                        <SelectItem key={`${z.camera_id}-${z.zone_id}`} value={z.zone_id}>
+                          {z.name} (cam {z.camera_id})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Occupancy % (&gt;=)</label>
-                  <input
+                  <Label>Occupancy % (&gt;=)</Label>
+                  <Input
                     type="number"
                     min={0}
                     max={100}
                     value={occupancyPct}
                     onChange={(e) => setOccupancyPct(parseInt(e.target.value || "0", 10))}
-                    className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background"
-                    placeholder="0"
                   />
                 </div>
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Severity</label>
-                <select
-                  value={severity}
-                  onChange={(e) => setSeverity(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background"
-                >
-                  <option value="info">info</option>
-                  <option value="warning">warning</option>
-                  <option value="critical">critical</option>
-                </select>
+                <Label>Severity</Label>
+                <Select value={severity} onValueChange={setSeverity}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="info">Info</SelectItem>
+                    <SelectItem value="warning">Warning</SelectItem>
+                    <SelectItem value="critical">Critical</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Cooldown (sec)</label>
-                <input
+                <Label>Cooldown (sec)</Label>
+                <Input
                   type="number"
                   min={0}
                   value={cooldownSec}
                   onChange={(e) => setCooldownSec(parseInt(e.target.value || "0", 10))}
-                  className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background"
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Cameras (optional)</label>
+            <div className="space-y-3 pt-2">
+              <Label>Cameras (optional, leaving empty applies to all)</Label>
               <div className="flex flex-wrap gap-2">
                 {loadingCameras ? (
                   <span className="text-xs text-muted-foreground">Loading cameras...</span>
@@ -361,34 +369,29 @@ function AlertModal({ onClose }: { onClose: () => void }) {
                   cameras.map((c) => {
                     const selected = cameraIds.includes(c.camera_id)
                     return (
-                      <button
+                      <Badge
                         key={c.camera_id}
-                        type="button"
+                        variant={selected ? "default" : "secondary"}
+                        className="cursor-pointer hover:opacity-80 transition-opacity"
                         onClick={() => toggleCamera(c.camera_id)}
-                        className={`px-3 py-1 rounded-full text-xs border transition-colors cursor-pointer ${
-                          selected
-                            ? "bg-primary/20 border-primary text-primary"
-                            : "bg-muted border-border text-muted-foreground hover:bg-muted/80"
-                        }`}
                       >
                         #{c.camera_id} {c.location ? `· ${c.location}` : ""}
-                      </button>
+                      </Badge>
                     )
                   })
                 )}
               </div>
             </div>
           </div>
-
-          <div className="flex gap-3 pt-4">
-            <Button variant="outline" onClick={onClose} disabled={saving} className="flex-1">
-              Cancel
-            </Button>
-            <Button onClick={onCreate} disabled={saving} className="flex-1">
-              {saving ? "Creating..." : "Create Alert"}
-            </Button>
-          </div>
         </CardContent>
+        <div className="p-6 border-t border-border bg-muted/20 shrink-0 flex gap-3 justify-end items-center">
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={onCreate} disabled={saving}>
+            {saving ? "Creating..." : "Create Alert"}
+          </Button>
+        </div>
       </Card>
     </div>
   )

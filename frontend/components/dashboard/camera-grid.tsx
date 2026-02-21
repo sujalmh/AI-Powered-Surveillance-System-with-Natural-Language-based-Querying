@@ -1,220 +1,329 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, memo } from "react";
+import useSWR from "swr";
 import { api, API_BASE } from "@/lib/api";
-
-type CameraDoc = {
-  camera_id: number;
-  source?: string;
-  location?: string;
-  status?: string;
-  last_seen?: string;
-  running?: boolean;
-};
+import { Users } from "lucide-react";
 
 type ZoneInfo = {
   zone_id: string;
   name: string;
   count: number;
   capacity?: number;
-  occupancy_pct?: number;
 };
 
-type Card = {
+type CameraCard = {
   id: number;
   name: string;
-  status: "live" | "recording" | "stopped";
+  location?: string;
+  status: "live" | "stopped";
   people: number;
   zones?: ZoneInfo[];
 };
 
-/* ────────────────────────────────── CameraTile ────────────────────────────────── */
+const fetchCameras = async (): Promise<CameraCard[]> => {
+  const cams = (await api.listCameras()) as any[];
+  const base: CameraCard[] = cams.map((c) => ({
+    id: Number(c.camera_id),
+    name: c.location ? c.location : `Camera ${c.camera_id}`,
+    location: c.location,
+    status: c.running ? "live" : "stopped",
+    people: 0,
+  }));
 
-type CameraTileProps = { id: number; name: string; status: "live" | "recording" | "stopped"; people: number; zones?: ZoneInfo[] };
+  const fetchPromises = base.map(async (cam) => {
+    try {
+      const occ = (await api.getOccupancy(cam.id)) as any;
+      cam.people = occ?.person_count ?? 0;
+      if (Array.isArray(occ?.zones) && occ.zones.length > 0) {
+        cam.zones = occ.zones.map((z: any) => ({
+          zone_id: z.zone_id,
+          name: z.name,
+          count: z.count ?? 0,
+          capacity: z.capacity,
+        }));
+      }
+    } catch {
+      try {
+        const p = new URLSearchParams();
+        p.set("camera_id", String(cam.id));
+        p.set("object", "person");
+        p.set("last_minutes", "5");
+        p.set("limit", "50");
+        const dets = (await api.listDetections(p)) as any[];
+        cam.people = dets.reduce((acc: number, d: any) => {
+          const objs = Array.isArray(d.objects) ? d.objects : [];
+          return acc + objs.filter((o: any) => o.object_name === "person").length;
+        }, 0);
+      } catch {}
+    }
+    return cam;
+  });
 
-function CameraTile({ id, name, status, people, zones }: CameraTileProps) {
+  return Promise.all(fetchPromises);
+};
+
+/* ────────────────────────────────────────────── */
+
+const CameraTile = memo(({ id, name, status, people, zones }: CameraCard) => {
   const imgRef = useRef<HTMLImageElement>(null);
   const [streamOk, setStreamOk] = useState(true);
   const retryTimer = useRef<NodeJS.Timeout | null>(null);
-
-  // The MJPEG multipart stream URL — browsers render this natively in an <img> tag.
-  // Each frame is pushed by the server; no polling needed.
   const streamUrl = `${API_BASE}/api/videos/stream/${id}`;
 
-  // On error: wait 3 seconds then retry the stream (don't fall back to polling)
   const handleError = () => {
     setStreamOk(false);
     if (retryTimer.current) clearTimeout(retryTimer.current);
-    retryTimer.current = setTimeout(() => {
-      setStreamOk(true);
-    }, 3000);
+    retryTimer.current = setTimeout(() => setStreamOk(true), 3000);
   };
 
-  // When streamOk flips back to true, force the img src to reload the stream
   useEffect(() => {
     if (streamOk && imgRef.current) {
-      // Adding a cache-buster on retry to force a fresh connection
       imgRef.current.src = `${streamUrl}?t=${Date.now()}`;
     }
   }, [streamOk, streamUrl]);
 
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (retryTimer.current) clearTimeout(retryTimer.current);
-    };
-  }, []);
+  useEffect(() => () => { if (retryTimer.current) clearTimeout(retryTimer.current); }, []);
+
+  const isLive = status === "live";
 
   return (
-    <div className="group relative overflow-hidden rounded-lg bg-black/50 aspect-video">
+    <div
+      style={{
+        position: "relative",
+        overflow: "hidden",
+        borderRadius: "var(--radius-md)",
+        background: "#0E100E",
+        aspectRatio: "16/9",
+        border: "1px solid rgba(255,255,255,0.07)",
+        transition: "transform 150ms ease, box-shadow 150ms ease",
+      }}
+      className="camera-tile"
+    >
+      {/* Stream / fallback */}
       {streamOk ? (
         <img
           ref={imgRef}
           src={streamUrl}
-          alt={`Camera ${name}`}
-          className="absolute inset-0 w-full h-full object-cover"
+          alt={name}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
           onError={handleError}
         />
       ) : (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-2">
-            <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            <span className="text-xs text-white/60">Reconnecting…</span>
-          </div>
+        <div style={{
+          position: "absolute", inset: 0,
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          gap: "8px", color: "#555",
+        }}>
+          <div style={{
+            width: "24px", height: "24px",
+            border: "3px solid #222",
+            borderTopColor: "#444",
+            borderRadius: "50%",
+            animation: "spin 1s linear infinite",
+          }} />
+          <span style={{ fontSize: "0.6875rem", fontFamily: "var(--font-mono)", letterSpacing: "0.05em" }}>
+            Reconnecting...
+          </span>
         </div>
       )}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-      <div className="absolute bottom-0 left-0 right-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform">
-        <p className="text-sm font-semibold text-white">{name}</p>
-        <div className="flex items-center justify-between mt-2">
-          <span
-            className={`text-xs px-2 py-1 rounded ${
-              status === "live"
-                ? "bg-red-500/80 text-white"
-                : status === "recording"
-                ? "bg-blue-500/80 text-white"
-                : "bg-gray-500/80 text-white"
-            }`}
-          >
-            {status === "live" ? "LIVE" : status === "recording" ? "REC" : "STOPPED"}
-          </span>
-          <span className="text-xs text-white/90">{people} people</span>
-        </div>
-        {zones && zones.length > 0 && (
-          <div className="mt-2 space-y-1">
-            {zones.map((z) => (
-              <div key={z.zone_id} className="flex items-center justify-between text-xs text-white/90">
-                <span>{z.name}: {z.count}{z.capacity != null ? ` / ${z.capacity}` : ""}</span>
-                {z.occupancy_pct != null && (
-                  <div className="w-12 h-1.5 bg-white/20 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-white/90 rounded-full"
-                      style={{ width: `${Math.min(100, z.occupancy_pct)}%` }}
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+
+      {/* Top-right: status badge */}
+      <div style={{ position: "absolute", top: "8px", right: "8px" }}>
+        <span style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "4px",
+          padding: "2px 8px",
+          borderRadius: "var(--radius-full)",
+          background: "rgba(0,0,0,0.55)",
+          backdropFilter: "blur(4px)",
+          WebkitBackdropFilter: "blur(4px)",
+          fontSize: "0.625rem",
+          fontFamily: "var(--font-mono)",
+          fontWeight: 600,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          color: isLive ? "#4ADE80" : "#888",
+          border: `1px solid ${isLive ? "rgba(74,222,128,0.3)" : "rgba(255,255,255,0.1)"}`,
+        }}>
+          {isLive && <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#4ADE80", display: "inline-block", animation: "pulse 2s ease-in-out infinite" }} />}
+          {isLive ? "LIVE" : "STOPPED"}
+        </span>
       </div>
+
+      {/* Bottom-left: camera label */}
+      <div style={{ position: "absolute", bottom: "8px", left: "8px" }}>
+        <span style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "5px",
+          padding: "2px 8px",
+          borderRadius: "var(--radius-full)",
+          background: "rgba(0,0,0,0.65)",
+          backdropFilter: "blur(4px)",
+          WebkitBackdropFilter: "blur(4px)",
+          fontSize: "0.6875rem",
+          color: "#ddd",
+          border: "1px solid rgba(255,255,255,0.1)",
+        }}>
+          <span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: "0.625rem" }}>#{id}</span>
+          <span>{name}</span>
+        </span>
+      </div>
+
+      {/* Bottom-right: people chip */}
+      <div style={{ position: "absolute", bottom: "8px", right: "8px" }}>
+        <span style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "4px",
+          padding: "2px 8px",
+          borderRadius: "var(--radius-full)",
+          background: "rgba(0,0,0,0.55)",
+          backdropFilter: "blur(4px)",
+          WebkitBackdropFilter: "blur(4px)",
+          fontSize: "0.6875rem",
+          color: "#ccc",
+          border: "1px solid rgba(255,255,255,0.1)",
+        }}>
+          <Users style={{ width: "10px", height: "10px" }} />
+          {people}
+        </span>
+      </div>
+
+      {/* Zone overlay on hover */}
+      {zones && zones.length > 0 && (
+        <div style={{
+          position: "absolute",
+          bottom: "36px",
+          left: "8px",
+          background: "rgba(0,0,0,0.80)",
+          backdropFilter: "blur(4px)",
+          borderRadius: "var(--radius-sm)",
+          padding: "6px 8px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "3px",
+          opacity: 0,
+          transition: "opacity 150ms ease",
+        }} className="zone-overlay">
+          {zones.map((z) => (
+            <div key={z.zone_id} style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
+              <span style={{ fontSize: "0.625rem", color: "#aaa", fontFamily: "var(--font-mono)" }}>{z.name}</span>
+              <span style={{ fontSize: "0.625rem", color: "#ddd", fontFamily: "var(--font-mono)" }}>
+                {z.count}{z.capacity ? `/${z.capacity}` : ""}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <style>{`
+        .camera-tile:hover {
+          transform: scale(1.01);
+          box-shadow: 0 0 0 2px rgba(22,163,74,0.4);
+        }
+        .camera-tile:hover .zone-overlay {
+          opacity: 1 !important;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+      `}</style>
     </div>
   );
-}
+});
+CameraTile.displayName = "CameraTile";
 
-/* ────────────────────────────────── CameraGrid ────────────────────────────────── */
+/* ────────────────────────────────────────────── */
 
 export function CameraGrid() {
-  const [cards, setCards] = useState<Card[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-
-  const load = async () => {
-    setLoading(true);
-    setErr(null);
-    try {
-      const cams = (await api.listCameras()) as any[];
-      // Build base cards from camera list
-      const base: Card[] = cams.map((c) => ({
-        id: Number(c.camera_id),
-        name: c.location ? `#${c.camera_id} · ${c.location}` : `#${c.camera_id}`,
-        status: c.running ? "live" : "stopped",
-        people: 0,
-      }));
-
-      // Enrich with occupancy (people count + zone counts/capacity) or fallback to detections
-      for (let i = 0; i < base.length; i++) {
-        try {
-          const occ = await api.getOccupancy(base[i].id) as any;
-          base[i].people = occ?.person_count ?? 0;
-          if (Array.isArray(occ?.zones) && occ.zones.length > 0) {
-            base[i].zones = occ.zones.map((z: any) => ({
-              zone_id: z.zone_id,
-              name: z.name,
-              count: z.count ?? 0,
-              capacity: z.capacity,
-              occupancy_pct: z.occupancy_pct,
-            }));
-          }
-        } catch {
-          try {
-            const p = new URLSearchParams();
-            p.set("camera_id", String(base[i].id));
-            p.set("object", "person");
-            p.set("last_minutes", "5");
-            p.set("limit", "50");
-            const dets = (await api.listDetections(p)) as any[];
-            const count = dets.reduce((acc: number, d: any) => {
-              const objs = Array.isArray(d.objects) ? d.objects : [];
-              return acc + objs.filter((o: any) => o.object_name === "person").length;
-            }, 0);
-            base[i].people = count;
-          } catch {
-            // ignore per-camera error
-          }
-        }
-      }
-
-      setCards(base);
-    } catch (e: any) {
-      setErr(e?.message || "Failed to load cameras");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-  }, []);
+  const { data: cards, error, isLoading } = useSWR("cameras", fetchCameras, { refreshInterval: 5000 });
 
   return (
-    <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold text-foreground">Live Camera Feed</h2>
-        {loading && <span className="text-xs text-muted-foreground">Loading…</span>}
-        {err && <span className="text-xs text-red-400">{err}</span>}
-        <button
-          onClick={load}
-          className="ml-auto px-3 py-1.5 rounded-lg bg-white/10 border border-white/20 text-xs text-foreground hover:bg-white/15"
-        >
-          Refresh
-        </button>
+    <div
+      style={{
+        background: "var(--color-surface)",
+        border: "1px solid var(--color-border)",
+        borderRadius: "var(--radius-lg)",
+        boxShadow: "var(--shadow-sm)",
+        overflow: "hidden",
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {/* Header */}
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "14px 16px",
+        borderBottom: "1px solid var(--color-border)",
+      }}>
+        <p style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--color-text)" }}>Live Camera Feed</p>
+        <a href="#" style={{
+          fontSize: "0.75rem",
+          color: "var(--color-primary)",
+          textDecoration: "none",
+          display: "flex",
+          alignItems: "center",
+          gap: "3px",
+        }}>
+          View All →
+        </a>
       </div>
-      <div className="grid grid-cols-3 gap-4">
-        {cards.map((camera) => (
-          <CameraTile
-            key={camera.id}
-            id={camera.id}
-            name={camera.name}
-            status={camera.status}
-            people={camera.people}
-            zones={camera.zones}
-          />
-        ))}
-        {cards.length === 0 && !loading && (
-          <div className="col-span-3 text-sm text-muted-foreground">No cameras registered yet.</div>
+
+      {/* Grid */}
+      <div style={{ padding: "12px", flex: 1 }}>
+        {error && (
+          <p style={{ fontSize: "0.8125rem", color: "var(--color-danger)", marginBottom: "10px" }}>
+            Error loading cameras: {error.message}
+          </p>
         )}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: "10px",
+        }} className="camera-grid-inner">
+          {isLoading && !cards
+            ? Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} style={{
+                  background: "var(--color-surface-raised)",
+                  borderRadius: "var(--radius-md)",
+                  aspectRatio: "16/9",
+                  animation: "pulse-bg 1.5s ease-in-out infinite",
+                }} />
+              ))
+            : cards && cards.length > 0
+            ? cards.map((cam) => <CameraTile key={cam.id} {...cam} />)
+            : (
+                <div style={{
+                  gridColumn: "1/-1",
+                  textAlign: "center",
+                  padding: "40px 20px",
+                  color: "var(--color-text-faint)",
+                  fontSize: "0.875rem",
+                }}>
+                  No cameras registered yet.
+                </div>
+              )
+          }
+        </div>
       </div>
+
+      <style>{`
+        @media (max-width: 900px) {
+          .camera-grid-inner { grid-template-columns: repeat(2, 1fr) !important; }
+        }
+        @media (max-width: 560px) {
+          .camera-grid-inner { grid-template-columns: 1fr !important; }
+        }
+        @keyframes pulse-bg {
+          0%,100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      `}</style>
     </div>
   );
 }

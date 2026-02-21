@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MessageSquare, Plus } from "lucide-react";
+import { MessageSquare, Plus, Search } from "lucide-react";
 import { api } from "@/lib/api";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 type SessionItem = {
   session_id: string;
@@ -11,48 +12,36 @@ type SessionItem = {
   message_count: number;
 };
 
+
 export function ConversationSidebar() {
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
   const [current, setCurrent] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
-    setErr(null);
     try {
       const data = await api.chatSessions();
       setSessions(Array.isArray(data) ? data : []);
       const sid = typeof window !== "undefined" ? window.localStorage.getItem("ai_surveillance_chat_session") : null;
       setCurrent(sid);
-    } catch (e: any) {
-      setErr(e?.message || "Failed to load sessions");
-    } finally {
-      setLoading(false);
-    }
+    } catch {}
+    setLoading(false);
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
   const switchSession = (sid: string) => {
-    try {
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem("ai_surveillance_chat_session", sid);
-        setCurrent(sid);
-        // Notify listeners (ChatInterface) to reload history
-        window.dispatchEvent(new CustomEvent("chat:session:set", { detail: { session_id: sid } }));
-      }
-    } catch {
-      // ignore
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("ai_surveillance_chat_session", sid);
+      setCurrent(sid);
+      window.dispatchEvent(new CustomEvent("chat:session:set", { detail: { session_id: sid } }));
     }
   };
 
   const newConversation = () => {
     const sid = crypto.randomUUID();
     switchSession(sid);
-    // Optimistically add to list top
     setSessions((prev) => [
       { session_id: sid, last_message: "New conversation", last_message_time: new Date().toISOString(), message_count: 0 },
       ...prev,
@@ -60,75 +49,172 @@ export function ConversationSidebar() {
   };
 
   return (
-    <div className="w-64 glass-card glass-noise relative rounded-2xl p-4 flex flex-col overflow-hidden">
-      {/* Top accent line */}
-      <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-accent to-transparent opacity-60" />
-      
-      <button onClick={newConversation} className="gradient-button w-full mb-4 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 relative group overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
-        <Plus className="w-4 h-4 relative z-10" />
-        <span className="relative z-10">New Conversation</span>
-      </button>
-
-      <div className="flex items-center justify-between mb-2 relative z-10">
-        <p className="text-xs text-muted-foreground flex items-center gap-2">
-          Conversations
-          <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-        </p>
+    <div
+      style={{
+        width: "256px",
+        maxWidth: "256px",
+        flexShrink: 0,
+        background: "var(--color-surface)",
+        border: "1px solid var(--color-border)",
+        borderRadius: "var(--radius-lg)",
+        boxShadow: "var(--shadow-sm)",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        height: "100%",
+        minWidth: 0,
+        boxSizing: "border-box" as const,
+      }}
+    >
+      {/* Header */}
+      <div style={{
+        height: "52px",
+        borderBottom: "1px solid var(--color-border)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "0 12px 0 14px",
+        flexShrink: 0,
+      }}>
+        <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text)" }}>Chats</span>
         <button
-          onClick={load}
-          className="px-2 py-1 rounded glass text-[10px] text-foreground hover:glass-glow transition-all duration-300"
+          onClick={newConversation}
+          style={{
+            width: "26px", height: "26px",
+            borderRadius: "var(--radius-md)",
+            background: "var(--color-primary-light)",
+            border: "none",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "var(--color-primary)",
+            cursor: "pointer",
+            transition: "all 150ms",
+          }}
+          className="new-chat-btn"
+          title="New conversation"
         >
-          Refresh
+          <Plus style={{ width: "14px", height: "14px" }} />
         </button>
       </div>
-      {err && <div className="text-xs text-red-400 mb-2">{err}</div>}
-      {loading && <div className="text-xs text-muted-foreground mb-2">Loading…</div>}
 
-      <div className="flex-1 overflow-y-auto space-y-2 relative z-10">
-        {sessions.map((conv) => {
-          const isActive = current === conv.session_id;
-          return (
-            <button
-              key={conv.session_id}
-              onClick={() => switchSession(conv.session_id)}
-              className={`w-full text-left glass relative rounded-2xl p-3 group transition-all duration-300 hover:glass-glow ${
-                isActive ? "gradient-button" : ""
-              }`}
-              title={conv.session_id}
-            >
-              {/* Active conversation accent */}
-              {isActive && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gradient-to-b from-accent to-primary rounded-r" />
-              )}
-              
-              <div className="flex items-start gap-2 relative z-10">
-                <div className={`p-1.5 rounded-lg transition-all duration-300 ${
-                  isActive ? "bg-primary-foreground/10" : "bg-accent/10"
-                } group-hover:scale-110`}>
-                  <MessageSquare className={`w-4 h-4 ${isActive ? "text-primary-foreground" : "text-accent"}`} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium truncate ${
-                    isActive ? "text-primary-foreground" : "text-foreground"
-                  }`}>
-                    {conv.last_message || "Empty conversation"}
-                  </p>
-                  <p className={`text-[10px] ${
-                    isActive ? "text-primary-foreground/70" : "text-muted-foreground"
-                  }`}>
-                    {conv.message_count} message{conv.message_count === 1 ? "" : "s"}
-                    {conv.last_message_time ? ` · ${new Date(conv.last_message_time).toLocaleString()}` : ""}
-                  </p>
-                </div>
-              </div>
-            </button>
-          );
-        })}
-        {sessions.length === 0 && !loading && (
-          <div className="text-xs text-muted-foreground">No conversations yet. Create a new one.</div>
-        )}
+      {/* Search */}
+      <div style={{ padding: "10px", flexShrink: 0 }}>
+        <div style={{ position: "relative" }}>
+          <Search style={{
+            width: "12px", height: "12px",
+            position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)",
+            color: "var(--color-text-faint)", pointerEvents: "none",
+          }} />
+          <input
+            type="text"
+            placeholder="Search chats..."
+            style={{
+              width: "100%",
+              background: "var(--color-surface-raised)",
+              border: "1px solid var(--color-border)",
+              borderRadius: "var(--radius-md)",
+              padding: "6px 10px 6px 26px",
+              fontSize: "0.8125rem",
+              color: "var(--color-text)",
+              outline: "none",
+              transition: "border-color 150ms",
+              fontFamily: "var(--font-ui)",
+            }}
+            onFocus={e => (e.target.style.borderColor = "var(--color-primary)")}
+            onBlur={e => (e.target.style.borderColor = "var(--color-border)")}
+          />
+        </div>
       </div>
+
+      {/* Session list */}
+      <ScrollArea className="sidebar-scroll-area" style={{ flex: 1, minHeight: 0, overflow: "hidden", width: "100%" }}>
+        <div style={{ padding: "4px 0 4px 8px", display: "flex", flexDirection: "column", gap: "2px", width: "calc(256px - 2px - 8px)", boxSizing: "border-box" as const, overflow: "hidden" }}>
+          {loading && sessions.length === 0 && Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} style={{
+              height: "52px",
+              background: "var(--color-surface-raised)",
+              borderRadius: "var(--radius-md)",
+              animation: "pulse-bg 1.5s ease-in-out infinite",
+              marginBottom: "2px",
+            }} />
+          ))}
+          {sessions.map((conv) => {
+            const isActive = current === conv.session_id;
+
+            return (
+              <button
+                key={conv.session_id}
+                onClick={() => switchSession(conv.session_id)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  padding: "10px 12px",
+                  borderRadius: "var(--radius-md)",
+                  background: isActive ? "var(--color-primary-light)" : "transparent",
+                  border: "none",
+                  width: "100%",
+                  minWidth: 0,
+                  boxSizing: "border-box" as const,
+                  overflow: "hidden",
+                  cursor: "pointer",
+                  textAlign: "left" as const,
+                  transition: "background 150ms ease",
+                }}
+                className="session-item"
+                data-active={isActive ? "true" : undefined}
+              >
+                <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "6px", minWidth: 0 }}>
+                    <span style={{
+                      fontSize: "0.8125rem",
+                      fontWeight: isActive ? 600 : 500,
+                      color: isActive ? "var(--color-primary)" : "var(--color-text)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      display: "block",
+                      minWidth: 0,
+                      flex: "1 1 0%",
+                    }}>
+                      {(() => { const t = conv.last_message || "New conversation"; return t.length > 32 ? t.slice(0, 32) + "…" : t; })()}
+                    </span>
+                    <span style={{ fontSize: "0.625rem", color: "var(--color-text-faint)", flexShrink: 0, whiteSpace: "nowrap" }}>
+                      {conv.last_message_time ? new Date(conv.last_message_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Now"}
+                    </span>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+          {sessions.length === 0 && !loading && (
+            <div style={{
+              textAlign: "center",
+              padding: "32px 16px",
+              color: "var(--color-text-faint)",
+              fontSize: "0.8125rem",
+            }}>
+              No past sessions
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+
+      <style>{`
+        .sidebar-scroll-area,
+        .sidebar-scroll-area [data-slot="scroll-area-viewport"],
+        .sidebar-scroll-area [data-slot="scroll-area-viewport"] > div {
+          max-width: 100% !important;
+          overflow-x: hidden !important;
+        }
+        .session-item:hover:not([data-active]) {
+          background: var(--color-surface-raised) !important;
+        }
+        .new-chat-btn:hover {
+          background: var(--color-primary) !important;
+          color: white !important;
+        }
+        @keyframes pulse-bg { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+      `}</style>
     </div>
   );
 }
