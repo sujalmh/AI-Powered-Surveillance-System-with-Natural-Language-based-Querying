@@ -185,7 +185,14 @@ class AnswerGenerator:
         # Format collected data
         unique_cameras = sorted(set(camera_ids))
         camera_list = ", ".join(f"Camera {c}" for c in unique_cameras) if unique_cameras else "No cameras"
-        timestamps_formatted = timestamps_list[:10] if timestamps_list else []
+        
+        timestamps_formatted = []
+        for ts_str in (timestamps_list[:10] if timestamps_list else []):
+            try:
+                dt = datetime.fromisoformat(str(ts_str).replace('Z', '+00:00'))
+                timestamps_formatted.append(dt.strftime("%Y-%m-%d %I:%M:%S %p"))
+            except Exception:
+                timestamps_formatted.append(str(ts_str))
         
         structured_count = metadata.get('structured_count', 0) if metadata else 0
         semantic_count = metadata.get('semantic_count', 0) if metadata else 0
@@ -214,7 +221,14 @@ Alert Logs (up to first 10):
 
                 for idx, a in enumerate(alert_summaries[:10], start=1):
                     cam_str = f"Camera {a['camera_id']}" if a.get("camera_id") is not None else "Unknown camera"
-                    prompt += f"- {idx}. [{a.get('severity', 'info')}] {a.get('alert_name') or 'Unnamed alert'} at {a.get('triggered_at') or 'unknown time'} on {cam_str}: {a.get('message')}\n"  # noqa: E501
+                    trigger_ts = a.get('triggered_at')
+                    try:
+                        if trigger_ts:
+                            dt = datetime.fromisoformat(str(trigger_ts).replace('Z', '+00:00'))
+                            trigger_ts = dt.strftime("%Y-%m-%d %I:%M:%S %p")
+                    except Exception:
+                        pass
+                    prompt += f"- {idx}. [{a.get('severity', 'info')}] {a.get('alert_name') or 'Unnamed alert'} at {trigger_ts or 'unknown time'} on {cam_str}: {a.get('message')}\n"  # noqa: E501
 
                 prompt += """
 
@@ -368,12 +382,23 @@ Generate Natural Language Answer:"""
             parts.append(f"  Count Filter: {parsed_filter['count_constraint']}")
         
         ts = parsed_filter.get("timestamp", {})
-        if ts and "$gte" in ts and "$lte" in ts:
+        if ts and isinstance(ts, dict) and "$gte" in ts and "$lte" in ts:
             try:
-                start = datetime.fromisoformat(ts["$gte"])
-                end = datetime.fromisoformat(ts["$lte"])
+                start = datetime.fromisoformat(str(ts["$gte"]).replace('Z', '+00:00'))
+                end = datetime.fromisoformat(str(ts["$lte"]).replace('Z', '+00:00'))
+                start_fmt = start.strftime("%Y-%m-%d %I:%M:%S %p")
+                end_fmt = end.strftime("%Y-%m-%d %I:%M:%S %p")
                 duration_min = int((end - start).total_seconds() / 60)
-                parts.append(f"  Time Range: {ts['$gte']} to {ts['$lte']} ({duration_min} min)")
+                parts.append(f"  Time Range: {start_fmt} to {end_fmt} ({duration_min} min)")
+            except:
+                parts.append(f"  Time: {ts}")
+        elif ts:
+            try:
+                if isinstance(ts, str):
+                    dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                    parts.append(f"  Time: {dt.strftime('%Y-%m-%d %I:%M:%S %p')}")
+                else:
+                    parts.append(f"  Time: {ts}")
             except:
                 parts.append(f"  Time: {ts}")
         elif parsed_filter.get("__last_minutes"):

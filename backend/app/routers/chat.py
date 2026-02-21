@@ -346,30 +346,59 @@ def _maybe_create_alert_from_nl(nl: str, parsed: Dict[str, Any]) -> Optional[Dic
     obj = parsed.get("objects.object_name") or "person"
     color = parsed.get("objects.color")
     cam = parsed.get("camera_id")
-    count = _guess_count_from_text(nl) or 1
+    
+    # Use count_constraint from parsed if available, otherwise guess
+    count_constraint = parsed.get("count_constraint")
+    count_dict = {}
+    if count_constraint:
+        for k, v in count_constraint.items():
+            if k == "eq": count_dict["=="] = v
+            elif k == "gt": count_dict[">"] = v
+            elif k == "gte": count_dict[">="] = v
+            elif k == "lt": count_dict["<"] = v
+            elif k == "lte": count_dict["<="] = v
+    else:
+        count = _guess_count_from_text(nl) or 1
+        count_dict = {">=": count}
+
     # event enter detection
     event = None
     if any(k in low for k in ["enter", "enters", "arrives", "comes in", "comes"]):
-        event = {"name": "enter", "object": obj}
+        event = "enter"
     # time-of-day: night
-    tod = None
+    time_of_day = None
     if any(k in low for k in ["night", "after dark", "evening"]):
-        tod = {"start": "20:00", "end": "06:00"}
+        time_of_day = {"start": "20:00", "end": "06:00"}
+    
+    behavior = parsed.get("action")
+    zone = parsed.get("zone")
+    area = {"zone_id": zone} if zone else None
+    
     rule = {
         "cameras": [int(cam)] if cam is not None else None,
         "objects": [{"name": obj}],
         "color": color,
-        "count": {">=": count},
+        "count": count_dict,
         "event": event,
-        "tod": tod,
-        "cooldown_s": 30,
+        "time_of_day": time_of_day,
+        "behavior": behavior,
+        "area": area,
     }
+    
+    # Incorporate time window if specified explicitly in NLP
+    if "timestamp" in parsed and isinstance(parsed["timestamp"], dict):
+        ts = parsed["timestamp"]
+        if "$gte" in ts and "$lte" in ts:
+            rule["time"] = {"from": ts["$gte"], "to": ts["$lte"]}
+
     doc = {
         "name": f"NL: {nl[:60]}",
         "nl": nl,
-        "rule": rule,
+        "rule": {k: v for k, v in rule.items() if v is not None},
         "enabled": True,
-        "actions": ["push_ws", "snapshot"],
+        "actions": ["store_clip", "snapshot", "push_ws"],
+        "severity": "info",
+        "cooldown_sec": 60.0,
         "created_at": iso_now(),
         "updated_at": iso_now(),
     }
@@ -378,6 +407,7 @@ def _maybe_create_alert_from_nl(nl: str, parsed: Dict[str, Any]) -> Optional[Dic
         return {"id": str(ins.inserted_id), "name": doc["name"], "enabled": True}
     except Exception:
         return None
+
 
 
 @router.get("/history", response_model=ChatHistoryResponse)
