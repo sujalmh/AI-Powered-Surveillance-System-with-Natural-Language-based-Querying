@@ -77,7 +77,7 @@ const fetchAlerts = async (): Promise<AlertItem[]> => {
   });
 };
 
-export function AlertsTable({ onAddAlert }: { onAddAlert: () => void }) {
+export function AlertsTable() {
   const { data: alerts, error, isLoading, mutate } = useSWR("alerts", fetchAlerts, { refreshInterval: 10000 });
 
   useEffect(() => {
@@ -180,15 +180,14 @@ export function AlertsTable({ onAddAlert }: { onAddAlert: () => void }) {
   });
 
   return (
-    <Card className="shadow-sm border-border bg-card overflow-hidden">
-      <CardHeader className="pb-4 flex flex-row items-center justify-between shadow-none">
-        <CardTitle className="text-lg">Configured Alerts</CardTitle>
+    <Card className="shadow-sm border-border bg-card overflow-hidden w-full">
+      <CardHeader className="pb-4 flex flex-row items-center justify-between">
+        <div>
+          <CardTitle className="text-lg">Configured Alerts</CardTitle>
+          <p className="text-sm text-muted-foreground mt-1">Manage your active natural language rules</p>
+        </div>
         <div className="flex items-center gap-4">
           {isLoading && !alerts && <span className="text-xs text-muted-foreground animate-pulse">Loading...</span>}
-          <Button onClick={onAddAlert} className="rounded-full h-8 px-4 text-xs font-semibold shadow-sm">
-            <Plus className="w-3.5 h-3.5 mr-1" />
-            Add Alert
-          </Button>
         </div>
       </CardHeader>
       <CardContent className="p-0 border-t border-border overflow-x-auto">

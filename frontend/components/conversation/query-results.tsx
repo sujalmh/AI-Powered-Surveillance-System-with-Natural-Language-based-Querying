@@ -89,12 +89,12 @@ export const QueryResults = React.memo(({ onShowSteps, response }: QueryResultsP
               {(item as any).clip_url ? (
                 <video
                   key={(item as any).clip_url}
-                  src={`${API_BASE}${(item as any).clip_url}`}
+                  src={`${API_BASE}${(item as any).clip_url}#t=0.001`}
                   className="absolute inset-0 w-full h-full object-cover"
                   muted
                   loop
                   playsInline
-                  preload="none" // Lazy loads video preview
+                  preload="metadata"
                   crossOrigin="anonymous"
                   onMouseOver={e => (e.target as HTMLVideoElement).play().catch(()=> {})}
                   onMouseOut={e => {

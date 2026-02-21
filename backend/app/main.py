@@ -1,12 +1,42 @@
+import atexit
+import logging
+import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.app.config import settings
-from backend.app.db.mongo import get_db_info
+from backend.app.db.mongo import get_db_info, client as mongo_client
 from backend.app.routers.cameras import router as cameras_router
 
-# Optional future routers (to be added as files are created)
+logger = logging.getLogger(__name__)
+
+try:
+    from backend.app.services.detection_runner import runner
+except Exception:
+    runner = None
+
+
+# ── Force-exit handler ──────────────────────────────────────────────
+# PyTorch, OpenCLIP, PyMongo, and other ML libraries create non-daemon
+# background threads.  On Windows, when uvicorn --reload tries to shut
+# down the worker process, those threads keep the process alive forever.
+# This atexit handler runs AFTER the asyncio loop and lifespan shutdown
+# have completed and forcibly terminates the process so it doesn't hang.
+#
+# NOTE: uvicorn installs its own SIGTERM handler, so no application-level
+# SIGTERM registration is performed here.  Cleanup relies on atexit/_force_exit.
+def _force_exit():
+    """Last-resort exit: kill the process even if stray threads linger."""
+    os._exit(0)
+
+
+atexit.register(_force_exit)
+
+
+# ── Router imports ──────────────────────────────────────────────────
 try:
     from backend.app.routers.detections import router as detections_router  # type: ignore
 except Exception:
@@ -15,6 +45,7 @@ except Exception:
 try:
     from backend.app.routers.chat import router as chat_router  # type: ignore
 except Exception:
+    logger.exception("Failed to import chat router")
     chat_router = None  # type: ignore
 
 try:
@@ -43,7 +74,40 @@ except Exception:
     dashboard_router = None  # type: ignore
 
 
-app = FastAPI(title=settings.APP_NAME, version=settings.VERSION)
+# ── Lifespan ────────────────────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup — eagerly verify that chat dependencies can be imported so
+    # mis-configurations surface at startup, not on the first /send request.
+    try:
+        from backend.app.services.nl_parser import parse_nl_with_llm  # noqa: F401
+        from backend.app.services.unified_retrieval import UnifiedRetrieval  # noqa: F401
+    except Exception:
+        logger.warning(
+            "Chat dependencies (parse_nl_with_llm / UnifiedRetrieval) failed to import; "
+            "/api/chat/send will fall back to lazy import at request time",
+            exc_info=True,
+        )
+
+    yield
+
+    # Shutdown — best-effort graceful cleanup before atexit fires
+    if runner is not None:
+        try:
+            for cid in list(runner.list_running().keys()):
+                try:
+                    runner.stop_camera(cid, timeout=2)
+                except Exception:
+                    logger.exception("Error stopping camera %s during shutdown", cid)
+        except Exception:
+            logger.exception("Error listing running cameras during shutdown")
+    try:
+        mongo_client.close()
+    except Exception:
+        logger.exception("Error closing MongoDB connection during shutdown")
+
+
+app = FastAPI(title=settings.APP_NAME, version=settings.VERSION, lifespan=lifespan)
 
 # CORS
 app.add_middleware(

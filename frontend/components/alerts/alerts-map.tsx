@@ -59,9 +59,12 @@ export function AlertsMap() {
   }, [data?.logs]);
 
   return (
-    <Card className="h-full flex flex-col shadow-sm border-border bg-card">
-      <CardHeader className="pb-4 flex flex-row items-center justify-between shadow-none">
-        <CardTitle className="text-lg">Camera Status</CardTitle>
+    <Card className="shadow-sm border-border bg-card w-full">
+      <CardHeader className="pb-4 flex flex-row items-center justify-between">
+        <div>
+          <CardTitle className="text-lg">Camera Status</CardTitle>
+          <p className="text-sm text-muted-foreground mt-1">Live feed connectivity and alerts</p>
+        </div>
         {isLoading && !data && <span className="text-xs text-muted-foreground animate-pulse">Loading...</span>}
       </CardHeader>
       
