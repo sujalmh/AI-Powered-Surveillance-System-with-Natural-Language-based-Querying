@@ -118,6 +118,58 @@ def build_detection_query_from_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
         if end_iso:
             q["timestamp"]["$lte"] = end_iso
 
+    # Handle time_of_day filter using MongoDB $expr with $dateToString
+    tod = rule.get("time_of_day")
+    if tod and isinstance(tod, dict) and "start" in tod and "end" in tod:
+        import zoneinfo
+        tz = tod.get("tz", "UTC")
+        try:
+            zoneinfo.ZoneInfo(tz)
+        except Exception:
+            tz = "UTC"
+
+        # Convert timestamp to HH:MM format using validated timezone
+        dt_expr = {
+            "$dateToString": {
+                "format": "%H:%M",
+                "date": {"$toDate": "$timestamp"},
+                "timezone": tz
+            }
+        }
+        
+        def parse_time_to_minutes(t_str: str) -> int:
+            try:
+                parts = str(t_str).split(":")
+                return int(parts[0]) * 60 + int(parts[1])
+            except Exception:
+                return 0
+
+        start_m = parse_time_to_minutes(tod["start"])
+        end_m = parse_time_to_minutes(tod["end"])
+
+        # Format back to zero-padded HH:MM for correct lexicographic comparison with $dateToString
+        start_fmt = f"{start_m // 60:02d}:{start_m % 60:02d}"
+        end_fmt = f"{end_m // 60:02d}:{end_m % 60:02d}"
+
+        if start_m <= end_m:
+            # Normal range (e.g. 09:00 to 17:00)
+            range_cond = {"$and": [{"$gte": ["$$time", start_fmt]}, {"$lte": ["$$time", end_fmt]}]}
+        else:
+            # Wraparound range (e.g. 20:00 to 06:00)
+            range_cond = {"$or": [{"$gte": ["$$time", start_fmt]}, {"$lte": ["$$time", end_fmt]}]}
+            
+        tod_cond = {
+            "$let": {
+                "vars": {"time": dt_expr},
+                "in": range_cond
+            }
+        }
+            
+        if "$expr" not in q:
+            q["$expr"] = tod_cond
+        else:
+            q["$expr"] = {"$and": [q["$expr"], tod_cond]}
+
     # object / color
     objects = rule.get("objects")
     if objects and isinstance(objects, list) and len(objects) > 0:

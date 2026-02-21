@@ -110,13 +110,17 @@ export function AlertsTable({ onAddAlert }: { onAddAlert: () => void }) {
     {
       accessorKey: "name",
       header: "Name",
-      cell: ({ row }) => <span className="font-medium">{row.getValue("name")}</span>,
+      cell: ({ row }) => (
+        <span className="font-medium break-words overflow-hidden" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+          {row.getValue("name")}
+        </span>
+      ),
     },
     {
       accessorKey: "condition",
       header: "Condition",
       cell: ({ row }) => (
-        <span className="text-muted-foreground text-sm">
+        <span className="text-muted-foreground text-sm break-words overflow-hidden" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
           {row.getValue("condition") || row.original.nl || <span className="italic">n/a</span>}
         </span>
       ),
@@ -187,7 +191,7 @@ export function AlertsTable({ onAddAlert }: { onAddAlert: () => void }) {
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="p-0 border-t border-border">
+      <CardContent className="p-0 border-t border-border overflow-x-auto">
         {error ? (
           <div className="p-6 text-sm text-rose-500">Failed to load alerts: {error.message}</div>
         ) : (

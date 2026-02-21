@@ -164,7 +164,10 @@ export function RecentAlerts() {
                   fontWeight: 500,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
+                  wordBreak: "break-word",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
                 }}>
                   {alert.message}
                 </p>

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+import logging
 from datetime import datetime
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 from backend.app.config import settings
 
@@ -50,8 +53,8 @@ class AnswerGenerator:
                     api_key=api_key,
                     temperature=0.3,
                 )
-            except Exception as e:
-                print(f"Failed to initialize OpenAI: {e}")
+            except Exception:
+                logger.error("Failed to initialize OpenAI", exc_info=True)
                 self.llm = None
         elif provider == "openrouter":
             try:
@@ -62,8 +65,8 @@ class AnswerGenerator:
                     openai_api_key=api_key or settings.OPENAI_API_KEY,
                     temperature=0.3,
                 )
-            except Exception as e:
-                print(f"Failed to initialize OpenRouter: {e}")
+            except Exception:
+                logger.error("Failed to initialize OpenRouter", exc_info=True)
                 self.llm = None
         elif provider == "ollama":
             try:
@@ -73,8 +76,8 @@ class AnswerGenerator:
                     base_url=settings.OLLAMA_BASE_URL,
                     temperature=0.3
                 )
-            except Exception as e:
-                print(f"Failed to initialize Ollama: {e}")
+            except Exception:
+                logger.error("Failed to initialize Ollama", exc_info=True)
                 self.llm = None
     
     def generate(
@@ -112,9 +115,9 @@ class AnswerGenerator:
             
             response = self.llm.invoke([HumanMessage(content=context)])
             return response.content.strip()
-        except Exception as e:
-            print(f"LLM answer generation failed: {e}")
-            return self._fallback_answer(query_type, results, parsed_filter)
+        except Exception:
+            logger.error("LLM answering generation failed", exc_info=True)
+            return "I apologize, but I encountered an error while trying to generate an answer."
     
     def _build_context(
         self,
@@ -185,7 +188,14 @@ class AnswerGenerator:
         # Format collected data
         unique_cameras = sorted(set(camera_ids))
         camera_list = ", ".join(f"Camera {c}" for c in unique_cameras) if unique_cameras else "No cameras"
-        timestamps_formatted = timestamps_list[:10] if timestamps_list else []
+        
+        timestamps_formatted = []
+        for ts_str in (timestamps_list[:10] if timestamps_list else []):
+            try:
+                dt = datetime.fromisoformat(str(ts_str).replace('Z', '+00:00'))
+                timestamps_formatted.append(dt.strftime("%Y-%m-%d %I:%M:%S %p"))
+            except Exception:
+                timestamps_formatted.append(str(ts_str))
         
         structured_count = metadata.get('structured_count', 0) if metadata else 0
         semantic_count = metadata.get('semantic_count', 0) if metadata else 0
@@ -214,7 +224,14 @@ Alert Logs (up to first 10):
 
                 for idx, a in enumerate(alert_summaries[:10], start=1):
                     cam_str = f"Camera {a['camera_id']}" if a.get("camera_id") is not None else "Unknown camera"
-                    prompt += f"- {idx}. [{a.get('severity', 'info')}] {a.get('alert_name') or 'Unnamed alert'} at {a.get('triggered_at') or 'unknown time'} on {cam_str}: {a.get('message')}\n"  # noqa: E501
+                    trigger_ts = a.get('triggered_at')
+                    try:
+                        if trigger_ts:
+                            dt = datetime.fromisoformat(str(trigger_ts).replace('Z', '+00:00'))
+                            trigger_ts = dt.strftime("%Y-%m-%d %I:%M:%S %p")
+                    except Exception as e:
+                        logger.debug("Failed to parse trigger_ts %s for alert %s: %s", trigger_ts, a.get('alert_name') or idx, e)
+                    prompt += f"- {idx}. [{a.get('severity', 'info')}] {a.get('alert_name') or 'Unnamed alert'} at {trigger_ts or 'unknown time'} on {cam_str}: {a.get('message')}\n"
 
                 prompt += """
 
@@ -368,13 +385,26 @@ Generate Natural Language Answer:"""
             parts.append(f"  Count Filter: {parsed_filter['count_constraint']}")
         
         ts = parsed_filter.get("timestamp", {})
-        if ts and "$gte" in ts and "$lte" in ts:
+        if ts and isinstance(ts, dict) and "$gte" in ts and "$lte" in ts:
             try:
-                start = datetime.fromisoformat(ts["$gte"])
-                end = datetime.fromisoformat(ts["$lte"])
+                start = datetime.fromisoformat(str(ts["$gte"]).replace('Z', '+00:00'))
+                end = datetime.fromisoformat(str(ts["$lte"]).replace('Z', '+00:00'))
+                start_fmt = start.strftime("%Y-%m-%d %I:%M:%S %p")
+                end_fmt = end.strftime("%Y-%m-%d %I:%M:%S %p")
                 duration_min = int((end - start).total_seconds() / 60)
-                parts.append(f"  Time Range: {ts['$gte']} to {ts['$lte']} ({duration_min} min)")
-            except:
+                parts.append(f"  Time Range: {start_fmt} to {end_fmt} ({duration_min} min)")
+            except Exception:
+                logger.debug("Timestamp formatting failed for ts=%r", ts, exc_info=True)
+                parts.append(f"  Time: {ts}")
+        elif ts:
+            try:
+                if isinstance(ts, str):
+                    dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                    parts.append(f"  Time: {dt.strftime('%Y-%m-%d %I:%M:%S %p')}")
+                else:
+                    parts.append(f"  Time: {ts}")
+            except Exception:
+                logger.debug("Timestamp formatting failed for ts=%r", ts, exc_info=True)
                 parts.append(f"  Time: {ts}")
         elif parsed_filter.get("__last_minutes"):
             parts.append(f"  Time Window: Last {parsed_filter['__last_minutes']} minutes")

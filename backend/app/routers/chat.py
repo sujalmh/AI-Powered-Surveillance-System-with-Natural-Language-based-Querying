@@ -320,7 +320,6 @@ def parse_simple_nl_to_filter(nl: str) -> Dict[str, Any]:
 
 
 def _guess_count_from_text(nl: str) -> Optional[int]:
-    import re
     m = re.search(r"(>=|more than|at least)\s*(\d+)", nl.lower())
     if m:
         try:
@@ -346,30 +345,92 @@ def _maybe_create_alert_from_nl(nl: str, parsed: Dict[str, Any]) -> Optional[Dic
     obj = parsed.get("objects.object_name") or "person"
     color = parsed.get("objects.color")
     cam = parsed.get("camera_id")
-    count = _guess_count_from_text(nl) or 1
+    
+    # Use count_constraint from parsed if available, otherwise guess
+    count_constraint = parsed.get("count_constraint")
+    count_dict = None
+    if count_constraint:
+        temp_dict = {}
+        for k, v in count_constraint.items():
+            if k == "eq":
+                temp_dict["=="] = v
+            elif k == "gt":
+                temp_dict[">"] = v
+            elif k == "gte":
+                temp_dict[">="] = v
+            elif k == "lt":
+                temp_dict["<"] = v
+            elif k == "lte":
+                temp_dict["<="] = v
+        if temp_dict:
+            count_dict = temp_dict
+    else:
+        guessed = _guess_count_from_text(nl)
+        count = guessed if guessed is not None else 1
+        count_dict = {">=": count}
+
     # event enter detection
     event = None
     if any(k in low for k in ["enter", "enters", "arrives", "comes in", "comes"]):
-        event = {"name": "enter", "object": obj}
+        event = "enter"
     # time-of-day: night
-    tod = None
+    time_of_day = None
     if any(k in low for k in ["night", "after dark", "evening"]):
-        tod = {"start": "20:00", "end": "06:00"}
+        time_of_day = {"start": "20:00", "end": "06:00"}
+    
+    behavior = parsed.get("action")
+    zone = parsed.get("zone")
+    area = {"zone_id": zone} if zone else None
+    
     rule = {
         "cameras": [int(cam)] if cam is not None else None,
         "objects": [{"name": obj}],
         "color": color,
-        "count": {">=": count},
+        "count": count_dict,
         "event": event,
-        "tod": tod,
-        "cooldown_s": 30,
+        "time_of_day": time_of_day,
+        "behavior": behavior,
+        "area": area,
     }
+    
+    # Incorporate time window if specified explicitly in NLP
+    if "timestamp" in parsed and isinstance(parsed["timestamp"], dict):
+        ts = parsed["timestamp"]
+        if "$gte" in ts and "$lte" in ts:
+            rule["time"] = {"from": ts["$gte"], "to": ts["$lte"]}
+
+    actions = ["store_clip", "snapshot", "push_ws"]
+    
+    severity = "info"
+    if any(k in low for k in ["critical", "severe", "urgent"]):
+        severity = "critical"
+    elif any(k in low for k in ["high", "important"]):
+        severity = "high"
+    elif any(k in low for k in ["warning", "warn", "moderate"]):
+        severity = "warning"
+        
+    cooldown_sec = 60.0
+    m_cd = re.search(r"\bcooldown\s+(?:of\s+)?(\d+(?:\.\d+)?)\s*(sec|s|minute|m|hour|h)\b", low)
+    if m_cd:
+        try:
+            val = float(m_cd.group(1))
+            unit = m_cd.group(2)
+            if unit.startswith("m"):
+                val *= 60.0
+            elif unit.startswith("h"):
+                val *= 3600.0
+            cooldown_sec = val
+        except Exception as e:
+            logger.debug("Failed to parse cooldown duration from %r, falling back to 60.0s: %s", m_cd.group(0), e)
+    
     doc = {
         "name": f"NL: {nl[:60]}",
         "nl": nl,
-        "rule": rule,
+        "rule": {k: v for k, v in rule.items() if v is not None},
         "enabled": True,
-        "actions": ["push_ws", "snapshot"],
+        "actions": actions,
+        "severity": severity,
+        "cooldown_sec": cooldown_sec,
         "created_at": iso_now(),
         "updated_at": iso_now(),
     }
@@ -377,7 +438,9 @@ def _maybe_create_alert_from_nl(nl: str, parsed: Dict[str, Any]) -> Optional[Dic
         ins = alerts_col.insert_one(doc)
         return {"id": str(ins.inserted_id), "name": doc["name"], "enabled": True}
     except Exception:
+        logger.exception("Failed to insert NL alert `%s`", doc.get("name"))
         return None
+
 
 
 @router.get("/history", response_model=ChatHistoryResponse)
@@ -437,7 +500,8 @@ def sessions(limit: int = 20) -> List[ChatSession]:
 @router.post("/send", response_model=ChatSendResponse)
 def send(req: ChatSendRequest) -> ChatSendResponse:
     try:
-        logger.info(f"Received chat request. Session: {req.session_id}, Message: {req.message}")
+        logger.info("Received chat request. Session: %s, Message length: %d", req.session_id, len(req.message))
+        logger.debug("Full message payload omitted for PII; session: %s", req.session_id)
         # Save user message
         save_message(req.session_id, "user", req.message, None)
 
@@ -447,11 +511,11 @@ def send(req: ChatSendRequest) -> ChatSendResponse:
         else:
             try:
                 parsed = parse_nl_with_llm(req.message)
-                logger.info(f"LLM parsed query: {parsed}")
+                logger.info("LLM parsed query: %s", parsed)
             except Exception as e:
-                logger.warning(f"LLM parsing failed: {e}. Falling back to regex parser.")
+                logger.warning("LLM parsing failed: %s. Falling back to regex parser.", e, exc_info=True)
                 parsed = parse_simple_nl_to_filter(req.message)
-                logger.info(f"Regex parsed query: {parsed}")
+                logger.info("Regex parsed query: %s", parsed)
 
         # If LLM suggested a relative window and absolute timestamp not provided, expand to [now-last_minutes, now]
         # Use UTC to keep timestamps consistent across services
@@ -464,8 +528,8 @@ def send(req: ChatSendRequest) -> ChatSendResponse:
                 now = datetime.now(timezone.utc)
                 start = now - timedelta(minutes=minutes)
                 parsed["timestamp"] = {"$gte": start.isoformat(), "$lte": now.isoformat()}
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to parse __last_minutes value %r: %s", parsed.get("__last_minutes"), e, exc_info=True)
 
         # Default time window: if no time filter at all, default to last 24 hours (UTC)
         if "timestamp" not in parsed and "__last_minutes" not in parsed:

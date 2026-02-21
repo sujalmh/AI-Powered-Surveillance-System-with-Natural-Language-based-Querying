@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+import zoneinfo
 from collections import deque, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, time as dtime, timezone
@@ -226,6 +227,25 @@ def evaluate_realtime(
 
         area = rule.get("area") or {}
         zone_id = area.get("zone_id")
+        
+        # ---------------- Time of Day check ----------------
+        tod = rule.get("time_of_day")
+        if tod:
+            win = _parse_local_time_window(tod)
+            if not win:
+                _log.warning("Skipping rule %s due to malformed time_of_day: %r", rid, tod)
+                continue
+            
+            # Apply the requested timezone to the UTC `now_dt`
+            try:
+                tz_name = win[2]
+                local_dt = now_dt.astimezone(zoneinfo.ZoneInfo(tz_name))
+            except Exception as e:
+                _log.warning("Timezone conversion failed for rule %s (tz=%s): %s", rid, win[2], e)
+                continue
+
+            if not _in_local_window(win, local_dt):
+                continue
 
         # ---------------- Crowd Density ----------------
         if event_type == "crowd_density" and want_name:
