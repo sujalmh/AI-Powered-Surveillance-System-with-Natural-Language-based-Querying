@@ -65,12 +65,12 @@ export function AlertsMap() {
         {isLoading && !data && <span className="text-xs text-muted-foreground animate-pulse">Loading...</span>}
       </CardHeader>
       
-      <CardContent className="p-0 border-t border-border">
+      <CardContent className="p-0 border-t border-border overflow-x-auto">
         {error ? (
-          <div className="p-6 text-sm text-rose-500">Failed to load map data: {error.message}</div>
-        ) : (
-          <Table>
-            <TableHeader className="bg-muted/40 hover:bg-muted/40">
+           <div className="p-6 text-sm text-rose-500">Failed to load map data: {error.message}</div>
+         ) : (
+           <Table>
+             <TableHeader className="bg-muted/40 hover:bg-muted/40">
               <TableRow>
                 <TableHead className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Camera</TableHead>
                 <TableHead className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Location</TableHead>
