@@ -410,7 +410,6 @@ def _maybe_create_alert_from_nl(nl: str, parsed: Dict[str, Any]) -> Optional[Dic
         severity = "warning"
         
     cooldown_sec = 60.0
-    import re
     m_cd = re.search(r"\bcooldown\s+(?:of\s+)?(\d+(?:\.\d+)?)\s*(sec|s|minute|m|hour|h)\b", low)
     if m_cd:
         try:
@@ -501,8 +500,8 @@ def sessions(limit: int = 20) -> List[ChatSession]:
 @router.post("/send", response_model=ChatSendResponse)
 def send(req: ChatSendRequest) -> ChatSendResponse:
     try:
-        logger.info(f"Received chat request. Session: {req.session_id}, Message length: {len(req.message)}")
-        logger.debug(f"Full message payload for session {req.session_id}: {req.message}")
+        logger.info("Received chat request. Session: %s, Message length: %d", req.session_id, len(req.message))
+        logger.debug("Full message payload omitted for PII; session: %s", req.session_id)
         # Save user message
         save_message(req.session_id, "user", req.message, None)
 
@@ -512,11 +511,11 @@ def send(req: ChatSendRequest) -> ChatSendResponse:
         else:
             try:
                 parsed = parse_nl_with_llm(req.message)
-                logger.info(f"LLM parsed query: {parsed}")
+                logger.info("LLM parsed query: %s", parsed)
             except Exception as e:
-                logger.warning(f"LLM parsing failed: {e}. Falling back to regex parser.")
+                logger.warning("LLM parsing failed: %s. Falling back to regex parser.", e, exc_info=True)
                 parsed = parse_simple_nl_to_filter(req.message)
-                logger.info(f"Regex parsed query: {parsed}")
+                logger.info("Regex parsed query: %s", parsed)
 
         # If LLM suggested a relative window and absolute timestamp not provided, expand to [now-last_minutes, now]
         # Use UTC to keep timestamps consistent across services

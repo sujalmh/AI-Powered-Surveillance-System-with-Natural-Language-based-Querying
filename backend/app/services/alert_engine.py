@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+import zoneinfo
 from collections import deque, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, time as dtime, timezone
@@ -237,11 +238,10 @@ def evaluate_realtime(
             
             # Apply the requested timezone to the UTC `now_dt`
             try:
-                import zoneinfo
                 tz_name = win[2]
                 local_dt = now_dt.astimezone(zoneinfo.ZoneInfo(tz_name))
             except Exception as e:
-                _log.warning("Timezone conversion failed for rule %s (tz=%s): %s", rid, win[2] if win else None, e)
+                _log.warning("Timezone conversion failed for rule %s (tz=%s): %s", rid, win[2], e)
                 continue
 
             if not _in_local_window(win, local_dt):
