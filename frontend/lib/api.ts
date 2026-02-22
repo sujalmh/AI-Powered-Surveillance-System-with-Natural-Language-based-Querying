@@ -111,7 +111,7 @@ export const api = {
             method: "POST",
             body: JSON.stringify(payload),
         }),
-    startCamera: (cameraId: number, payload?: { source?: number | string; location?: string; show_window?: boolean }) =>
+    startCamera: (cameraId: number, payload?: { source?: number | string; location?: string; show_window?: boolean; check?: boolean }) =>
         http<{ ok: boolean; camera_id: number; running: boolean }>(`/api/cameras/${cameraId}/start`, {
             method: "POST",
             body: JSON.stringify(payload || {}),
@@ -124,7 +124,7 @@ export const api = {
         http<{ ok: boolean; camera_id: number; message: string }>(`/api/cameras/${cameraId}`, {
             method: "DELETE",
         }),
-    probeCamera: (source: string | number, timeout = 3) => {
+    probeCamera: (source: string | number, timeout = 8) => {
         const src = typeof source === "number" ? String(source) : source;
         const p = new URLSearchParams();
         p.set("source", src);

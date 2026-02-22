@@ -72,6 +72,17 @@ class AttributeEncoder:
         n = np.linalg.norm(v) + 1e-6
         return (v / n).astype(np.float32)
 
+    def encode_texts(self, texts: List[str]) -> np.ndarray:
+        """Batch encode texts; returns (N, D) float32 L2-normalized."""
+        if not texts:
+            return np.zeros((0, 384), dtype=np.float32)
+        emb = self.model.encode(texts)
+        v = np.asarray(emb, dtype=np.float32)
+        if v.ndim == 1:
+            v = v.reshape(1, -1)
+        n = np.linalg.norm(v, axis=1, keepdims=True) + 1e-6
+        return (v / n).astype(np.float32)
+
 
 # Singleton accessor
 _ENCODER: Optional[AttributeEncoder] = None

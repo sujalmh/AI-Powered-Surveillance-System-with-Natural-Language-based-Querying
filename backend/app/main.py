@@ -1,16 +1,32 @@
-import atexit
 import logging
 import os
+import signal
 import threading
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 
 from backend.app.config import settings
+from backend.app.core.logging_config import configure_logging
+
+configure_logging(
+    log_level=os.getenv("LOG_LEVEL", "INFO"),
+    log_json=os.getenv("LOG_JSON", "false").lower() == "true",
+)
+
 from backend.app.db.mongo import get_db_info, client as mongo_client
 from backend.app.routers.cameras import router as cameras_router
+from backend.app.schemas.responses import (
+    error_response,
+    ERROR_VALIDATION,
+    ERROR_NOT_FOUND,
+    ERROR_BAD_REQUEST,
+    ERROR_SERVER,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,34 +36,67 @@ except Exception:
     runner = None
 
 
-# ── Force-exit handler ──────────────────────────────────────────────
-# PyTorch, OpenCLIP, PyMongo, and other ML libraries create non-daemon
-# background threads.  On Windows, when uvicorn --reload tries to shut
-# down the worker process, those threads keep the process alive forever.
-# This atexit handler runs AFTER the asyncio loop and lifespan shutdown
-# have completed and forcibly terminates the process so it doesn't hang.
-#
-# NOTE: uvicorn installs its own SIGTERM handler, so no application-level
-# SIGTERM registration is performed here.  Cleanup relies on atexit/_force_exit.
-def _force_exit():
-    """Last-resort exit: kill the process only if stray non-daemon threads linger."""
-    stray = [
-        t for t in threading.enumerate()
-        if t is not threading.current_thread() and not t.daemon and t.is_alive()
-    ]
-    if not stray:
-        return  # clean exit — no stray threads
-    # Flush logging before hard-kill so we don't lose messages
-    for h in logging.root.handlers:
+# ── Shutdown machinery ──────────────────────────────────────────────
+_shutdown_event = threading.Event()
+_HARD_DEADLINE_SEC = 6.0
+
+
+def _graceful_shutdown_work() -> None:
+    """Best-effort cleanup: stop cameras, task pool, mongo."""
+    if runner is not None:
         try:
-            h.flush()
-            h.close()
+            runner.stop_all(timeout=2.0)
         except Exception:
             pass
-    os._exit(0)
+
+    try:
+        from backend.app.services.task_queue import shutdown as tq_shutdown
+        tq_shutdown(wait=False, cancel_futures=True)
+    except Exception:
+        pass
+
+    try:
+        mongo_client.close()
+    except Exception:
+        pass
 
 
-atexit.register(_force_exit)
+def _watchdog() -> None:
+    """Daemon thread that waits for the shutdown signal, then hard-kills after a deadline."""
+    _shutdown_event.wait()
+    logger.info("Shutdown watchdog started — hard deadline in %.0fs", _HARD_DEADLINE_SEC)
+    _graceful_shutdown_work()
+    # Give the main thread / uvicorn a moment to exit cleanly
+    main_thread = threading.main_thread()
+    main_thread.join(timeout=_HARD_DEADLINE_SEC)
+    if main_thread.is_alive():
+        logger.warning("Graceful shutdown timed out — forcing exit")
+        for h in logging.root.handlers:
+            try:
+                h.flush()
+            except Exception:
+                pass
+        os._exit(0)
+
+
+_watchdog_thread = threading.Thread(target=_watchdog, name="shutdown-watchdog", daemon=True)
+_watchdog_thread.start()
+
+
+def _signal_handler(signum, frame):
+    sig_name = signal.Signals(signum).name if hasattr(signal, "Signals") else str(signum)
+    logger.info("Received %s — initiating shutdown", sig_name)
+    _shutdown_event.set()
+    # Re-raise as KeyboardInterrupt so uvicorn's shutdown proceeds normally
+    if signum == signal.SIGINT:
+        raise KeyboardInterrupt
+
+
+# Install signal handlers (only safe in the main thread)
+if threading.current_thread() is threading.main_thread():
+    signal.signal(signal.SIGINT, _signal_handler)
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, _signal_handler)
 
 
 # ── Router imports ──────────────────────────────────────────────────
@@ -111,23 +160,70 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown — best-effort graceful cleanup before atexit fires
-    if runner is not None:
-        try:
-            for cid in list(runner.list_running().keys()):
-                try:
-                    runner.stop_camera(cid, timeout=2)
-                except Exception:
-                    logger.exception("Error stopping camera %s during shutdown", cid)
-        except Exception:
-            logger.exception("Error listing running cameras during shutdown")
-    try:
-        mongo_client.close()
-    except Exception:
-        logger.exception("Error closing MongoDB connection during shutdown")
+    # Lifespan shutdown — signal the watchdog and let it handle cleanup.
+    # Also do inline cleanup in case the watchdog hasn't fired yet.
+    logger.info("Lifespan shutdown triggered")
+    _shutdown_event.set()
+    _graceful_shutdown_work()
 
 
 app = FastAPI(title=settings.APP_NAME, version=settings.VERSION, lifespan=lifespan)
+
+
+# ── Global exception handlers (standardized error envelope) ─────────────
+def _http_status_to_code(status_code: int) -> str:
+    if status_code == 404:
+        return ERROR_NOT_FOUND
+    if status_code == 400:
+        return ERROR_BAD_REQUEST
+    if status_code == 422:
+        return ERROR_VALIDATION
+    return ERROR_SERVER
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content=error_response(
+            ERROR_VALIDATION,
+            "Request validation failed",
+            details={"errors": exc.errors()},
+        ),
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc: HTTPException):
+    detail = exc.detail
+    if isinstance(detail, dict):
+        message = detail.get("message", str(detail)) if isinstance(detail.get("message"), str) else str(detail)
+        details = {k: v for k, v in detail.items() if k != "message"}
+    else:
+        message = str(detail)
+        details = None
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_response(
+            _http_status_to_code(exc.status_code),
+            message,
+            details=details or None,
+        ),
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request, exc: Exception):
+    logger.exception("Unhandled exception: %s", exc)
+    return JSONResponse(
+        status_code=500,
+        content=error_response(
+            ERROR_SERVER,
+            "Internal server error",
+            details={"detail": str(exc)} if getattr(settings, "DEBUG", False) else None,
+        ),
+    )
+
 
 # CORS
 app.add_middleware(

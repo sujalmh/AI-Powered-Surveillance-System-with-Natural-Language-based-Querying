@@ -68,7 +68,8 @@ class _Embedder:
             if not pil_batch:
                 break
             x = torch.cat(pil_batch, dim=0).to(self.device, non_blocking=True)
-            feats = self.model.encode_image(x)
+            with torch.cuda.amp.autocast(enabled=(self.device.type == "cuda")):
+                feats = self.model.encode_image(x)
             # L2 normalize
             feats = feats / feats.norm(dim=-1, keepdim=True).clamp(min=1e-6)
             outs.append(feats.float().cpu())
@@ -89,7 +90,8 @@ class _Embedder:
         while idx < len(texts):
             batch = texts[idx: idx + self.batch_size]
             tokens = self.tokenizer(batch).to(self.device, non_blocking=True)
-            feats = self.model.encode_text(tokens)
+            with torch.cuda.amp.autocast(enabled=(self.device.type == "cuda")):
+                feats = self.model.encode_text(tokens)
             feats = feats / feats.norm(dim=-1, keepdim=True).clamp(min=1e-6)
             outs.append(feats.float().cpu())
             idx += self.batch_size

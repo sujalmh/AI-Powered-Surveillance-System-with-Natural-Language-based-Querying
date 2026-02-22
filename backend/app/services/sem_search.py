@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime
+from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -9,6 +10,14 @@ import numpy as np
 from backend.app.config import settings
 from backend.app.services.sem_embedder import get_embedder
 from backend.app.services.sem_store import get_faiss_store
+
+
+@lru_cache(maxsize=128)
+def _cached_text_embed(query_tuple: Tuple[str, ...]) -> np.ndarray:
+    """LRU-cached text embedding; argument must be a tuple of query strings (hashable). Returns (N, D)."""
+    if not query_tuple:
+        return get_embedder().text_embed([""])
+    return get_embedder().text_embed(list(query_tuple))
 
 
 def _norm_scores(scores: List[float]) -> List[float]:
@@ -75,9 +84,8 @@ def search_unstructured(
     use_expansion = getattr(settings, "ENABLE_CLIP_EXPANSION", True) and expanded_queries and len(expanded_queries) > 1
     if use_expansion:
         try:
-            embedder = get_embedder()
-            embs = embedder.text_embed(expanded_queries)
-            n = len(embs)
+            embs = _cached_text_embed(tuple(expanded_queries))
+            n = embs.shape[0]
             w_primary = 0.6
             w_rest = (1.0 - w_primary) / max(1, n - 1)
             weights = [w_primary] + [w_rest] * (n - 1)
@@ -87,9 +95,9 @@ def search_unstructured(
                 combined = combined / norm
             query_emb = combined
         except Exception:
-            query_emb = get_embedder().text_embed([query])[0]
+            query_emb = _cached_text_embed((query,))[0]
     else:
-        query_emb = get_embedder().text_embed([query])[0]
+        query_emb = _cached_text_embed((query,))[0]
     store = get_faiss_store(dim=512)
 
     def _filter_pred(meta: Dict[str, Any]) -> bool:

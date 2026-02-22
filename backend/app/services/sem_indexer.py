@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -270,6 +270,58 @@ def _phash_hex(img: np.ndarray) -> str:
         return ""
 
 
+def _flush_embed_batch(
+    embedder: Any,
+    store: Any,
+    images: List[np.ndarray],
+    metas: List[Dict[str, object]],
+    captioner: Optional[Any],
+) -> int:
+    """Embed a batch of images, build metadata with captions/object_captions, add to store. Returns count added."""
+    if not images:
+        return 0
+    embs = embedder.image_embed(images)
+    metas_to_add: List[Dict[str, object]] = []
+    if captioner is not None:
+        try:
+            caps = captioner.caption_images_batched(images)
+        except Exception:
+            caps = []
+        for j, m in enumerate(metas):
+            m2 = dict(m)
+            base_cap = caps[j] if j < len(caps) else None
+            rich_cap = _compose_caption_from_detections(camera_id=int(m.get("camera_id", -1)), frame_ts=str(m.get("frame_ts") or ""))
+            if base_cap and rich_cap:
+                m2["caption"] = f"{base_cap}. {rich_cap}"
+            elif rich_cap:
+                m2["caption"] = rich_cap
+            else:
+                m2["caption"] = base_cap
+            caps_list = _object_captions_from_detections(
+                camera_id=int(m.get("camera_id", -1)),
+                frame_ts=str(m.get("frame_ts") or ""),
+            )
+            if not caps_list:
+                caps_list = _object_captions_from_yolo(images[j])
+            m2["object_captions"] = caps_list
+            metas_to_add.append(m2)
+    else:
+        for j, m in enumerate(metas):
+            m2 = dict(m)
+            rich_cap = _compose_caption_from_detections(camera_id=int(m.get("camera_id", -1)), frame_ts=str(m.get("frame_ts") or ""))
+            m2["caption"] = rich_cap or None
+            caps_list = _object_captions_from_detections(
+                camera_id=int(m.get("camera_id", -1)),
+                frame_ts=str(m.get("frame_ts") or ""),
+            )
+            if not caps_list:
+                caps_list = _object_captions_from_yolo(images[j])
+            m2["object_captions"] = caps_list
+            metas_to_add.append(m2)
+    store.vector_add(embs, metas_to_add, save=False)
+    return embs.shape[0]
+
+
 def index_clip(
     camera_id: int,
     clip_path: str,
@@ -295,7 +347,18 @@ def index_clip(
         except Exception:
             captioner = None
 
-    # Dedup across clip using phash set and also skip if already exists in DB (clip_path+frame_index unique)
+    # Sample all frames first so we can batch-check DB existence (one query instead of N)
+    bundles_list = list(sample_frames_from_clip(clip_path, every_sec=every_sec))
+    if not bundles_list:
+        return {"ok": True, "indexed_frames": 0, "model": settings.SEMANTIC_MODEL, "backend": settings.VECTOR_BACKEND}
+    frame_indices = [int(b.frame_index) for b in bundles_list]
+    existing_docs = list(vlm_frames.find(
+        {"clip_path": clip_path, "frame_index": {"$in": frame_indices}},
+        {"_id": 1, "caption": 1, "frame_index": 1},
+    ))
+    existing_map = {(clip_path, int(d["frame_index"])): d for d in existing_docs}
+
+    # Dedup across clip using phash set and skip if already in existing_map
     seen_hashes: set[str] = set()
     images: List[np.ndarray] = []
     metas: List[Dict[str, object]] = []
@@ -303,12 +366,8 @@ def index_clip(
     now_iso = datetime.now(timezone.utc).isoformat()
     added = 0
 
-    for bundle in sample_frames_from_clip(clip_path, every_sec=every_sec):
-        # DB-level uniqueness guard
-        existing = vlm_frames.find_one(
-            {"clip_path": clip_path, "frame_index": int(bundle.frame_index)},
-            {"_id": 1, "caption": 1},
-        )
+    for bundle in bundles_list:
+        existing = existing_map.get((clip_path, int(bundle.frame_index)))
         if existing:
             # Backfill caption without adding a new vector if missing
             if captioner is not None and not existing.get("caption"):
@@ -348,100 +407,13 @@ def index_clip(
 
         # To bound memory, embed+flush in micro-batches ~ batch_size
         if len(images) >= embedder.batch_size:
-            embs = embedder.image_embed(images)
-            metas_to_add = metas
-            if captioner is not None:
-                try:
-                    caps = captioner.caption_images_batched(images)
-                except Exception:
-                    caps = []
-                metas_to_add = []
-                for j, m in enumerate(metas):
-                    m2 = dict(m)
-                    base_cap = caps[j] if j < len(caps) else None
-                    rich_cap = _compose_caption_from_detections(camera_id=int(m.get("camera_id", -1)), frame_ts=str(m.get("frame_ts") or ""))
-                    if base_cap and rich_cap:
-                        m2["caption"] = f"{base_cap}. {rich_cap}"
-                    elif rich_cap:
-                        m2["caption"] = rich_cap
-                    else:
-                        m2["caption"] = base_cap
-                    # Save per-object captions for testing (richer like realtime camera indexing)
-                    caps_list = _object_captions_from_detections(
-                        camera_id=int(m.get("camera_id", -1)),
-                        frame_ts=str(m.get("frame_ts") or "")
-                    )
-                    if not caps_list:
-                        # Fallback to YOLO on the sampled frame when structured detections are not available
-                        caps_list = _object_captions_from_yolo(images[j])
-                    m2["object_captions"] = caps_list
-                    metas_to_add.append(m2)
-            else:
-                # No captioner: still compose rich captions from structured detections and save per-object captions
-                metas_to_add = []
-                for j, m in enumerate(metas):
-                    m2 = dict(m)
-                    rich_cap = _compose_caption_from_detections(camera_id=int(m.get("camera_id", -1)), frame_ts=str(m.get("frame_ts") or ""))
-                    m2["caption"] = rich_cap or None
-                    caps_list = _object_captions_from_detections(
-                        camera_id=int(m.get("camera_id", -1)),
-                        frame_ts=str(m.get("frame_ts") or "")
-                    )
-                    if not caps_list:
-                        caps_list = _object_captions_from_yolo(images[j])
-                    m2["object_captions"] = caps_list
-                    metas_to_add.append(m2)
-            store.vector_add(embs, metas_to_add, save=False)
+            added += _flush_embed_batch(embedder, store, images, metas, captioner)
             images.clear()
             metas.clear()
-            added += embs.shape[0]
 
     # Flush remainder
     if images:
-        embs = embedder.image_embed(images)
-        metas_to_add = metas
-        if captioner is not None:
-            try:
-                caps = captioner.caption_images_batched(images)
-            except Exception:
-                caps = []
-            metas_to_add = []
-            for j, m in enumerate(metas):
-                m2 = dict(m)
-                base_cap = caps[j] if j < len(caps) else None
-                rich_cap = _compose_caption_from_detections(camera_id=int(m.get("camera_id", -1)), frame_ts=str(m.get("frame_ts") or ""))
-                if base_cap and rich_cap:
-                    m2["caption"] = f"{base_cap}. {rich_cap}"
-                elif rich_cap:
-                    m2["caption"] = rich_cap
-                else:
-                    m2["caption"] = base_cap
-                # Save per-object captions for testing (richer like realtime camera indexing)
-                caps_list = _object_captions_from_detections(
-                    camera_id=int(m.get("camera_id", -1)),
-                    frame_ts=str(m.get("frame_ts") or "")
-                )
-                if not caps_list:
-                    caps_list = _object_captions_from_yolo(images[j])
-                m2["object_captions"] = caps_list
-                metas_to_add.append(m2)
-        else:
-            # No captioner: compose rich captions from structured detections and save per-object captions
-            metas_to_add = []
-            for j, m in enumerate(metas):
-                m2 = dict(m)
-                rich_cap = _compose_caption_from_detections(camera_id=int(m.get("camera_id", -1)), frame_ts=str(m.get("frame_ts") or ""))
-                m2["caption"] = rich_cap or None
-                caps_list = _object_captions_from_detections(
-                    camera_id=int(m.get("camera_id", -1)),
-                    frame_ts=str(m.get("frame_ts") or "")
-                )
-                if not caps_list:
-                    caps_list = _object_captions_from_yolo(images[j])
-                m2["object_captions"] = caps_list
-                metas_to_add.append(m2)
-        store.vector_add(embs, metas_to_add, save=False)
-        added += embs.shape[0]
+        added += _flush_embed_batch(embedder, store, images, metas, captioner)
 
     # Persist index and metadata mapping
     if added > 0:

@@ -5,13 +5,18 @@ import time
 import zoneinfo
 from collections import deque, defaultdict
 from dataclasses import dataclass
-from datetime import datetime, time as dtime, timezone
+from datetime import datetime, time as dtime, timedelta, timezone
 from typing import Any, Deque, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
 
-from backend.app.db.mongo import alerts as alerts_col, alert_logs as alert_logs_col, zones as zones_col
+from backend.app.db.mongo import (
+    alerts as alerts_col,
+    alert_logs as alert_logs_col,
+    detections as detections_col,
+    zones as zones_col,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -78,8 +83,161 @@ def _load_active_rules() -> List[Dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------
-# Time Window Utilities
+# Time Window Utilities (shared with on-demand rule evaluation)
 # ---------------------------------------------------------------------
+
+
+def parse_time_window(rule_time: Optional[Dict[str, Any]]) -> Tuple[Optional[str], Optional[str]]:
+    """Build (start_iso, end_iso) from rule time spec (last_minutes, last_hours, or from/to)."""
+    if not rule_time:
+        return None, None
+    start_iso: Optional[str] = None
+    end_iso: Optional[str] = None
+    if "last_minutes" in rule_time:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(minutes=int(rule_time["last_minutes"]))
+        start_iso, end_iso = start.isoformat(), end.isoformat()
+    elif "last_hours" in rule_time:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=int(rule_time["last_hours"]))
+        start_iso, end_iso = start.isoformat(), end.isoformat()
+    else:
+        if "from" in rule_time:
+            try:
+                start_iso = datetime.fromisoformat(rule_time["from"]).isoformat()
+            except Exception:
+                start_iso = rule_time["from"]
+        if "to" in rule_time:
+            try:
+                end_iso = datetime.fromisoformat(rule_time["to"]).isoformat()
+            except Exception:
+                end_iso = rule_time["to"]
+    return start_iso, end_iso
+
+
+def build_detection_query_from_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
+    """Build MongoDB query for detections from an alert rule spec."""
+    q: Dict[str, Any] = {}
+    cameras = rule.get("cameras")
+    if cameras:
+        q["camera_id"] = {"$in": cameras}
+
+    start_iso, end_iso = parse_time_window(rule.get("time"))
+    if start_iso or end_iso:
+        q["timestamp"] = {}
+        if start_iso:
+            q["timestamp"]["$gte"] = start_iso
+        if end_iso:
+            q["timestamp"]["$lte"] = end_iso
+
+    tod = rule.get("time_of_day")
+    if tod and isinstance(tod, dict) and "start" in tod and "end" in tod:
+        tz = tod.get("tz", "UTC")
+        try:
+            zoneinfo.ZoneInfo(tz)
+        except Exception:
+            tz = "UTC"
+        dt_expr = {
+            "$dateToString": {
+                "format": "%H:%M",
+                "date": {"$toDate": "$timestamp"},
+                "timezone": tz,
+            }
+        }
+
+        def parse_time_to_minutes(t_str: str) -> int:
+            try:
+                parts = str(t_str).split(":")
+                return int(parts[0]) * 60 + int(parts[1])
+            except Exception:
+                return 0
+
+        start_m = parse_time_to_minutes(tod["start"])
+        end_m = parse_time_to_minutes(tod["end"])
+        start_fmt = f"{start_m // 60:02d}:{start_m % 60:02d}"
+        end_fmt = f"{end_m // 60:02d}:{end_m % 60:02d}"
+        if start_m <= end_m:
+            range_cond = {"$and": [{"$gte": ["$$time", start_fmt]}, {"$lte": ["$$time", end_fmt]}]}
+        else:
+            range_cond = {"$or": [{"$gte": ["$$time", start_fmt]}, {"$lte": ["$$time", end_fmt]}]}
+        tod_cond = {"$let": {"vars": {"time": dt_expr}, "in": range_cond}}
+        if "$expr" not in q:
+            q["$expr"] = tod_cond
+        else:
+            q["$expr"] = {"$and": [q["$expr"], tod_cond]}
+
+    objects = rule.get("objects")
+    if objects and isinstance(objects, list) and len(objects) > 0:
+        name = objects[0].get("name")
+        if name:
+            q["objects.object_name"] = name
+    color = rule.get("color")
+    if color:
+        q["objects.color"] = color
+    return q
+
+
+def matches_count_condition(count: int, cond: Optional[Dict[str, Any]]) -> bool:
+    """Return True if count satisfies the condition (e.g. {">=": 1})."""
+    if not cond:
+        return count >= 1
+    for op, val in cond.items():
+        try:
+            v = float(val)
+        except Exception:
+            continue
+        if op == "==" and not (count == v):
+            return False
+        elif op == ">=" and not (count >= v):
+            return False
+        elif op == "<=" and not (count <= v):
+            return False
+        elif op == ">" and not (count > v):
+            return False
+        elif op == "<" and not (count < v):
+            return False
+    return True
+
+
+def evaluate_rule(rule_doc: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    On-demand evaluation of an alert rule against recent detections.
+    Returns an alert_log dict if triggered, otherwise None.
+    """
+    if not rule_doc.get("enabled", True):
+        return None
+    rule = rule_doc.get("rule", {}) or {}
+    query = build_detection_query_from_rule(rule)
+    if "timestamp" not in query:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(minutes=30)
+        query["timestamp"] = {"$gte": start.isoformat(), "$lte": end.isoformat()}
+
+    docs = list(detections_col.find(query).sort("timestamp", -1).limit(500))
+    want_name = query.get("objects.object_name")
+    want_color = query.get("objects.color")
+    matched_count = 0
+    for d in docs:
+        for obj in d.get("objects", []):
+            if want_name and obj.get("object_name") != want_name:
+                continue
+            if want_color and obj.get("color") != want_color:
+                continue
+            matched_count += 1
+
+    if matches_count_condition(matched_count, rule.get("count")):
+        return {
+            "alert_id": rule_doc["_id"],
+            "triggered_at": _now_utc_iso(),
+            "camera_id": docs[0]["camera_id"] if docs else None,
+            "event_id": None,
+            "detection_ids": [str(d["_id"]) for d in docs[:10]],
+            "snapshot": None,
+            "clip": None,
+            "message": f"Rule '{rule_doc.get('name')}' matched count={matched_count}",
+        }
+    return None
+
 
 def _parse_local_time_window(rule_time: Optional[Dict[str, Any]]) -> Optional[Tuple[dtime, dtime, str]]:
     if not rule_time:
@@ -193,14 +351,18 @@ def evaluate_realtime(
     snapshot_url: Optional[str] = None,
     zone_counts: Optional[Dict[str, int]] = None,
 ) -> None:
+    rules = _load_active_rules()
+    if not rules:
+        return
 
     st = _PER_CAMERA[camera_id]
-    prev_gray = st.get("prev_gray")
     energy_hist = st.setdefault("energy_hist", deque(maxlen=60))
-
-    cur_gray, energy = _motion_energy(prev_gray, frame_bgr)
-    st["prev_gray"] = cur_gray
-    energy_hist.append(energy)
+    has_fight_rule = any(rd.get("rule", {}).get("behavior") == "fight" for rd in rules)
+    if has_fight_rule:
+        prev_gray = st.get("prev_gray")
+        cur_gray, energy = _motion_energy(prev_gray, frame_bgr)
+        st["prev_gray"] = cur_gray
+        energy_hist.append(energy)
 
     presence = defaultdict(int)
     for o in objects:
@@ -214,7 +376,7 @@ def evaluate_realtime(
     except Exception:
         now_dt = datetime.now(timezone.utc)
 
-    for rd in _load_active_rules():
+    for rd in rules:
         rid = str(rd["_id"])
         rule = rd.get("rule", {})
         cooldown = float(rd.get("cooldown_sec", 60))

@@ -3,8 +3,6 @@ import logging
 import numpy as np
 import datetime
 from ultralytics import YOLO
-from sklearn.cluster import KMeans
-from pymongo import MongoClient
 Core = None  # lazy import in ensure_openvino_loaded
 import math
 import os
@@ -21,12 +19,15 @@ except Exception:  # pragma: no cover
 from backend.app.services.frame_store import update_frame
 from backend.app.services.clip_builder import build_clip_from_snapshots
 from backend.app.services.sem_indexer import index_clip
-from backend.app.db.mongo import app_settings, tracks
+from backend.app.core.settings_reader import get_indexing_mode
+from pymongo import UpdateOne
+from backend.app.db.mongo import tracks, cameras as cameras_col, zones as zones_col, detections as detections_col
 from backend.app.services.visual_embedder import get_visual_embedder
 from backend.app.services.attribute_encoder import get_attribute_encoder
 from backend.app.services.person_store import get_person_store
 from backend.app.services.fusion import MultimodalFusion
 from backend.app.services.alert_engine import evaluate_realtime
+from backend.app.services.task_queue import submit as task_submit
 
 logger = logging.getLogger(__name__)
 
@@ -104,21 +105,13 @@ def to_numpy(x):
         return np.asarray(x)
 
 # =========================================
-# CONFIGURATION
+# CONFIGURATION (centralized via backend.app.config)
 # =========================================
-MODEL_PATH = os.getenv("MODEL_PATH", "yolo11m-seg.pt")   # YOLOv11 segmentation model for detection
-OPENVINO_MODEL_XML = os.getenv(
-    "OPENVINO_MODEL_XML",
-    "intel/person-attributes-recognition-crossroad-0238/FP32/person-attributes-recognition-crossroad-0238.xml"
-)
+MODEL_PATH = settings.MODEL_PATH
+OPENVINO_MODEL_XML = settings.OPENVINO_MODEL_XML
 CONF_THRESHOLD = 0.5
 NUM_CLUSTERS = 5
-MIN_PERSON_WIDTH_PIXELS = 60 # NEW: Minimum width of a person to trigger attribute recognition
-
-# MongoDB connection (use env; never hardcode secrets)
-mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-client = MongoClient(mongo_uri)
-db = client[os.getenv("MONGO_DB_NAME", "ai_surveillance")]
+MIN_PERSON_WIDTH_PIXELS = 60  # Minimum width of a person to trigger attribute recognition
 
 # Zones cache for crowd/ROI counts: camera_id -> (list of zone docs, cache_time)
 _ZONES_CACHE: Dict[int, Tuple[List[Dict[str, Any]], float]] = {}
@@ -127,9 +120,9 @@ _ZONES_CACHE_TTL_SEC = 60.0
 # =========================================
 # LOAD MODELS
 # =========================================
-print("🔄 Loading YOLOv11m-seg model...")
+logger.info("Loading YOLOv11m-seg model...")
 model = YOLO(MODEL_PATH)
-print("✅ YOLO model loaded successfully.")
+logger.info("YOLO model loaded successfully.")
 
 # Defer OpenVINO model loading until needed to avoid import-time crashes
 compiled_model = None
@@ -157,13 +150,13 @@ def ensure_openvino_loaded() -> bool:
         compiled_model = cm
         input_layer = compiled_model.input(0)
         output_layer = compiled_model.output(0)
-        print("✅ OpenVINO attributes model loaded successfully (lazy).")
+        logger.info("OpenVINO attributes model loaded successfully (lazy).")
         return True
     except Exception as e:
         compiled_model = None
         input_layer = None
         output_layer = None
-        print(f"⚠️ OpenVINO attributes model disabled (lazy): {e}")
+        logger.warning("OpenVINO attributes model disabled (lazy): %s", e)
         return False
 
 
@@ -271,34 +264,38 @@ def closest_color(rgb_color):
 
 
 def get_dominant_color(roi, mask, k=NUM_CLUSTERS):
-    """Extract dominant color from masked region using K-Means in LAB space."""
+    """Extract dominant color from masked region using histogram on quantized LAB (fast, no K-Means)."""
     if roi is None or roi.size == 0 or mask is None or mask.size == 0:
         return (0, 0, 0)
-    
     try:
         lab_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2LAB)
-        mask_bool = (mask > 0.5)
-        
+        mask_bool = mask.astype(bool) if mask.dtype != bool else (mask > 0.5)
         masked_pixels = lab_roi[mask_bool]
-        
-        if masked_pixels.shape[0] < k:
-            if masked_pixels.shape[0] == 0: return (0, 0, 0)
-            # Not enough pixels for clustering, find the mean color instead
+        n_pixels = masked_pixels.shape[0]
+        if n_pixels == 0:
+            return (0, 0, 0)
+        if n_pixels < 10:
             mean_lab = np.mean(masked_pixels, axis=0)
             lab_arr = np.array([[mean_lab]], dtype=np.uint8)
             rgb_color = cv2.cvtColor(lab_arr, cv2.COLOR_LAB2RGB)[0][0]
             return tuple(map(int, rgb_color))
-        
-        kmeans = KMeans(n_clusters=k, n_init=5, random_state=42)
-        kmeans.fit(masked_pixels)
-        
-        dominant_lab = kmeans.cluster_centers_[np.argmax(np.bincount(kmeans.labels_))]
-        lab_arr = np.array([[dominant_lab]], dtype=np.uint8)
+        # Quantize LAB into 8x8x8 bins; L in [0,255], A/B in [0,255] with 128 neutral
+        L, A, B = masked_pixels[:, 0], masked_pixels[:, 1], masked_pixels[:, 2]
+        qL = np.minimum(L // 32, 7)
+        qA = np.minimum(np.maximum(A.astype(np.int32) + 128, 0) // 32, 7)
+        qB = np.minimum(np.maximum(B.astype(np.int32) + 128, 0) // 32, 7)
+        flat_idx = (qL.astype(np.int32) * 64 + qA * 8 + qB).astype(np.int32)
+        hist = np.bincount(flat_idx, minlength=512)
+        dominant_bin = int(np.argmax(hist))
+        # Bin center back to LAB (uint8 for OpenCV: L 0-255, A/B 0-255)
+        Lc = min(255, dominant_bin // 64 * 32 + 16)
+        Ac = (dominant_bin // 8 % 8) * 32 + 16
+        Bc = (dominant_bin % 8) * 32 + 16
+        lab_arr = np.array([[[Lc, Ac, Bc]]], dtype=np.uint8)
         rgb_color = cv2.cvtColor(lab_arr, cv2.COLOR_LAB2RGB)[0][0]
-        
         return tuple(map(int, rgb_color))
     except Exception as e:
-        print(f"⚠️ Warning: K-Means or color conversion failed: {e}")
+        logger.warning("Histogram color extraction failed: %s", e)
         return (0, 0, 0)
 
 # =========================================
@@ -371,22 +368,93 @@ def get_person_attributes(person_roi, person_mask):
             "coat_jacket_confidence": round(float(sigmoid(attrs[6])), 2),
         }
     except Exception as e:
-        print(f"⚠️ Warning: Failed to get person attributes: {e}")
+        logger.warning("Failed to get person attributes: %s", e)
         return {}
+
+
+def get_person_attributes_batch(
+    person_rois: List[np.ndarray], person_masks: List[np.ndarray]
+) -> List[Dict[str, Any]]:
+    """
+    Batch infer person attributes for multiple ROIs in one OpenVINO call.
+    Returns a list of attribute dicts (same format as get_person_attributes), one per ROI.
+    """
+    if not person_rois or not person_masks:
+        return []
+    if not ensure_openvino_loaded() or compiled_model is None or output_layer is None:
+        return [{} for _ in person_rois]
+    try:
+        batch_arr: List[np.ndarray] = []
+        for roi, mask in zip(person_rois, person_masks):
+            if roi is None or roi.size == 0:
+                batch_arr.append(np.zeros((3, 160, 80), dtype=np.float32))
+                continue
+            mask_u8 = (mask * 255).astype(np.uint8) if mask.dtype != np.uint8 else mask
+            mask_3ch = cv2.cvtColor(mask_u8, cv2.COLOR_GRAY2BGR)
+            masked_roi = cv2.bitwise_and(roi, mask_3ch)
+            preprocessed = preprocess_for_attributes(masked_roi, target_size=(80, 160))
+            img = preprocessed.transpose((2, 0, 1)).astype(np.float32)
+            batch_arr.append(img)
+        batch = np.stack(batch_arr, axis=0).astype(np.float32)
+        preds = compiled_model([batch])[output_layer]
+        out: List[Dict[str, Any]] = []
+        for i in range(preds.shape[0]):
+            attrs = preds[i].flatten()
+            sigmoid = lambda x: 1 / (1 + np.exp(-x))
+            out.append({
+                "male_confidence": round(float(sigmoid(attrs[0])), 2),
+                "bag_confidence": round(float(sigmoid(attrs[1])), 2),
+                "hat_confidence": round(float(sigmoid(attrs[2])), 2),
+                "longhair_confidence": round(float(sigmoid(attrs[3])), 2),
+                "longpants_confidence": round(float(sigmoid(attrs[4])), 2),
+                "longsleeves_confidence": round(float(sigmoid(attrs[5])), 2),
+                "coat_jacket_confidence": round(float(sigmoid(attrs[6])), 2),
+            })
+        return out
+    except Exception as e:
+        logger.warning("Batch person attributes failed: %s", e)
+        return [{} for _ in person_rois]
+
+
+def _run_person_embeddings_async(
+    camera_id: int,
+    timestamp: str,
+    det_id_str: Optional[str],
+    person_rois: List[np.ndarray],
+    person_attr_texts: List[str],
+    person_meta: List[Dict[str, object]],
+) -> None:
+    """
+    Run in task queue: batch SigLIP + attribute encode, fuse, add to person FAISS.
+    Decouples embedding compute from the detection loop.
+    """
+    if not person_rois or not person_attr_texts or len(person_rois) != len(person_attr_texts):
+        return
+    try:
+        visual_encoder = get_visual_embedder()
+        attr_encoder = get_attribute_encoder()
+        fusion = MultimodalFusion(
+            visual_weight=getattr(settings, "FUSION_VISUAL_WEIGHT", 0.6),
+            text_weight=getattr(settings, "FUSION_TEXT_WEIGHT", 0.4),
+        )
+        person_index = get_person_store(dim=1152)
+        v_embs = visual_encoder.encode(person_rois)
+        t_embs = attr_encoder.encode_texts(person_attr_texts)
+        fused_vecs: List[np.ndarray] = []
+        for j in range(len(person_rois)):
+            v_vec = v_embs[j] if j < v_embs.shape[0] else np.zeros((768,), dtype=np.float32)
+            t_vec = t_embs[j] if j < t_embs.shape[0] else attr_encoder.encode_text(person_attr_texts[j])
+            fused_vecs.append(fusion.fuse(v_vec, t_vec).astype(np.float32))
+        arr = np.vstack(fused_vecs).astype(np.float32)
+        metas = [dict(m, detection_id=det_id_str) for m in person_meta]
+        person_index.vector_add(arr, metas, save=False)
+    except Exception as e:
+        logger.warning("Async person embeddings failed: %s", e)
 
 
 # =========================================
 # AUTO INDEXING HELPERS (VLM)
 # =========================================
-def _get_indexing_mode() -> str:
-    try:
-        doc = app_settings.find_one({"key": "indexing_mode"}, {"_id": 0, "value": 1})
-        val = (doc or {}).get("value")
-        return val if val in ("structured", "semantic", "both") else "both"
-    except Exception:
-        return "both"
-
-
 def _auto_build_and_index(camera_id: int, start_iso: str, end_iso: str, every_sec: float = 1.0) -> None:
     """
     Build a clip from snapshots between [start_iso, end_iso] and index it semantically.
@@ -394,7 +462,7 @@ def _auto_build_and_index(camera_id: int, start_iso: str, end_iso: str, every_se
     """
     try:
         # Respect runtime mode: skip semantic work if structured-only
-        if _get_indexing_mode() == "structured":
+        if get_indexing_mode() == "structured":
             return
         built = build_clip_from_snapshots(camera_id=camera_id, start_iso=start_iso, end_iso=end_iso, fps=5.0)
         index_clip(
@@ -406,7 +474,7 @@ def _auto_build_and_index(camera_id: int, start_iso: str, end_iso: str, every_se
         )
     except Exception as e:
         # Log to stdout; do not interrupt detection
-        print(f"⚠️ Auto VLM indexing failed for cam {camera_id} [{start_iso}..{end_iso}]: {e}")
+        logger.warning("Auto VLM indexing failed for cam %s [%s..%s]: %s", camera_id, start_iso, end_iso, e)
 
 
 # =========================================
@@ -428,12 +496,16 @@ class ThreadedFrameReader:
 
     def _run(self) -> None:
         while not self._stopped:
-            ret, frame = self._cap.read()
+            try:
+                ret, frame = self._cap.read()
+            except Exception:
+                break
+            if self._stopped:
+                break
             with self._lock:
                 self._ret = ret
                 self._frame = frame
             if ret:
-                # Push every captured frame to the MJPEG store immediately
                 try:
                     encode_ok, jpg = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
                     if encode_ok:
@@ -442,7 +514,7 @@ class ThreadedFrameReader:
                     pass
             else:
                 import time
-                time.sleep(0.01)  # Avoid busy-spin on read failure
+                time.sleep(0.01)
 
     def read(self):
         """Return the latest frame (non-blocking)."""
@@ -451,36 +523,19 @@ class ThreadedFrameReader:
 
     def stop(self) -> None:
         self._stopped = True
-        self._thread.join(timeout=3)
-
-    def release(self) -> None:
-        self.stop()
+        # Release the capture first to unblock any pending cap.read()
         try:
             self._cap.release()
         except Exception:
             pass
+        self._thread.join(timeout=2)
+
+    def release(self) -> None:
+        self.stop()
 
     def reopen(self, source, backend=None):
         """Release old cap, open a new one, restart reader thread."""
-        self.stop()
-        # If thread is still alive after stop() timeout, forcibly release
-        # the old capture to unblock any blocking cap.read() in _run.
-        if self._thread and self._thread.is_alive():
-            try:
-                self._cap.release()
-            except Exception:
-                pass
-            # Poll briefly for thread to exit after cap release
-            import time
-            for _ in range(10):
-                if not self._thread.is_alive():
-                    break
-                time.sleep(0.1)
-        else:
-            try:
-                self._cap.release()
-            except Exception:
-                pass
+        self.stop()  # sets _stopped, releases cap, joins thread
         if backend is not None:
             self._cap = cv2.VideoCapture(source, backend)
         else:
@@ -502,10 +557,10 @@ def process_live_stream(
     show_window: bool = False,
     stop_event: Optional[threading.Event] = None
 ):
-    global db
-    cameras_collection = db["cameras"]
-    detections_collection = db["detections"]
-    zones_collection = db["zones"]
+    # Use shared app DB layer (backend.app.db.mongo)
+    cameras_collection = cameras_col
+    detections_collection = detections_col
+    zones_collection = zones_col
 
     # Use DirectShow for local webcams on Windows to improve reliability
     if isinstance(source, int):
@@ -517,7 +572,7 @@ def process_live_stream(
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     if not cap.isOpened():
         msg = f"Cannot open camera source {source}"
-        print(f"❌ {msg}")
+        logger.error("%s", msg)
         try:
             cameras_collection.update_one(
                 {"camera_id": camera_id},
@@ -538,7 +593,7 @@ def process_live_stream(
         }},
         upsert=True
     )
-    print(f"✅ Camera {camera_id} registered in the database.")
+    logger.info("Camera %s registered in the database.", camera_id)
 
     fps = cap.get(cv2.CAP_PROP_FPS) or 30
     frame_interval = int(fps / 2) # Process 2 frames per second
@@ -568,7 +623,7 @@ def process_live_stream(
                 half=(device == "cuda"),
             )
         except Exception as e:
-            print(f"⚠️ BoTSORT disabled: {e}")
+            logger.warning("BoTSORT disabled: %s", e)
             tracker = None
 
     # In-memory track history across frames: track_id -> {first_seen, last_seen, frame_count}
@@ -581,17 +636,19 @@ def process_live_stream(
         window_sec = 15.0
     window_start_iso: Optional[str] = None
 
-    print(f"📹 Starting live detection on Camera {camera_id} at '{location}'...")
-    # Allow some tolerance for webcams/RTSP streams that may take a moment to provide frames
-    read_failures = 0
-    max_read_failures = 60  # ~2 seconds at 30fps (adjust as needed)
-    reconnect_attempts = 0
-    max_reconnects = 3  # Try reopening the stream up to 3 times
+    logger.info("Starting live detection on Camera %s at '%s'...", camera_id, location)
 
-    while True:
-        if stop_event is not None and stop_event.is_set():
-            print("🛑 Stop signal received.")
-            break
+    def _should_stop() -> bool:
+        return stop_event is not None and stop_event.is_set()
+
+    read_failures = 0
+    max_read_failures = 60
+    reconnect_attempts = 0
+    max_reconnects = 3
+    last_heartbeat_time = 0.0
+    last_person_save_time = 0.0
+
+    while not _should_stop():
         ret, frame = reader.read()
         if not ret or frame is None:
             read_failures += 1
@@ -599,20 +656,23 @@ def process_live_stream(
                 # For HTTP/MJPEG streams, try to reconnect before giving up
                 if isinstance(source, str) and reconnect_attempts < max_reconnects:
                     reconnect_attempts += 1
-                    print(f"🔄 Stream dropped. Reconnecting (attempt {reconnect_attempts}/{max_reconnects})...")
+                    logger.info("Stream dropped. Reconnecting (attempt %s/%s)...", reconnect_attempts, max_reconnects)
                     import time
-                    time.sleep(2)  # Wait before reconnecting
+                    for _ in range(20):
+                        if _should_stop():
+                            break
+                        time.sleep(0.1)
                     if reader.reopen(source, cv2.CAP_FFMPEG):
-                        print(f"✅ Reconnected to stream on attempt {reconnect_attempts}")
+                        logger.info("Reconnected to stream on attempt %s", reconnect_attempts)
                         read_failures = 0
                         continue
                     else:
-                        print(f"❌ Reconnect attempt {reconnect_attempts} failed")
+                        logger.warning("Reconnect attempt %s failed", reconnect_attempts)
                         read_failures = 0
                         continue
 
                 msg = f"No frames from source after {max_read_failures} attempts"
-                print(f"🔴 {msg}")
+                logger.error("%s", msg)
                 try:
                     cameras_collection.update_one(
                         {"camera_id": camera_id},
@@ -630,32 +690,42 @@ def process_live_stream(
             read_failures = 0
             reconnect_attempts = 0  # Reset reconnect counter on successful read
 
-        # Heartbeat: mark camera active and update last_seen on successful frame
-        try:
-            cameras_collection.update_one(
-                {"camera_id": camera_id},
-                {"$set": {"status": "active", "last_seen": datetime.datetime.now().isoformat(), "last_error": None}},
-                upsert=True,
-            )
-        except Exception:
-            pass
+        # Heartbeat: mark camera active and update last_seen (throttled to every 5s to reduce DB load)
+        import time as _time
+        now_ts = _time.time()
+        if now_ts - last_heartbeat_time >= 5.0:
+            try:
+                cameras_collection.update_one(
+                    {"camera_id": camera_id},
+                    {"$set": {"status": "active", "last_seen": datetime.datetime.now().isoformat(), "last_error": None}},
+                    upsert=True,
+                )
+                last_heartbeat_time = now_ts
+            except Exception:
+                pass
 
         # NOTE: Frame store update is handled by ThreadedFrameReader continuously.
         # No need to call update_frame() here — the reader thread does it at full FPS.
 
         if frame_count % frame_interval == 0:
-            # Run YOLO with or without external tracker
+            use_half = torch.cuda.is_available()
             if tracker is None:
-                results = model.track(frame, persist=True, conf=CONF_THRESHOLD, verbose=False)
+                results = model.track(frame, persist=True, conf=CONF_THRESHOLD, verbose=False, half=use_half)
             else:
-                results = model(frame)  # list of Results with .boxes and .masks
+                results = model(frame, half=use_half)
+            if _should_stop():
+                break
             timestamp = datetime.datetime.now().isoformat()
 
             doc = {"camera_id": camera_id, "timestamp": timestamp, "objects": []}
 
-            # Accumulate person-level embeddings to add after Mongo insert (to attach detection_id/object_index)
-            fused_vecs: List[np.ndarray] = []
-            fused_meta: List[Dict[str, object]] = []
+            # Collect person ROIs and attribute texts for async batch encoding (task queue)
+            person_rois: List[np.ndarray] = []
+            person_attr_texts: List[str] = []
+            person_meta: List[Dict[str, object]] = []
+            track_bulk_ops: List[Any] = []  # Batch track updates for bulk_write
+            # Defer batch OpenVINO: (roi, mask_roi, color_name, track_id, obj_index) for each person with width >= MIN
+            person_attr_defer: List[Tuple[np.ndarray, np.ndarray, str, int, int]] = []
 
             for r in results:
                 if r.masks is None or r.boxes is None:
@@ -779,9 +849,9 @@ def process_live_stream(
                                 st["frame_count"] = 1
                         track_state[tid] = st
                         obj["track_history"] = st
-                        # Persist per-track summary in Mongo (upsert)
-                        try:
-                            tracks.update_one(
+                        # Queue per-track update for batch bulk_write
+                        track_bulk_ops.append(
+                            UpdateOne(
                                 {"camera_id": int(camera_id), "track_id": tid},
                                 {
                                     "$setOnInsert": {"first_seen": st["first_seen"], "camera_id": int(camera_id)},
@@ -790,44 +860,27 @@ def process_live_stream(
                                 },
                                 upsert=True,
                             )
-                        except Exception:
-                            pass
+                        )
 
-                    # --- IMPROVEMENT: Quality filter based on OpenVINO docs ---
-                    # Only run attribute inference if the person is wide enough
-                    attributes: Dict[str, Any] = {}
+                    # --- IMPROVEMENT: Quality filter + batch OpenVINO ---
+                    # Only run attribute inference if the person is wide enough; batch inference after loop
                     if obj_name == "person":
                         person_width = x2 - x1
+                        obj_index = len(doc["objects"])
                         if person_width >= MIN_PERSON_WIDTH_PIXELS:
-                            attributes = get_person_attributes(roi, mask_roi)
-                            obj["person_attributes"] = attributes
+                            person_attr_defer.append((roi, mask_roi, color_name, int(track_id), obj_index))
+                            obj["person_attributes"] = {}  # Filled after batch inference
+                            obj["attribute_text"] = ""  # Filled after batch
+                            # person_rois / person_attr_texts / person_meta added after batch below
                         else:
-                            # Optionally, note that attributes were skipped
                             obj["person_attributes"] = {"status": "skipped_too_small"}
-
-                        # Build person-level fused embedding (SigLIP visual + attribute text)
-                        try:
-                            # Visual embedding from masked ROI
-                            # Ensure mask applies: keep ROI; mask already applied for attributes, but reuse raw roi for encoder
-                            v_emb = visual_encoder.encode([roi])
-                            if v_emb.shape[0] == 1:
-                                v_vec = v_emb[0]
-                            else:
-                                v_vec = np.zeros((768,), dtype=np.float32)
-
-                            # Attribute text + text embedding
-                            attr_text = attr_encoder.attributes_to_text(attributes or {}, color_name)
-                            t_vec = attr_encoder.encode_text(attr_text)
-
-                            # Fuse to 1152-dim vector
-                            f_vec = fusion.fuse(v_vec, t_vec)
-                            obj["attribute_text"] = attr_text  # optional for traceability
-
-                            # Defer add to person FAISS until we have detection_id
-                            fused_vecs.append(f_vec.astype(np.float32))
-                            fused_meta.append(
+                            attr_text = attr_encoder.attributes_to_text({}, color_name)
+                            obj["attribute_text"] = attr_text
+                            person_rois.append(roi)
+                            person_attr_texts.append(attr_text)
+                            person_meta.append(
                                 {
-                                    "object_index": len(doc["objects"]),  # current index before append
+                                    "object_index": obj_index,
                                     "camera_id": int(camera_id),
                                     "track_id": int(track_id),
                                     "timestamp": timestamp,
@@ -835,12 +888,42 @@ def process_live_stream(
                                     "attribute_text": attr_text,
                                 }
                             )
-                        except Exception as _ex:
-                            # Do not block detection on embedding errors
-                            pass
-
 
                     doc["objects"].append(obj)
+
+            # Batch OpenVINO attribute inference for deferred persons; then add them to person_rois/person_attr_texts/person_meta
+            if person_attr_defer:
+                rois_attr = [t[0] for t in person_attr_defer]
+                masks_attr = [t[1] for t in person_attr_defer]
+                batch_attrs = get_person_attributes_batch(rois_attr, masks_attr)
+                for j, (roi, _mask, color_name, track_id, obj_idx) in enumerate(person_attr_defer):
+                    if j < len(batch_attrs):
+                        doc["objects"][obj_idx]["person_attributes"] = batch_attrs[j]
+                    attr_text = attr_encoder.attributes_to_text(
+                        doc["objects"][obj_idx].get("person_attributes") or {}, color_name
+                    )
+                    doc["objects"][obj_idx]["attribute_text"] = attr_text
+                    person_rois.append(roi)
+                    person_attr_texts.append(attr_text)
+                    person_meta.append(
+                        {
+                            "object_index": obj_idx,
+                            "camera_id": int(camera_id),
+                            "track_id": track_id,
+                            "timestamp": timestamp,
+                            "color": color_name,
+                            "attribute_text": attr_text,
+                        }
+                    )
+
+            # Person embeddings are computed asynchronously in task queue (see below after insert)
+
+            # Batch persist track updates (one bulk_write per frame)
+            if track_bulk_ops:
+                try:
+                    tracks.bulk_write(track_bulk_ops)
+                except Exception:
+                    pass
 
             # Persist object count summaries for robust retrieval (e.g., no-person / multi-person queries)
             try:
@@ -887,7 +970,7 @@ def process_live_stream(
                     cv2.imwrite(str(snap_path), frame)
                     doc["snapshot"] = f"/media/snapshots/camera_{camera_id}/{snap_path.name}"
                 except Exception as e:
-                    print(f"⚠️ Warning: Failed to save snapshot: {e}")
+                    logger.warning("Failed to save snapshot: %s", e)
                 ins = detections_collection.insert_one(doc)
                 det_id = ins.inserted_id if ins is not None else None
 
@@ -905,18 +988,28 @@ def process_live_stream(
                     # Do not interrupt detection loop on alert evaluation errors
                     pass
 
-                # Flush person-level vectors to FAISS (with detection_id/object_index linkage)
+                # Run person embeddings in background task (SigLIP + fusion + FAISS add)
+                if person_rois:
+                    try:
+                        task_submit(
+                            _run_person_embeddings_async,
+                            int(camera_id),
+                            timestamp,
+                            str(det_id) if det_id is not None else None,
+                            [roi.copy() for roi in person_rois],
+                            list(person_attr_texts),
+                            [dict(m) for m in person_meta],
+                        )
+                    except Exception:
+                        pass
+                # Periodic persist of person index (background task also adds to same store)
                 try:
-                    if fused_vecs:
-                        arr = np.vstack(fused_vecs).astype(np.float32)
-                        metas = []
-                        for m in fused_meta:
-                            mi = dict(m)
-                            mi["detection_id"] = str(det_id) if det_id is not None else None
-                            metas.append(mi)
-                        person_index.vector_add(arr, metas, save=True)
+                    import time as _time
+                    now_ps = _time.time()
+                    if now_ps - last_person_save_time >= 30.0:
+                        person_index.save()
+                        last_person_save_time = now_ps
                 except Exception:
-                    # Ignore person-index failures; structured path must not be interrupted
                     pass
 
                 # Auto-index trigger: roll a short window into a clip and index semantically in background
@@ -929,12 +1022,8 @@ def process_live_stream(
                         now_dt = datetime.datetime.fromisoformat(timestamp)
                         start_dt = datetime.datetime.fromisoformat(window_start_iso)
                         if (now_dt - start_dt).total_seconds() >= window_sec:
-                            # Spawn background job so detection loop is not blocked
-                            threading.Thread(
-                                target=_auto_build_and_index,
-                                args=(camera_id, window_start_iso, timestamp, 1.0),
-                                daemon=True,
-                            ).start()
+                            # Spawn background job via bounded task queue (backpressure, error logging)
+                            task_submit(_auto_build_and_index, camera_id, window_start_iso, timestamp, 1.0)
                             # Start next window from current timestamp
                             window_start_iso = timestamp
                 except Exception as _e:
@@ -947,14 +1036,16 @@ def process_live_stream(
         # Removed cv2.imshow/waitKey to prevent crashes with opencv-python-headless
 
     
-    cameras_collection.update_one(
-        {"camera_id": camera_id},
-        {"$set": {"status": "inactive"}}
-    )
-    
+    logger.info("Camera %s loop exited, cleaning up...", camera_id)
+    try:
+        cameras_collection.update_one(
+            {"camera_id": camera_id},
+            {"$set": {"status": "inactive"}},
+        )
+    except Exception:
+        pass
     reader.release()
-    # Removed cv2.destroyAllWindows - requires GUI-enabled OpenCV
-    print(f"✅ Camera {camera_id} processing completed.")
+    logger.info("Camera %s processing completed.", camera_id)
 
 # =========================================
 if __name__ == "__main__":

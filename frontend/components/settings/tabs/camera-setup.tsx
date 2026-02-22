@@ -54,7 +54,7 @@ export function CameraSetup() {
   const canAdd = useMemo(() => cameraId !== "" && String(source).trim().length > 0, [cameraId, source]);
 
   const probeSource = async (src: string | number) => {
-    try { return await api.probeCamera(src, 3); }
+    try { return await api.probeCamera(src); }
     catch (e: any) { return { ok: false, message: e?.message || "Probe request failed" }; }
   };
 
@@ -66,7 +66,8 @@ export function CameraSetup() {
       const probe = await probeSource(source.trim());
       if (!probe.ok) { setErr(`Probe failed: ${probe.message}`); await load(); return; }
       setInfo("Probe OK: camera is reachable. Starting stream...");
-      await api.startCamera(Number(cameraId), { source: source.trim(), location: location.trim() || undefined, show_window: false });
+      // Already probed above — skip the backend's built-in preflight check
+      await api.startCamera(Number(cameraId), { source: source.trim(), location: location.trim() || undefined, show_window: false, check: false });
       await load(); setCameraId(""); setSource(""); setLocation(""); setInfo("Camera started successfully.");
     } catch (e: any) { setErr(e?.message || "Failed to add/start camera"); }
     finally { setProbingId(null); setSaving(false); }
@@ -77,7 +78,8 @@ export function CameraSetup() {
     try {
       setProbingId(id); const probe = await probeSource(src ?? id); setProbingId(null);
       if (!probe.ok) { setErr(`Probe failed: ${probe.message}`); return; }
-      await api.startCamera(id, { source: src, location: loc, show_window: false });
+      // Already probed above — skip the backend's built-in preflight check
+      await api.startCamera(id, { source: src, location: loc, show_window: false, check: false });
       await load(); setInfo(`Camera #${id} started.`);
     } catch (e: any) { setErr(e?.message || "Failed to start camera"); }
     finally { setStartingId(null); }

@@ -47,7 +47,8 @@ class VisualEmbedder:
         pil_imgs = [to_pil_rgb(arr) for arr in images]
         inputs = self.processor(images=pil_imgs, return_tensors="pt")
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
-        feats = self.model.get_image_features(**inputs)
+        with torch.cuda.amp.autocast(enabled=(self.device.type == "cuda")):
+            feats = self.model.get_image_features(**inputs)
         feats = feats / feats.norm(dim=-1, keepdim=True).clamp(min=1e-6)
         return feats.float().cpu().numpy().astype(np.float32)
 

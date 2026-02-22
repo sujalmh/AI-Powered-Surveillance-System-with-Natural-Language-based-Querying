@@ -443,6 +443,11 @@ class UnifiedRetrieval:
         cursor = cameras_col.find(cam_filter, {"_id": 0}).limit(int(limit))
         cameras = list(cursor)
 
+        try:
+            running_set = runner.running_cameras()
+        except Exception:
+            running_set = set()
+
         results: List[Dict[str, Any]] = []
         for c in cameras:
             raw_id = c.get("camera_id")
@@ -453,21 +458,14 @@ class UnifiedRetrieval:
                 except (TypeError, ValueError):
                     pass
             if cid is None:
-                # Malformed or missing camera_id: include doc with running=False so query doesn't crash
                 result = dict(c)
                 result["type"] = "camera_status"
                 result["running"] = False
                 results.append(result)
                 continue
-            running = False
-            try:
-                running = runner.is_running(cid)
-            except Exception:
-                # If runtime status fails, treat as not running but keep DB status
-                running = False
             result = dict(c)
             result["type"] = "camera_status"
-            result["running"] = running
+            result["running"] = cid in running_set
             results.append(result)
 
         return results
@@ -638,15 +636,13 @@ class UnifiedRetrieval:
             print(f"[UnifiedRetrieval] Initial query returned {len(results)} detection(s)")
             logger.debug(f"Initial query returned {len(results)} detection(s)")
 
-            # If query returned 0 results, try a diagnostic fallback query to see if ANY detections exist
-            if len(results) == 0:
-                # Build a broader diagnostic query (remove object filter, keep time/camera)
+            # If query returned 0 results and DEBUG is on, run diagnostic fallback query (avoid extra DB hit in production)
+            if settings.DEBUG and len(results) == 0:
                 diagnostic_filter: Dict[str, Any] = {}
                 if "timestamp" in mongo_filter:
                     diagnostic_filter["timestamp"] = mongo_filter["timestamp"]
                 if "camera_id" in mongo_filter:
                     diagnostic_filter["camera_id"] = mongo_filter["camera_id"]
-                
                 if diagnostic_filter:
                     try:
                         diagnostic_cursor = detections_col.find(
@@ -654,32 +650,19 @@ class UnifiedRetrieval:
                             {"_id": 0, "timestamp": 1, "camera_id": 1, "objects.object_name": 1}
                         ).sort("timestamp", -1).limit(5)
                         diagnostic_results = list(diagnostic_cursor)
-                        
                         if diagnostic_results:
-                            print(f"[UnifiedRetrieval] DIAGNOSTIC: Found {len(diagnostic_results)} detection(s) without object filter")
-                            logger.warning(f"DIAGNOSTIC: Found {len(diagnostic_results)} detection(s) without object filter")
-                            # Log sample object names found
+                            logger.warning("DIAGNOSTIC: Found %s detection(s) without object filter", len(diagnostic_results))
                             obj_names_found = set()
                             for d in diagnostic_results:
                                 for obj in d.get("objects", []):
-                                    if isinstance(obj, dict):
-                                        obj_name = obj.get("object_name")
-                                        if obj_name:
-                                            obj_names_found.add(str(obj_name))
+                                    if isinstance(obj, dict) and obj.get("object_name"):
+                                        obj_names_found.add(str(obj["object_name"]))
                             if obj_names_found:
-                                print(f"[UnifiedRetrieval] DIAGNOSTIC: Object names found in DB: {sorted(obj_names_found)}")
-                                logger.warning(f"DIAGNOSTIC: Object names found in DB: {sorted(obj_names_found)}")
-                            # Log sample timestamps
-                            sample_timestamps = [d.get("timestamp") for d in diagnostic_results[:3] if d.get("timestamp")]
-                            if sample_timestamps:
-                                print(f"[UnifiedRetrieval] DIAGNOSTIC: Sample timestamps in DB: {sample_timestamps}")
-                                logger.warning(f"DIAGNOSTIC: Sample timestamps in DB: {sample_timestamps}")
+                                logger.warning("DIAGNOSTIC: Object names in DB: %s", sorted(obj_names_found))
                         else:
-                            print("[UnifiedRetrieval] DIAGNOSTIC: No detections found even without object filter (time/camera only)")
-                            logger.warning("DIAGNOSTIC: No detections found even without object filter (time/camera only)")
+                            logger.warning("DIAGNOSTIC: No detections without object filter (time/camera only)")
                     except Exception as diag_err:
-                        print(f"[UnifiedRetrieval] DIAGNOSTIC query failed: {diag_err}")
-                        logger.error(f"DIAGNOSTIC query failed: {diag_err}")
+                        logger.error("DIAGNOSTIC query failed: %s", diag_err)
 
             # Strictly enforce count constraints in-memory.
             results = self._filter_docs_by_count_constraint(results, parsed_filter)
@@ -1205,40 +1188,41 @@ class UnifiedRetrieval:
             return results
         
         try:
+            clip_keys = [
+                (r.get("camera_id"), r.get("clip_path"))
+                for r in results
+                if r.get("clip_path") and r.get("camera_id") is not None
+            ]
+            if not clip_keys:
+                return results
+            # Deduplicate for query
+            unique_keys = list(dict.fromkeys(clip_keys))
+            or_conditions = [{"camera_id": cam, "clip_path": cp} for cam, cp in unique_keys]
+            vlm_cursor = vlm_frames_col.find(
+                {"$or": or_conditions},
+                {"_id": 0, "camera_id": 1, "clip_path": 1, "caption": 1, "object_captions": 1, "frame_index": 1, "frame_ts": 1},
+            ).limit(100)
+            vlm_all = list(vlm_cursor)
+            # Group by (camera_id, clip_path), keep first 10 frames per clip
+            by_key: Dict[Tuple[Any, Any], List[Dict[str, Any]]] = defaultdict(list)
+            for d in vlm_all:
+                key = (d.get("camera_id"), d.get("clip_path"))
+                if len(by_key[key]) < 10:
+                    by_key[key].append(d)
             for result in results:
                 cam_id = result.get("camera_id")
                 clip_path = result.get("clip_path")
-                
-                # Skip if no clip_path or camera_id
                 if not clip_path or cam_id is None:
                     continue
-                
-                # Query vlm_frames for this clip
-                vlm_docs = list(vlm_frames_col.find(
-                    {
-                        "camera_id": cam_id,
-                        "clip_path": clip_path
-                    },
-                    {
-                        "_id": 0,
-                        "caption": 1,
-                        "object_captions": 1,
-                        "frame_index": 1,
-                        "frame_ts": 1
-                    }
-                ).limit(10))  # Limit to first 10 frames
-                
+                vlm_docs = by_key.get((cam_id, clip_path), [])
                 if vlm_docs:
                     result["vlm_frames"] = vlm_docs
-                    # Add main caption from first frame if available
                     if vlm_docs and vlm_docs[0].get("caption"):
                         result["scene_caption"] = vlm_docs[0]["caption"]
-            
             enriched_count = sum(1 for r in results if r.get("vlm_frames"))
             if enriched_count > 0:
                 print(f"[UnifiedRetrieval] Enriched {enriched_count} results with VLM frame data")
                 logger.debug(f"Enriched {enriched_count} results with VLM frame data")
-                
         except Exception as e:
             print(f"[UnifiedRetrieval] Error enriching VLM frames: {e}")
             logger.error(f"Error enriching VLM frames: {e}")

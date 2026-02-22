@@ -11,6 +11,7 @@ from pathlib import Path
 import shutil
 
 from backend.app.config import settings
+from backend.app.core.async_utils import run_sync
 from backend.app.services.frame_store import mjpeg_generator
 from backend.app.services.sem_indexer import index_clip
 from backend.app.db.mongo import vlm_frames, cameras as cameras_col
@@ -66,27 +67,33 @@ def _walk_media(root_dir: str, base_url: str, prefix: Optional[str] = None, limi
 
 
 @router.get("/recordings", response_model=List[MediaItem])
-def list_recordings(prefix: Optional[str] = Query(None, description="relative path prefix filter"), limit: int = Query(200, ge=1, le=1000)) -> List[MediaItem]:
-    try:
-        return _walk_media(str(settings.RECORDINGS_DIR), "/media/recordings", prefix=prefix, limit=limit)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to list recordings: {e}") from e
+async def list_recordings(prefix: Optional[str] = Query(None, description="relative path prefix filter"), limit: int = Query(200, ge=1, le=1000)) -> List[MediaItem]:
+    def _block():
+        try:
+            return _walk_media(str(settings.RECORDINGS_DIR), "/media/recordings", prefix=prefix, limit=limit)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to list recordings: {e}") from e
+    return await run_sync(_block)
 
 
 @router.get("/clips", response_model=List[MediaItem])
-def list_clips(prefix: Optional[str] = Query(None, description="relative path prefix filter"), limit: int = Query(200, ge=1, le=1000)) -> List[MediaItem]:
-    try:
-        return _walk_media(str(settings.CLIPS_DIR), "/media/clips", prefix=prefix, limit=limit)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to list clips: {e}") from e
+async def list_clips(prefix: Optional[str] = Query(None, description="relative path prefix filter"), limit: int = Query(200, ge=1, le=1000)) -> List[MediaItem]:
+    def _block():
+        try:
+            return _walk_media(str(settings.CLIPS_DIR), "/media/clips", prefix=prefix, limit=limit)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to list clips: {e}") from e
+    return await run_sync(_block)
 
 
 @router.get("/snapshots", response_model=List[MediaItem])
-def list_snapshots(prefix: Optional[str] = Query(None, description="relative path prefix filter"), limit: int = Query(200, ge=1, le=1000)) -> List[MediaItem]:
-    try:
-        return _walk_media(str(settings.SNAPSHOTS_DIR), "/media/snapshots", prefix=prefix, limit=limit)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to list snapshots: {e}") from e
+async def list_snapshots(prefix: Optional[str] = Query(None, description="relative path prefix filter"), limit: int = Query(200, ge=1, le=1000)) -> List[MediaItem]:
+    def _block():
+        try:
+            return _walk_media(str(settings.SNAPSHOTS_DIR), "/media/snapshots", prefix=prefix, limit=limit)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to list snapshots: {e}") from e
+    return await run_sync(_block)
 
 
 @router.get("/stream/{camera_id}")
@@ -106,27 +113,21 @@ def stream_mjpeg(
 
 
 @router.get("/latest/{camera_id}")
-def latest_jpeg(
-    camera_id: int,
-) -> Response:
-    """
-    Return the latest available JPEG frame as a single image for the given camera.
-    Useful as a fallback when MJPEG streaming isn't supported by the client.
-    """
-    from backend.app.services.frame_store import get_latest  # local import to avoid circulars
+async def latest_jpeg(camera_id: int) -> Response:
+    """Return the latest available JPEG frame for the camera (fallback when MJPEG not supported)."""
 
-    item = get_latest(camera_id)
-    if not item:
-        # return a 204 No Content if no frame yet
-        return Response(status_code=204)
-
-    jpg_bytes, _ = item
-    headers = {
-        "Cache-Control": "no-store, max-age=0",
-        "Pragma": "no-cache",
-        "Expires": "0",
-    }
-    return Response(content=jpg_bytes, media_type="image/jpeg", headers=headers)
+    def _block():
+        from backend.app.services.frame_store import get_latest
+        item = get_latest(camera_id)
+        if not item:
+            return Response(status_code=204)
+        jpg_bytes, _ = item
+        return Response(
+            content=jpg_bytes,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "no-store, max-age=0", "Pragma": "no-cache", "Expires": "0"},
+        )
+    return await run_sync(_block)
 
 @router.post("/upload")
 async def upload_clip(
@@ -218,17 +219,16 @@ async def upload_clip(
         raise HTTPException(status_code=500, detail=f"upload/index failed: {e}") from e
 
 @router.get("/frames")
-def list_clip_frames(
+async def list_clip_frames(
     clip_path: str,
     limit: int = Query(500, ge=1, le=5000),
     enrich: Optional[str] = Query(None, description="optional enrichment: 'yolo' to compute objects on-the-fly"),
 ) -> List[Dict[str, Any]]:
-    """
-    Return frame-level metadata stored for a given clip_path from the semantic index (vlm_frames).
-    Fields include: camera_id, clip_path, clip_url, frame_ts, frame_index, model, caption, hash.
-    """
-    try:
-        cur = vlm_frames.find(
+    """Return frame-level metadata for a clip from the semantic index (vlm_frames)."""
+
+    def _block():
+        try:
+            cur = vlm_frames.find(
             {"clip_path": clip_path},
             {
                 "_id": 0,
@@ -243,115 +243,116 @@ def list_clip_frames(
                 "hash": 1,
                 "embedding_dim": 1,
             },
-        ).sort("frame_index", 1).limit(int(limit))
-        docs = list(cur)
+            ).sort("frame_index", 1).limit(int(limit))
+            docs = list(cur)
 
-        # Best-effort enrichment: if object_captions are missing, compose from detections near frame_ts
-        try:
-            from backend.app.db.mongo import detections as _detections  # local import
-        except Exception:
-            _detections = None  # type: ignore
+            # Best-effort enrichment: if object_captions are missing, compose from detections near frame_ts
+            try:
+                from backend.app.db.mongo import detections as _detections  # local import
+            except Exception:
+                _detections = None  # type: ignore
 
-        if _detections is not None:
-            for d in docs:
-                if d.get("object_captions"):
-                    continue
-                ts = d.get("frame_ts")
-                cam = d.get("camera_id")
-                if not ts or cam is None:
-                    continue
-                try:
-                    dt = datetime.fromisoformat(str(ts))
-                    window = timedelta(seconds=3)
-                    q = {
-                        "camera_id": int(cam),
-                        "timestamp": {"$gte": (dt - window).isoformat(), "$lte": (dt + window).isoformat()},
-                    }
-                    dd = list(_detections.find(q, {"_id": 0, "objects": 1}).limit(10))
-                    out: List[str] = []
-                    for di in dd:
-                        for o in (di.get("objects") or []):
-                            name = str(o.get("object_name") or "").strip().lower()
-                            if not name:
-                                continue
-                            if name == "person":
-                                color = str(o.get("color") or "").strip()
-                                acc = o.get("person_attributes") or {}
-                                parts: List[str] = ["person"]
-                                if color and color.lower() != "unknown":
-                                    parts.append(f"wearing {color.lower()} clothing")
-                                if acc.get("hat_confidence", 0.0) > 0.5:
-                                    parts.append("hat")
-                                if acc.get("bag_confidence", 0.0) > 0.5:
-                                    parts.append("carrying bag")
-                                if acc.get("longsleeves_confidence", 0.0) > 0.5:
-                                    parts.append("long sleeves")
-                                if acc.get("longpants_confidence", 0.0) > 0.5:
-                                    parts.append("long pants")
-                                if acc.get("coat_jacket_confidence", 0.0) > 0.5:
-                                    parts.append("coat/jacket")
-                                out.append(", ".join(parts))
-                            else:
-                                out.append(name)
+            if _detections is not None:
+                for d in docs:
+                    if d.get("object_captions"):
+                        continue
+                    ts = d.get("frame_ts")
+                    cam = d.get("camera_id")
+                    if not ts or cam is None:
+                        continue
+                    try:
+                        dt = datetime.fromisoformat(str(ts))
+                        window = timedelta(seconds=3)
+                        q = {
+                            "camera_id": int(cam),
+                            "timestamp": {"$gte": (dt - window).isoformat(), "$lte": (dt + window).isoformat()},
+                        }
+                        dd = list(_detections.find(q, {"_id": 0, "objects": 1}).limit(10))
+                        out: List[str] = []
+                        for di in dd:
+                            for o in (di.get("objects") or []):
+                                name = str(o.get("object_name") or "").strip().lower()
+                                if not name:
+                                    continue
+                                if name == "person":
+                                    color = str(o.get("color") or "").strip()
+                                    acc = o.get("person_attributes") or {}
+                                    parts: List[str] = ["person"]
+                                    if color and color.lower() != "unknown":
+                                        parts.append(f"wearing {color.lower()} clothing")
+                                    if acc.get("hat_confidence", 0.0) > 0.5:
+                                        parts.append("hat")
+                                    if acc.get("bag_confidence", 0.0) > 0.5:
+                                        parts.append("carrying bag")
+                                    if acc.get("longsleeves_confidence", 0.0) > 0.5:
+                                        parts.append("long sleeves")
+                                    if acc.get("longpants_confidence", 0.0) > 0.5:
+                                        parts.append("long pants")
+                                    if acc.get("coat_jacket_confidence", 0.0) > 0.5:
+                                        parts.append("coat/jacket")
+                                    out.append(", ".join(parts))
+                                else:
+                                    out.append(name)
+                                if len(out) >= 20:
+                                    break
                             if len(out) >= 20:
                                 break
-                        if len(out) >= 20:
-                            break
-                    if out:
-                        d["object_captions"] = out
-                except Exception:
-                    continue
+                        if out:
+                            d["object_captions"] = out
+                    except Exception:
+                        continue
 
-        # Optional YOLO enrichment if requested and object_captions still missing
-        if enrich == "yolo" and cv2 is not None and _API_YOLO is not None:
-            try:
-                model = _API_YOLO(settings.MODEL_PATH)
-            except Exception:
-                model = None
-            if model is not None:
+            # Optional YOLO enrichment if requested and object_captions still missing
+            if enrich == "yolo" and cv2 is not None and _API_YOLO is not None:
                 try:
-                    cap = cv2.VideoCapture(clip_path)
-                    if cap and cap.isOpened():
-                        for d in docs:
-                            if d.get("object_captions"):
-                                continue
-                            idx = d.get("frame_index")
-                            if idx is None:
-                                continue
-                            try:
-                                cap.set(cv2.CAP_PROP_POS_FRAMES, int(idx))
-                                ok, frame = cap.read()
-                                if not ok or frame is None:
+                    model = _API_YOLO(settings.MODEL_PATH)
+                except Exception:
+                    model = None
+                if model is not None:
+                    try:
+                        cap = cv2.VideoCapture(clip_path)
+                        if cap and cap.isOpened():
+                            for d in docs:
+                                if d.get("object_captions"):
                                     continue
-                                names: List[str] = []
-                                res = model(frame)
-                                for r in res:
-                                    if getattr(r, "boxes", None) is None:
+                                idx = d.get("frame_index")
+                                if idx is None:
+                                    continue
+                                try:
+                                    cap.set(cv2.CAP_PROP_POS_FRAMES, int(idx))
+                                    ok, frame = cap.read()
+                                    if not ok or frame is None:
                                         continue
-                                    cls = r.boxes.cls.cpu().numpy() if hasattr(r.boxes, "cls") else []
-                                    for c in cls:
-                                        try:
-                                            nm = str(r.names[int(c)]) if hasattr(r, "names") else None
-                                        except Exception:
-                                            nm = None
-                                        if nm:
-                                            names.append(str(nm).lower())
+                                    names: List[str] = []
+                                    res = model(frame)
+                                    for r in res:
+                                        if getattr(r, "boxes", None) is None:
+                                            continue
+                                        cls = r.boxes.cls.cpu().numpy() if hasattr(r.boxes, "cls") else []
+                                        for c in cls:
+                                            try:
+                                                nm = str(r.names[int(c)]) if hasattr(r, "names") else None
+                                            except Exception:
+                                                nm = None
+                                            if nm:
+                                                names.append(str(nm).lower())
+                                            if len(names) >= 20:
+                                                break
                                         if len(names) >= 20:
                                             break
-                                    if len(names) >= 20:
-                                        break
-                                if names:
-                                    d["object_captions"] = names
+                                    if names:
+                                        d["object_captions"] = names
+                                except Exception:
+                                    continue
+                        if cap:
+                            try:
+                                cap.release()
                             except Exception:
-                                continue
-                    if cap:
-                        try:
-                            cap.release()
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
+                                pass
+                    except Exception:
+                        pass
 
-        return docs
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"failed to fetch frames: {e}") from e
+            return docs
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"failed to fetch frames: {e}") from e
+    return await run_sync(_block)

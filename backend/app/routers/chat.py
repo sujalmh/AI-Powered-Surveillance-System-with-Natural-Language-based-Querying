@@ -19,6 +19,7 @@ _ALERT_RETRIEVAL_RE = re.compile(
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from backend.app.core.async_utils import run_sync
 from backend.app.db.mongo import chat_messages as chat_col, detections as detections_col, alerts as alerts_col
 import logging
 
@@ -465,168 +466,154 @@ def _maybe_create_alert_from_nl(nl: str, parsed: Dict[str, Any]) -> Optional[Dic
 
 
 @router.get("/history", response_model=ChatHistoryResponse)
-def history(session_id: str) -> ChatHistoryResponse:
-    try:
-        msgs = list(chat_col.find({"session_id": session_id}, {"_id": 0}).sort("created_at", 1))
-        # Ensure required fields
-        messages = [
-            ChatMessage(
-                role=m.get("role", "assistant"),
-                content=m.get("content", ""),
-                created_at=m.get("created_at", iso_now()),
-                payload=m.get("payload"),
-            )
-            for m in msgs
-        ]
-        return ChatHistoryResponse(session_id=session_id, messages=messages)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to load chat history: {e}") from e
+async def history(session_id: str) -> ChatHistoryResponse:
+    def _block():
+        try:
+            msgs = list(chat_col.find({"session_id": session_id}, {"_id": 0}).sort("created_at", 1))
+            messages = [
+                ChatMessage(
+                    role=m.get("role", "assistant"),
+                    content=m.get("content", ""),
+                    created_at=m.get("created_at", iso_now()),
+                    payload=m.get("payload"),
+                )
+                for m in msgs
+            ]
+            return ChatHistoryResponse(session_id=session_id, messages=messages)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to load chat history: {e}") from e
+    return await run_sync(_block)
 
 
 @router.get("/sessions", response_model=List[ChatSession])
-def sessions(limit: int = 20) -> List[ChatSession]:
-    """
-    Return recent chat sessions with last message and count.
-    Optimized to use MongoDB aggregation.
-    """
-    try:
-        pipeline = [
-            {"$sort": {"created_at": -1}},
-            {
-                "$group": {
-                    "_id": "$session_id",
-                    "last_message": {"$first": "$content"},
-                    "last_message_time": {"$first": "$created_at"},
-                    "message_count": {"$sum": 1}
-                }
-            },
-            {"$sort": {"last_message_time": -1}},
-            {"$limit": limit},
-            {
-                "$project": {
-                    "_id": 0,
-                    "session_id": "$_id",
-                    "last_message": 1,
-                    "last_message_time": 1,
-                    "message_count": 1
-                }
-            }
-        ]
-        docs = list(chat_col.aggregate(pipeline))
-        return [ChatSession(**d) for d in docs]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to list chat sessions: {e}") from e
+async def sessions(limit: int = 20) -> List[ChatSession]:
+    """Return recent chat sessions with last message and count (MongoDB aggregation)."""
+
+    def _block():
+        try:
+            pipeline = [
+                {"$sort": {"created_at": -1}},
+                {"$group": {"_id": "$session_id", "last_message": {"$first": "$content"}, "last_message_time": {"$first": "$created_at"}, "message_count": {"$sum": 1}}},
+                {"$sort": {"last_message_time": -1}},
+                {"$limit": limit},
+                {"$project": {"_id": 0, "session_id": "$_id", "last_message": 1, "last_message_time": 1, "message_count": 1}},
+            ]
+            docs = list(chat_col.aggregate(pipeline))
+            return [ChatSession(**d) for d in docs]
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to list chat sessions: {e}") from e
+    return await run_sync(_block)
 
 
 @router.post("/send", response_model=ChatSendResponse)
-def send(req: ChatSendRequest) -> ChatSendResponse:
-    try:
-        from backend.app.services.nl_parser import parse_nl_with_llm
-        from backend.app.services.unified_retrieval import UnifiedRetrieval
-        
-        logger.info("Received chat request. Session: %s, Message length: %d", req.session_id, len(req.message))
-        logger.debug("Full message payload omitted for PII; session: %s", req.session_id)
-        # Save user message
-        save_message(req.session_id, "user", req.message, None)
+async def send(req: ChatSendRequest) -> ChatSendResponse:
+    def _block():
+        try:
+            from backend.app.services.nl_parser import parse_nl_with_llm
+            from backend.app.services.unified_retrieval import UnifiedRetrieval
 
-        # Parse NL with LLM (structured) if no override provided; fallback to regex parser
-        if req.filter_override is not None:
-            parsed = req.filter_override
-        else:
-            try:
-                parsed = parse_nl_with_llm(req.message)
-                logger.info("LLM parsed query: %s", parsed)
-            except Exception as e:
-                logger.warning("LLM parsing failed: %s. Falling back to regex parser.", e, exc_info=True)
-                parsed = parse_simple_nl_to_filter(req.message)
-                logger.info("Regex parsed query: %s", parsed)
+            logger.info("Received chat request. Session: %s, Message length: %d", req.session_id, len(req.message))
+            logger.debug("Full message payload omitted for PII; session: %s", req.session_id)
+            # Save user message
+            save_message(req.session_id, "user", req.message, None)
 
-        # If LLM suggested a relative window and absolute timestamp not provided, expand to [now-last_minutes, now]
-        # Use UTC to keep timestamps consistent across services
-        tsf = parsed.get("timestamp")
-        # Check that tsf is a dict and contains $gte or $lte keys (empty dict is falsy in Python)
-        has_absolute_ts = isinstance(tsf, dict) and (tsf.get("$gte") or tsf.get("$lte"))
-        if "__last_minutes" in parsed and not has_absolute_ts:
-            try:
-                minutes = int(parsed["__last_minutes"])
+            # Parse NL with LLM (structured) if no override provided; fallback to regex parser
+            if req.filter_override is not None:
+                parsed = req.filter_override
+            else:
+                try:
+                    parsed = parse_nl_with_llm(req.message)
+                    logger.info("LLM parsed query: %s", parsed)
+                except Exception as e:
+                    logger.warning("LLM parsing failed: %s. Falling back to regex parser.", e, exc_info=True)
+                    parsed = parse_simple_nl_to_filter(req.message)
+                    logger.info("Regex parsed query: %s", parsed)
+
+            # If LLM suggested a relative window and absolute timestamp not provided, expand to [now-last_minutes, now]
+            # Use UTC to keep timestamps consistent across services
+            tsf = parsed.get("timestamp")
+            # Check that tsf is a dict and contains $gte or $lte keys (empty dict is falsy in Python)
+            has_absolute_ts = isinstance(tsf, dict) and (tsf.get("$gte") or tsf.get("$lte"))
+            if "__last_minutes" in parsed and not has_absolute_ts:
+                try:
+                    minutes = int(parsed["__last_minutes"])
+                    now = datetime.now(timezone.utc)
+                    start = now - timedelta(minutes=minutes)
+                    parsed["timestamp"] = {"$gte": start.isoformat(), "$lte": now.isoformat()}
+                except Exception as e:
+                    logger.debug("Failed to parse __last_minutes value %r: %s", parsed.get("__last_minutes"), e, exc_info=True)
+
+            # Default time window: if no time filter at all, default to last 24 hours (UTC)
+            if "timestamp" not in parsed and "__last_minutes" not in parsed:
                 now = datetime.now(timezone.utc)
-                start = now - timedelta(minutes=minutes)
+                start = now - timedelta(hours=24)
                 parsed["timestamp"] = {"$gte": start.isoformat(), "$lte": now.isoformat()}
-            except Exception as e:
-                logger.debug("Failed to parse __last_minutes value %r: %s", parsed.get("__last_minutes"), e, exc_info=True)
+                parsed["__last_minutes"] = 1440
 
-        # Default time window: if no time filter at all, default to last 24 hours (UTC)
-        if "timestamp" not in parsed and "__last_minutes" not in parsed:
-            now = datetime.now(timezone.utc)
-            start = now - timedelta(hours=24)
-            parsed["timestamp"] = {"$gte": start.isoformat(), "$lte": now.isoformat()}
-            parsed["__last_minutes"] = 1440
+            # Execute unified hybrid retrieval
+            logger.info("Starting unified hybrid retrieval...")
+            retrieval = UnifiedRetrieval()
+            semantic_query = parsed.get("__semantic_query", req.message)
+            
+            search_result = retrieval.search(
+                parsed_filter=parsed,
+                semantic_query=semantic_query,
+                limit=req.limit
+            )
+            logger.info("Retrieval complete. Metadata: %s", search_result.get("metadata"))
+            
+            results = search_result["results"]
+            answer = search_result["answer"]
+            metadata = search_result.get("metadata")
+            if not isinstance(metadata, dict):
+                metadata = {}
 
-        # Execute unified hybrid retrieval
-        logger.info("Starting unified hybrid retrieval...")
-        retrieval = UnifiedRetrieval()
-        semantic_query = parsed.get("__semantic_query", req.message)
-        
-        search_result = retrieval.search(
-            parsed_filter=parsed,
-            semantic_query=semantic_query,
-            limit=req.limit
-        )
-        logger.info("Retrieval complete. Metadata: %s", search_result.get("metadata"))
-        
-        results = search_result["results"]
-        answer = search_result["answer"]
-        metadata = search_result.get("metadata")
-        if not isinstance(metadata, dict):
-            metadata = {}
+            # Maybe create alert from NL — only if parsed intent suggests creation
+            alert_info = None
+            parsed_intent = parsed.get("__intent", "")
+            parsed_subtype = parsed.get("__query_subtype", "")
+            if parsed_intent in ("create", "update", "delete", "") or parsed_subtype in ("alerts", ""):
+                alert_info = _maybe_create_alert_from_nl(req.message, parsed)
 
-        # Maybe create alert from NL — only if parsed intent suggests creation
-        alert_info = None
-        parsed_intent = parsed.get("__intent", "")
-        parsed_subtype = parsed.get("__query_subtype", "")
-        if parsed_intent in ("create", "update", "delete", "") or parsed_subtype in ("alerts", ""):
-            alert_info = _maybe_create_alert_from_nl(req.message, parsed)
+            # Save assistant message (compact payload — store count + preview IDs, not full results)
+            result_ids = [
+                r.get("_id") or r.get("clip_url") or r.get("track_id")
+                for r in results[:5]
+            ]
+            save_message(
+                req.session_id,
+                "assistant",
+                answer,
+                {
+                    "session_id": req.session_id,
+                    "parsed_filter": parsed,
+                    "results_count": len(results),
+                    "results_preview": result_ids,
+                    "metadata": metadata,
+                    "answer": answer,
+                },
+            )
 
-        # Save assistant message (compact payload — store count + preview IDs, not full results)
-        result_ids = [
-            r.get("_id") or r.get("clip_url") or r.get("track_id")
-            for r in results[:5]
-        ]
-        save_message(
-            req.session_id,
-            "assistant",
-            answer,
-            {
+            # Build response compatible with frontend expectations
+            response_data = {
                 "session_id": req.session_id,
                 "parsed_filter": parsed,
-                "results_count": len(results),
-                "results_preview": result_ids,
-                "metadata": metadata,
+                "results": results,  # Unified results with clip_url
                 "answer": answer,
-            },
-        )
-
-        # Build response compatible with frontend expectations
-        response_data = {
-            "session_id": req.session_id,
-            "parsed_filter": parsed,
-            "results": results,  # Unified results with clip_url
-            "answer": answer,
-            "metadata": metadata,
-            "alert_created": alert_info,
-        }
-        
-        # Add fields expected by frontend for video display
-        # Frontend checks for semantic_results and mode fields
-        query_type = metadata.get("query_type", "visual")
-        has_action = parsed.get("action") is not None
-        
-        if has_action or query_type == "visual":
-            # For visual queries, expose results as semantic_results for proper rendering
-            response_data["semantic_results"] = results
-            response_data["mode"] = "unstructured" if has_action else "hybrid"
-        
+                "metadata": metadata,
+                "alert_created": alert_info,
+            }
+            
+            # Add fields expected by frontend for video display
+            # Frontend checks for semantic_results and mode fields
+            query_type = metadata.get("query_type", "visual")
+            has_action = parsed.get("action") is not None
+            
+            if has_action or query_type == "visual":
+                response_data["semantic_results"] = results
+                response_data["mode"] = "unstructured" if has_action else "hybrid"
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Chat processing failed: {e}") from e
         return ChatSendResponse(**response_data)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Chat processing failed: {e}") from e
+    return await run_sync(_block)
 
