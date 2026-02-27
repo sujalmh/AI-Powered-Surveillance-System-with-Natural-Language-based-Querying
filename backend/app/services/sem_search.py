@@ -151,7 +151,7 @@ def search_unstructured(
         )
 
     # Aggregate clip scores: max over frames; then apply adaptive or fixed threshold
-    clip_scores: List[float] = []
+    clip_scores = []
     for clip, entry in by_clip.items():
         frames = sorted(entry["frames"], key=lambda x: float(x.get("score") or 0.0), reverse=True)
         max_score = float(frames[0]["score"]) if frames else 0.0
@@ -161,14 +161,18 @@ def search_unstructured(
     # Adaptive threshold from distribution (or use fixed min_confidence)
     if getattr(settings, "ENABLE_ADAPTIVE_CONFIDENCE", True) and clip_scores:
         threshold = _adaptive_min_confidence(clip_scores, has_action=has_action, base=min_confidence)
+        # Increase the hard floor to 0.18 for better precision
+        threshold = max(threshold, 0.18)
     else:
-        threshold = 0.10 if has_action else min_confidence
+        threshold = 0.12 if has_action else max(min_confidence, 0.18)
     results = [entry for entry in by_clip.values() if entry["score"] >= threshold]
 
     # Normalize scores for consistent merging later
     normed = _norm_scores([r["score"] for r in results])
     for r, s in zip(results, normed):
         r["score_norm"] = s
+        # Ensure raw score is preserved for downstream thresholding
+        r["score_raw"] = r["score"]
 
     # Sort by normalized score desc
     results.sort(key=lambda x: x.get("score_norm", 0.0), reverse=True)
