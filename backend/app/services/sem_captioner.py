@@ -13,10 +13,10 @@ from backend.app.services.sem_embedder import get_embedder
 
 # Lazy import transformers so backend can start even if captions are disabled
 try:
-    from transformers import Blip2ForConditionalGeneration, Blip2Processor, pipeline  # type: ignore
+    from transformers import Qwen2VLForConditionalGeneration, AutoProcessor, pipeline  # type: ignore
 except Exception:  # pragma: no cover
-    Blip2ForConditionalGeneration = None  # type: ignore
-    Blip2Processor = None  # type: ignore
+    Qwen2VLForConditionalGeneration = None  # type: ignore
+    AutoProcessor = None  # type: ignore
     pipeline = None  # type: ignore
 
 
@@ -39,15 +39,15 @@ class _Captioner:
         if not settings.ENABLE_SEMANTIC or not settings.ENABLE_CAPTIONS:
             raise RuntimeError("Captions are disabled by config.")
 
-        if Blip2ForConditionalGeneration is None or Blip2Processor is None:
+        if Qwen2VLForConditionalGeneration is None or AutoProcessor is None:
             raise RuntimeError("transformers not installed. Please install transformers/accelerate/sentencepiece.")
 
         self.device = torch.device(
             "cuda" if (settings.EMBED_DEVICE == "cuda" and torch.cuda.is_available()) else "cpu"
         )
-        model_id = settings.CAPTION_MODEL or "Salesforce/blip2-flan-t5-base"
-        # On CPU, avoid fp16
-        torch_dtype = torch.float16 if self.device.type == "cuda" else torch.float32
+        model_id = settings.CAPTION_MODEL or "Qwen/Qwen2-VL-2B-Instruct"
+        # On CPU avoid fp16. On CUDA bfloat16 is preferred for Qwen2 if supported
+        torch_dtype = torch.bfloat16 if self.device.type == "cuda" else torch.float32
 
         # Fast path: allow forcing lightweight CLIP label guesses without HF downloads
         if str(settings.CAPTION_MODEL).lower() == "clip_labels":
@@ -75,23 +75,28 @@ class _Captioner:
         self.model = None
         self.pipe = None  # fallback pipeline
 
-        # Try BLIP-2 first
+        # Try Qwen2-VL first
         try:
-            self.processor = Blip2Processor.from_pretrained(
+            self.model = Qwen2VLForConditionalGeneration.from_pretrained(
+                model_id,
+                torch_dtype=torch_dtype,
+                device_map="auto" if self.device.type == "cuda" else None,
+                token=hf_token,
+                cache_dir=cache_dir,
+            )
+            # Send to device if device_map wasn't used natively
+            if not getattr(self.model.config, "quantization_config", None) and getattr(self.model, "device", self.device) != self.device:
+                self.model.to(self.device)
+            self.model.eval()
+
+            self.processor = AutoProcessor.from_pretrained(
                 model_id,
                 token=hf_token,
                 cache_dir=cache_dir,
             )
-            self.model = Blip2ForConditionalGeneration.from_pretrained(
-                model_id,
-                torch_dtype=torch_dtype,
-                token=hf_token,
-                cache_dir=cache_dir,
-            ).to(self.device)
-            self.model.eval()
-            self.backend = "blip2"
+            self.backend = "qwen2vl"
         except Exception:
-            # Fallback to a public captioner with image-to-text pipeline to avoid blocking on BLIP-2
+            # Fallback to a public captioner with image-to-text pipeline to avoid blocking on Qwen
             # Choices: "Salesforce/blip-image-captioning-base" (BLIP) or "nlpconnect/vit-gpt2-image-captioning"
             fallback_model = os.getenv("CAPTION_FALLBACK_MODEL", "nlpconnect/vit-gpt2-image-captioning")
             # Force PyTorch backend to avoid TF/Keras dependency issues
@@ -138,21 +143,48 @@ class _Captioner:
             return []
         out: List[str] = []
         i = 0
-        # A concise, generic caption prompt that works well with FLAN-T5-based BLIP-2
-        prompt = "Question: describe the image in a short sentence. Answer:"
+        # A robust surveillance prompt for Qwen2-VL
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": "Describe this surveillance camera frame accurately. Mention any people, vehicles, text, or notable activities."},
+                ],
+            }
+        ]
+
         while i < len(images):
             chunk = images[i : i + self.batch_size]
             pil_list = [_to_pil_rgb(arr) for arr in chunk]
 
-            if self.backend == "blip2" and self.processor is not None and self.model is not None:
-                # Pass a prompt per image to avoid broadcast issues on some processors
-                texts = [prompt] * len(pil_list)
-                inputs = self.processor(images=pil_list, text=texts, return_tensors="pt").to(self.device)
-                generated_ids = self.model.generate(
-                    **inputs,
-                    max_new_tokens=self.max_new_tokens,
-                )
-                captions = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
+            if self.backend == "qwen2vl" and self.processor is not None and self.model is not None:
+                try:
+                    text_prompt = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+                    texts = [text_prompt] * len(pil_list)
+
+                    inputs = self.processor(
+                        text=texts,
+                        images=pil_list,
+                        padding=True,
+                        return_tensors="pt"
+                    ).to(self.device)
+
+                    generated_ids = self.model.generate(
+                        **inputs,
+                        max_new_tokens=self.max_new_tokens,
+                    )
+                    
+                    # Trim the input prompt tokens from the generated output
+                    generated_ids_trimmed = [
+                        out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+                    ]
+                    
+                    captions = self.processor.batch_decode(
+                        generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+                    )
+                except Exception:
+                    captions = [""] * len(pil_list)
             elif self.backend == "clip_labels" and getattr(self, "_label_text_emb", None) is not None:
                 # Zero-shot label guessing with CLIP embeddings (fast, always available)
                 try:

@@ -12,14 +12,19 @@ MODEL_SUBPATH = f"{MODEL_NAME}/FP32"
 
 def ensure_model_downloaded(model_xml_path: str) -> None:
     """
-    Ensure the OpenVINO model XML and BIN files exist locally.
-    If not, download them from the official Open Model Zoo repository.
-
-    Args:
-        model_xml_path: Local path where the .xml file is expected to be.
-                        We infer the .bin path by replacing extension.
+    Ensure the model files exist locally.
+    Supports OpenVINO (.xml/.bin) and ONNX (.onnx).
     """
-    xml_path = Path(model_xml_path)
+    path = Path(model_xml_path)
+    
+    if path.suffix.lower() == ".onnx":
+        if path.exists():
+            return
+        logger.warning(f"ONNX model specified but not found at {path}. Please place the '.onnx' file there manually.")
+        print(f"⚠️  ONNX model not found at {path}. Automatic download for ONNX PAR is not currently implemented.")
+        return
+
+    xml_path = path
     bin_path = xml_path.with_suffix(".bin")
 
     # If both files exist, no action needed

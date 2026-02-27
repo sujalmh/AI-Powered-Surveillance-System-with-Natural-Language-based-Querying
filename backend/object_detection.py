@@ -124,39 +124,54 @@ logger.info("Loading YOLOv11m-seg model...")
 model = YOLO(MODEL_PATH)
 logger.info("YOLO model loaded successfully.")
 
-# Defer OpenVINO model loading until needed to avoid import-time crashes
-compiled_model = None
-input_layer = None
-output_layer = None
+# Defer attributes model loading until needed to avoid import-time crashes
+compiled_model = None  # OpenVINO
+input_layer = None     # OpenVINO
+output_layer = None    # OpenVINO
+onnx_session = None    # ONNX Runtime
 
-def ensure_openvino_loaded() -> bool:
+def ensure_attributes_model_loaded() -> bool:
     """
-    Lazily loads the OpenVINO attributes model the first time it's needed.
+    Lazily loads the attributes model (OpenVINO or ONNX) the first time it's needed.
     Returns True if the model is available, False otherwise.
     """
-    global compiled_model, input_layer, output_layer
-    if compiled_model is not None and input_layer is not None and output_layer is not None:
-        return True
+    global compiled_model, input_layer, output_layer, onnx_session
+    
+    # Check if already loaded
+    if str(OPENVINO_MODEL_XML).lower().endswith(".onnx"):
+        if onnx_session is not None:
+            return True
+    else:
+        if compiled_model is not None and input_layer is not None and output_layer is not None:
+            return True
+
     try:
-        # Import here to avoid failing at module import time if OpenVINO is misconfigured
-        from openvino.runtime import Core as OVCore  # type: ignore
         from backend.app.services.model_loader import ensure_model_downloaded
-        
         # Ensure model files exist before loading
         ensure_model_downloaded(OPENVINO_MODEL_XML)
         
-        ie = OVCore()
-        cm = ie.compile_model(model=OPENVINO_MODEL_XML, device_name="CPU")
-        compiled_model = cm
-        input_layer = compiled_model.input(0)
-        output_layer = compiled_model.output(0)
-        logger.info("OpenVINO attributes model loaded successfully (lazy).")
-        return True
+        if str(OPENVINO_MODEL_XML).lower().endswith(".onnx"):
+            import onnxruntime as ort
+            providers = ['CUDAExecutionProvider'] if ort.get_device() == 'GPU' else ['CPUExecutionProvider']
+            try:
+                # Try with CUDA first, fall back to CPU if it fails
+                onnx_session = ort.InferenceSession(OPENVINO_MODEL_XML, providers=providers)
+            except Exception:
+                onnx_session = ort.InferenceSession(OPENVINO_MODEL_XML, providers=['CPUExecutionProvider'])
+            logger.info("ONNX attributes model loaded successfully (lazy).")
+            return True
+        else:
+            # Import here to avoid failing at module import time if OpenVINO is misconfigured
+            from openvino.runtime import Core as OVCore  # type: ignore
+            ie = OVCore()
+            cm = ie.compile_model(model=OPENVINO_MODEL_XML, device_name="CPU")
+            compiled_model = cm
+            input_layer = compiled_model.input(0)
+            output_layer = compiled_model.output(0)
+            logger.info("OpenVINO attributes model loaded successfully (lazy).")
+            return True
     except Exception as e:
-        compiled_model = None
-        input_layer = None
-        output_layer = None
-        logger.warning("OpenVINO attributes model disabled (lazy): %s", e)
+        logger.warning("Attributes model disabled (lazy loading failed): %s", e)
         return False
 
 
@@ -329,12 +344,12 @@ def preprocess_for_attributes(roi, target_size=(80, 160)):
 def get_person_attributes(person_roi, person_mask):
     """
     IMPROVED: Infers attributes from a masked, aspect-ratio-preserved ROI.
+    Supports both OpenVINO and ONNX backends.
     Returns confidence scores instead of booleans for more nuanced data.
     """
     if person_roi is None or person_roi.size == 0:
         return {}
-    # Ensure attributes model is available; otherwise skip gracefully
-    if not ensure_openvino_loaded() or compiled_model is None or output_layer is None:
+    if not ensure_attributes_model_loaded():
         return {}
     
     try:
@@ -344,13 +359,24 @@ def get_person_attributes(person_roi, person_mask):
         masked_roi = cv2.bitwise_and(person_roi, mask_3ch)
 
         # 2. Preprocess with letterboxing to preserve aspect ratio
-        preprocessed_img = preprocess_for_attributes(masked_roi, target_size=(80, 160))
+        # For modern PAR models (like PA100k ONNX), standard size is typically 256x128.
+        # But we'll keep 160x80 to remain compatible with Intel model unless changed.
+        target_size = (80, 160) if not onnx_session else (128, 256) # (w, h)
+        preprocessed_img = preprocess_for_attributes(masked_roi, target_size=target_size)
 
-        # 3. Standard OpenVINO inference steps
+        # 3. Inference
         img = preprocessed_img.transpose((2, 0, 1))
         img = np.expand_dims(img, axis=0).astype(np.float32)
-        
-        preds = compiled_model([img])[output_layer]
+
+        if onnx_session is not None:
+            # ONNX Inference (usually normalizes by 255 and maybe mean/std, but keep generic here)
+            img = img / 255.0
+            input_name = onnx_session.get_inputs()[0].name
+            preds = onnx_session.run(None, {input_name: img})[0]
+        else:
+            # OpenVINO Inference (Intel model takes raw 0-255 inputs)
+            preds = compiled_model([img])[output_layer]
+
         attrs = preds.flatten()
 
         # 4. Convert model logits to probabilities using sigmoid
@@ -358,14 +384,16 @@ def get_person_attributes(person_roi, person_mask):
             return 1 / (1 + np.exp(-x))
 
         # 5. Return confidence scores for richer data
+        # Note: Index mapping assumes Intel model format for both for now. 
+        # A true ONNX PAR replacement would need an index mapping dict.
         return {
-            "male_confidence": round(float(sigmoid(attrs[0])), 2),
-            "bag_confidence": round(float(sigmoid(attrs[1])), 2),
-            "hat_confidence": round(float(sigmoid(attrs[2])), 2),
-            "longhair_confidence": round(float(sigmoid(attrs[3])), 2),
-            "longpants_confidence": round(float(sigmoid(attrs[4])), 2),
-            "longsleeves_confidence": round(float(sigmoid(attrs[5])), 2),
-            "coat_jacket_confidence": round(float(sigmoid(attrs[6])), 2),
+            "male_confidence": round(float(sigmoid(attrs[0]) if onnx_session is None else attrs[0]), 2), # Some ONNX models return sigmoids directly
+            "bag_confidence": round(float(sigmoid(attrs[1]) if onnx_session is None else attrs[1]), 2),
+            "hat_confidence": round(float(sigmoid(attrs[2]) if onnx_session is None else attrs[2]), 2),
+            "longhair_confidence": round(float(sigmoid(attrs[3]) if onnx_session is None else attrs[3]), 2),
+            "longpants_confidence": round(float(sigmoid(attrs[4]) if onnx_session is None else attrs[4]), 2),
+            "longsleeves_confidence": round(float(sigmoid(attrs[5]) if onnx_session is None else attrs[5]), 2),
+            "coat_jacket_confidence": round(float(sigmoid(attrs[6]) if onnx_session is None else attrs[6]), 2),
         }
     except Exception as e:
         logger.warning("Failed to get person attributes: %s", e)
@@ -376,39 +404,50 @@ def get_person_attributes_batch(
     person_rois: List[np.ndarray], person_masks: List[np.ndarray]
 ) -> List[Dict[str, Any]]:
     """
-    Batch infer person attributes for multiple ROIs in one OpenVINO call.
-    Returns a list of attribute dicts (same format as get_person_attributes), one per ROI.
+    Batch infer person attributes for multiple ROIs.
+    Supports OpenVINO and ONNX backends.
     """
     if not person_rois or not person_masks:
         return []
-    if not ensure_openvino_loaded() or compiled_model is None or output_layer is None:
+    if not ensure_attributes_model_loaded():
         return [{} for _ in person_rois]
     try:
         batch_arr: List[np.ndarray] = []
+        target_size = (80, 160) if not onnx_session else (128, 256)
+        
         for roi, mask in zip(person_rois, person_masks):
             if roi is None or roi.size == 0:
-                batch_arr.append(np.zeros((3, 160, 80), dtype=np.float32))
+                batch_arr.append(np.zeros((3, target_size[1], target_size[0]), dtype=np.float32))
                 continue
             mask_u8 = (mask * 255).astype(np.uint8) if mask.dtype != np.uint8 else mask
             mask_3ch = cv2.cvtColor(mask_u8, cv2.COLOR_GRAY2BGR)
             masked_roi = cv2.bitwise_and(roi, mask_3ch)
-            preprocessed = preprocess_for_attributes(masked_roi, target_size=(80, 160))
+            preprocessed = preprocess_for_attributes(masked_roi, target_size=target_size)
             img = preprocessed.transpose((2, 0, 1)).astype(np.float32)
+            if onnx_session is not None:
+                img = img / 255.0
             batch_arr.append(img)
+            
         batch = np.stack(batch_arr, axis=0).astype(np.float32)
-        preds = compiled_model([batch])[output_layer]
+        
+        if onnx_session is not None:
+            input_name = onnx_session.get_inputs()[0].name
+            preds = onnx_session.run(None, {input_name: batch})[0]
+        else:
+            preds = compiled_model([batch])[output_layer]
+            
         out: List[Dict[str, Any]] = []
+        sigmoid = lambda x: 1 / (1 + np.exp(-x))
         for i in range(preds.shape[0]):
             attrs = preds[i].flatten()
-            sigmoid = lambda x: 1 / (1 + np.exp(-x))
             out.append({
-                "male_confidence": round(float(sigmoid(attrs[0])), 2),
-                "bag_confidence": round(float(sigmoid(attrs[1])), 2),
-                "hat_confidence": round(float(sigmoid(attrs[2])), 2),
-                "longhair_confidence": round(float(sigmoid(attrs[3])), 2),
-                "longpants_confidence": round(float(sigmoid(attrs[4])), 2),
-                "longsleeves_confidence": round(float(sigmoid(attrs[5])), 2),
-                "coat_jacket_confidence": round(float(sigmoid(attrs[6])), 2),
+                "male_confidence": round(float(sigmoid(attrs[0]) if onnx_session is None else attrs[0]), 2),
+                "bag_confidence": round(float(sigmoid(attrs[1]) if onnx_session is None else attrs[1]), 2),
+                "hat_confidence": round(float(sigmoid(attrs[2]) if onnx_session is None else attrs[2]), 2),
+                "longhair_confidence": round(float(sigmoid(attrs[3]) if onnx_session is None else attrs[3]), 2),
+                "longpants_confidence": round(float(sigmoid(attrs[4]) if onnx_session is None else attrs[4]), 2),
+                "longsleeves_confidence": round(float(sigmoid(attrs[5]) if onnx_session is None else attrs[5]), 2),
+                "coat_jacket_confidence": round(float(sigmoid(attrs[6]) if onnx_session is None else attrs[6]), 2),
             })
         return out
     except Exception as e:
