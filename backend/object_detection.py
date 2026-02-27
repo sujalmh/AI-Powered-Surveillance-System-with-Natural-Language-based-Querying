@@ -617,15 +617,28 @@ def process_live_stream(
     if BoTSORT is not None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         reid_weights = os.getenv("REID_WEIGHTS", "osnet_x1_0_msmt17.pt")
+        # Detect actual camera FPS so track_buffer scales correctly
+        _cam_fps = int(cap.get(cv2.CAP_PROP_FPS) or 30) if hasattr(cap, 'get') else 30
         try:
             tracker = BoTSORT(
                 reid_weights=reid_weights,
                 device=device,
                 half=(device == "cuda"),
+                # --- Surveillance-tuned params ---
+                # Keep a lost person alive for 60 frames (2 s at 30 fps)
+                # so they can be re-identified after walking behind an object.
+                track_buffer=int(os.getenv("BOTSORT_TRACK_BUFFER", "60")),
+                # Stricter ReID: only match if appearance distance < 0.4
+                # (default 0.25 is too loose and causes ID swaps).
+                appearance_thresh=float(os.getenv("BOTSORT_APPEARANCE_THRESH", "0.4")),
+                # Scale buffer relative to actual FPS
+                frame_rate=_cam_fps,
             )
             logger.info(
-                "BoTSORT tracker active — ReID model: %s on %s (half=%s)",
-                reid_weights, device, (device == "cuda"),
+                "BoTSORT tracker active — ReID: %s | device: %s | buffer: %s frames | appearance_thresh: %s",
+                reid_weights, device,
+                os.getenv("BOTSORT_TRACK_BUFFER", "60"),
+                os.getenv("BOTSORT_APPEARANCE_THRESH", "0.4"),
             )
         except Exception as e:
             logger.error(
@@ -1297,6 +1310,17 @@ def process_video_file(
                                 pcount += 1
                 doc["person_count"] = pcount
                 doc["object_counts"] = ocounts
+            except Exception:
+                pass
+
+            # Zone-level counts — mirrors live stream pipeline for full parity
+            try:
+                zones_list = _get_zones_for_camera(zones_col, int(camera_id))
+                if zones_list and doc.get("objects"):
+                    h, w = frame.shape[0], frame.shape[1]
+                    doc["zone_counts"] = _compute_zone_counts(
+                        doc["objects"], zones_list, w, h
+                    )
             except Exception:
                 pass
 
