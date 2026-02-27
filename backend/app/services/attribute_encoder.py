@@ -65,6 +65,25 @@ class AttributeEncoder:
 
         return ", ".join(parts)
 
+    def object_to_caption(self, obj: dict) -> str:
+        """
+        Convert a stored detection object dict into a human-readable caption string.
+        Single source of truth — replaces inline attribute-to-text logic scattered
+        across sem_indexer.py and videos.py.
+
+        For non-person objects returns the object name.
+        For persons, builds a rich description using color + OpenVINO attributes.
+
+        Example output: "person wearing red clothing, carrying bag, long sleeves"
+        """
+        name = str(obj.get("object_name", "")).strip().lower()
+        if name != "person":
+            return name or "unknown"
+        color = str(obj.get("color") or "").strip()
+        color = color if color.lower() not in ("", "unknown") else None
+        attrs = obj.get("person_attributes") or {}
+        return self.attributes_to_text(attrs, color)
+
     def encode_text(self, text: str) -> np.ndarray:
         emb = self.model.encode([text])
         v = emb[0].astype(np.float32)

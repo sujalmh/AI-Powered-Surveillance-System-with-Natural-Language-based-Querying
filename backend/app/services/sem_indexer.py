@@ -184,10 +184,7 @@ def _compose_caption_from_detections(camera_id: int, frame_ts: Optional[str], to
 def _object_captions_from_detections(camera_id: int, frame_ts: Optional[str], limit: int = 20) -> List[str]:
     """
     Build a list of per-object captions near the frame time for richer testing output.
-    Example items:
-      - "person wearing red clothing, hat"
-      - "car"
-      - "person wearing black clothing, carrying bag"
+    Uses the centralised attribute_encoder.object_to_caption() so logic is never duplicated.
     """
     out: List[str] = []
     try:
@@ -200,31 +197,13 @@ def _object_captions_from_detections(camera_id: int, frame_ts: Optional[str], li
             "timestamp": {"$gte": (ts - window).isoformat(), "$lte": (ts + window).isoformat()},
         }
         docs = list(detections.find(q, {"_id": 0, "objects": 1}).limit(10))
+        from backend.app.services.attribute_encoder import get_attribute_encoder
+        encoder = get_attribute_encoder()
         for d in docs:
             for o in (d.get("objects") or []):
-                name = str(o.get("object_name") or "").strip().lower()
-                if not name:
-                    continue
-                if name == "person":
-                    color = str(o.get("color") or "").strip()
-                    acc = o.get("person_attributes") or {}
-                    parts: List[str] = ["person"]
-                    if color and color.lower() != "unknown":
-                        parts.append(f"wearing {color.lower()} clothing")
-                    # accessories
-                    if acc.get("hat_confidence", 0.0) > 0.5:
-                        parts.append("hat")
-                    if acc.get("bag_confidence", 0.0) > 0.5:
-                        parts.append("carrying bag")
-                    if acc.get("longsleeves_confidence", 0.0) > 0.5:
-                        parts.append("long sleeves")
-                    if acc.get("longpants_confidence", 0.0) > 0.5:
-                        parts.append("long pants")
-                    if acc.get("coat_jacket_confidence", 0.0) > 0.5:
-                        parts.append("coat/jacket")
-                    out.append(", ".join(parts))
-                else:
-                    out.append(name)
+                caption = encoder.object_to_caption(o)
+                if caption:
+                    out.append(caption)
                 if len(out) >= limit:
                     return out
     except Exception:

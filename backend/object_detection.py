@@ -616,14 +616,23 @@ def process_live_stream(
     person_index = get_person_store(dim=1152)
     if BoTSORT is not None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
+        reid_weights = os.getenv("REID_WEIGHTS", "osnet_x1_0_msmt17.pt")
         try:
             tracker = BoTSORT(
-                reid_weights=os.getenv("REID_WEIGHTS", "osnet_x0_25_msmt17.pt"),
+                reid_weights=reid_weights,
                 device=device,
                 half=(device == "cuda"),
             )
+            logger.info(
+                "BoTSORT tracker active — ReID model: %s on %s (half=%s)",
+                reid_weights, device, (device == "cuda"),
+            )
         except Exception as e:
-            logger.warning("BoTSORT disabled: %s", e)
+            logger.error(
+                "BoTSORT init FAILED (falling back to YOLO built-in tracker). "
+                "Ensure boxmot is installed. Error: %s",
+                e,
+            )
             tracker = None
 
     # In-memory track history across frames: track_id -> {first_seen, last_seen, frame_count}
@@ -1047,6 +1056,317 @@ def process_live_stream(
     reader.release()
     logger.info("Camera %s processing completed.", camera_id)
 
+
+# =========================================
+# VIDEO FILE DETECTION (mirrors live stream pipeline for uploaded videos)
+# =========================================
+def process_video_file(
+    camera_id: int,
+    video_path: str,
+    location: str = "Uploaded Video",
+    target_fps: float = 2.0,
+    start_iso: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Process an uploaded video file through the full detection pipeline:
+      YOLO seg -> color extraction -> OpenVINO batch person attributes ->
+      attribute text encoding -> MongoDB detection insert -> snapshot save ->
+      SigLIP+FAISS person embedding (via async task queue).
+
+    This mirrors process_live_stream() so that uploaded videos are as
+    queryable as live cameras.  Call index_clip() AFTER this function so
+    the semantic captioner can pull rich detections from MongoDB.
+
+    Args:
+        camera_id:  Camera / source ID to tag detections with.
+        video_path: Absolute path to the MP4 file.
+        location:   Human-readable location label.
+        target_fps: How many frames per second to sample (default 2).
+        start_iso:  Optional ISO timestamp for the video start time.
+                    If None, inferred from the file's mtime.
+
+    Returns:
+        dict with keys: ok, frames_processed, detections_inserted.
+    """
+    import time as _time
+
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        logger.error("process_video_file: Cannot open video %s", video_path)
+        return {"ok": False, "error": f"Cannot open video: {video_path}"}
+
+    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    frame_interval = max(1, int(round(fps / max(target_fps, 0.1))))
+
+    # Determine start datetime for timestamp assignment
+    if start_iso:
+        try:
+            start_dt = datetime.datetime.fromisoformat(start_iso)
+        except Exception:
+            start_dt = datetime.datetime.now()
+    else:
+        try:
+            mtime = os.path.getmtime(video_path)
+            duration = total_frames / fps if fps > 0 and total_frames > 0 else 0
+            start_dt = datetime.datetime.fromtimestamp(max(0, mtime - duration))
+        except Exception:
+            start_dt = datetime.datetime.now()
+
+    logger.info(
+        "process_video_file: camera_id=%s path=%s fps=%.1f target_fps=%.1f interval=%d start=%s",
+        camera_id, video_path, fps, target_fps, frame_interval, start_dt.isoformat(),
+    )
+
+    # Initialize encoders (singletons — no overhead if already loaded)
+    visual_encoder = get_visual_embedder()
+    attr_encoder = get_attribute_encoder()
+    fusion = MultimodalFusion(
+        visual_weight=getattr(settings, "FUSION_VISUAL_WEIGHT", 0.6),
+        text_weight=getattr(settings, "FUSION_TEXT_WEIGHT", 0.4),
+    )
+    person_index = get_person_store(dim=1152)
+
+    frames_processed = 0
+    detections_inserted = 0
+    frame_idx = 0
+    last_person_save_ts = _time.time()
+
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret or frame is None:
+                break
+
+            if frame_idx % frame_interval != 0:
+                frame_idx += 1
+                continue
+
+            frames_processed += 1
+
+            # Timestamp from video position
+            pos_sec = frame_idx / max(fps, 1e-6)
+            timestamp = (start_dt + datetime.timedelta(seconds=pos_sec)).isoformat()
+
+            use_half = torch.cuda.is_available()
+            try:
+                # persist=True gives consistent YOLO track IDs across frames in the file
+                results = model.track(frame, persist=True, conf=CONF_THRESHOLD, verbose=False, half=use_half)
+            except Exception as e:
+                logger.warning("process_video_file: YOLO track failed frame %d: %s", frame_idx, e)
+                frame_idx += 1
+                continue
+
+            doc: Dict[str, Any] = {"camera_id": camera_id, "timestamp": timestamp, "objects": []}
+            person_rois: List[np.ndarray] = []
+            person_attr_texts: List[str] = []
+            person_meta: List[Dict[str, object]] = []
+            track_bulk_ops: List[Any] = []
+            person_attr_defer: List[Tuple[np.ndarray, np.ndarray, str, int, int]] = []
+
+            for r in results:
+                if r.masks is None or r.boxes is None:
+                    continue
+                masks_data = r.masks.data if r.masks is not None else None
+                if masks_data is None:
+                    continue
+                masks = to_numpy(masks_data)
+                b = r.boxes
+                if b is None:
+                    continue
+                xyxy = to_numpy(b.xyxy)
+                cls_arr = to_numpy(b.cls)
+                conf_arr = to_numpy(b.conf)
+                ids_arr = to_numpy(getattr(b, "id", None)) if getattr(b, "id", None) is not None else None
+
+                if xyxy is None or cls_arr is None or conf_arr is None:
+                    continue
+                if not isinstance(xyxy, np.ndarray) or xyxy.size == 0:
+                    continue
+
+                for i in range(xyxy.shape[0]):
+                    x1, y1, x2, y2 = map(int, xyxy[i])
+                    x1, y1 = max(0, x1), max(0, y1)
+                    x2, y2 = min(frame.shape[1], x2), min(frame.shape[0], y2)
+                    if x1 >= x2 or y1 >= y2:
+                        continue
+
+                    cls_idx = int(cls_arr[i]) if np.ndim(cls_arr) == 1 else int(cls_arr[i][0])
+                    obj_name = model.names[cls_idx]
+                    roi = frame[y1:y2, x1:x2]
+
+                    if isinstance(masks, np.ndarray) and masks.ndim >= 1 and i < masks.shape[0]:
+                        mask_src = masks[i]
+                    else:
+                        mask_src = np.zeros((frame.shape[0], frame.shape[1]), dtype=np.uint8)
+                    mask_full = cv2.resize(mask_src, (frame.shape[1], frame.shape[0]), interpolation=cv2.INTER_NEAREST)
+                    mask_roi = mask_full[y1:y2, x1:x2]
+
+                    rgb_color = get_dominant_color(roi, mask_roi)
+                    color_name = closest_color(rgb_color)
+
+                    track_id = int(ids_arr[i]) if ids_arr is not None else -1
+                    conf_val = float(conf_arr[i]) if np.ndim(conf_arr) == 1 else float(conf_arr[i][0])
+
+                    obj: Dict[str, Any] = {
+                        "object_name": obj_name,
+                        "track_id": track_id,
+                        "confidence": round(conf_val, 2),
+                        "color": color_name,
+                        "bbox": [int(x1), int(y1), int(x2), int(y2)],
+                    }
+
+                    # Track history (batch bulk write below)
+                    if track_id >= 0:
+                        track_bulk_ops.append(
+                            UpdateOne(
+                                {"camera_id": int(camera_id), "track_id": track_id},
+                                {
+                                    "$setOnInsert": {"first_seen": timestamp, "camera_id": int(camera_id)},
+                                    "$set": {"last_seen": timestamp},
+                                    "$inc": {"frame_count": 1},
+                                },
+                                upsert=True,
+                            )
+                        )
+
+                    # Person attributes — quality filter + batch OpenVINO
+                    if obj_name == "person":
+                        obj_index = len(doc["objects"])
+                        if (x2 - x1) >= MIN_PERSON_WIDTH_PIXELS:
+                            person_attr_defer.append((roi, mask_roi, color_name, int(track_id), obj_index))
+                            obj["person_attributes"] = {}   # filled after batch
+                            obj["attribute_text"] = ""      # filled after batch
+                        else:
+                            obj["person_attributes"] = {"status": "skipped_too_small"}
+                            attr_text = attr_encoder.attributes_to_text({}, color_name)
+                            obj["attribute_text"] = attr_text
+                            person_rois.append(roi)
+                            person_attr_texts.append(attr_text)
+                            person_meta.append({
+                                "object_index": obj_index,
+                                "camera_id": int(camera_id),
+                                "track_id": int(track_id),
+                                "timestamp": timestamp,
+                                "color": color_name,
+                                "attribute_text": attr_text,
+                            })
+
+                    doc["objects"].append(obj)
+
+            # Batch OpenVINO attribute inference for deferred persons
+            if person_attr_defer:
+                rois_attr = [t[0] for t in person_attr_defer]
+                masks_attr = [t[1] for t in person_attr_defer]
+                batch_attrs = get_person_attributes_batch(rois_attr, masks_attr)
+                for j, (roi, _mask, color_name, track_id, obj_idx) in enumerate(person_attr_defer):
+                    if j < len(batch_attrs):
+                        doc["objects"][obj_idx]["person_attributes"] = batch_attrs[j]
+                    attr_text = attr_encoder.attributes_to_text(
+                        doc["objects"][obj_idx].get("person_attributes") or {}, color_name
+                    )
+                    doc["objects"][obj_idx]["attribute_text"] = attr_text
+                    person_rois.append(roi)
+                    person_attr_texts.append(attr_text)
+                    person_meta.append({
+                        "object_index": obj_idx,
+                        "camera_id": int(camera_id),
+                        "track_id": track_id,
+                        "timestamp": timestamp,
+                        "color": color_name,
+                        "attribute_text": attr_text,
+                    })
+
+            # Batch persist track updates
+            if track_bulk_ops:
+                try:
+                    tracks.bulk_write(track_bulk_ops)
+                except Exception:
+                    pass
+
+            # Compute object count summaries
+            try:
+                pcount = 0
+                ocounts: Dict[str, int] = {}
+                for o in doc["objects"]:
+                    if isinstance(o, dict):
+                        n = str(o.get("object_name", "")).lower()
+                        if n:
+                            ocounts[n] = ocounts.get(n, 0) + 1
+                            if n == "person":
+                                pcount += 1
+                doc["person_count"] = pcount
+                doc["object_counts"] = ocounts
+            except Exception:
+                pass
+
+            if doc["objects"]:
+                # Save snapshot
+                try:
+                    safe_ts = timestamp.replace(":", "-").replace(".", "-")
+                    cam_dir = settings.SNAPSHOTS_DIR / f"camera_{camera_id}"
+                    cam_dir.mkdir(parents=True, exist_ok=True)
+                    snap_path = cam_dir / f"{safe_ts}.jpg"
+                    cv2.imwrite(str(snap_path), frame)
+                    doc["snapshot"] = f"/media/snapshots/camera_{camera_id}/{snap_path.name}"
+                except Exception as e:
+                    logger.warning("process_video_file: snapshot failed: %s", e)
+
+                # Insert detection document
+                det_id: Optional[Any] = None
+                try:
+                    ins = detections_col.insert_one(doc)
+                    det_id = ins.inserted_id if ins is not None else None
+                    detections_inserted += 1
+                except Exception as e:
+                    logger.warning("process_video_file: detection insert failed: %s", e)
+
+                # Async SigLIP + attribute fusion → person FAISS
+                if person_rois:
+                    try:
+                        task_submit(
+                            _run_person_embeddings_async,
+                            int(camera_id),
+                            timestamp,
+                            str(det_id) if det_id is not None else None,
+                            [roi.copy() for roi in person_rois],
+                            list(person_attr_texts),
+                            [dict(m) for m in person_meta],
+                        )
+                    except Exception:
+                        pass
+
+                # Periodically persist person index
+                now_ps = _time.time()
+                if now_ps - last_person_save_ts >= 30.0:
+                    try:
+                        person_index.save()
+                    except Exception:
+                        pass
+                    last_person_save_ts = now_ps
+
+            frame_idx += 1
+
+    finally:
+        cap.release()
+        # Final person index flush
+        try:
+            person_index.save()
+        except Exception:
+            pass
+
+    logger.info(
+        "process_video_file: finished camera_id=%s frames_processed=%d detections_inserted=%d",
+        camera_id, frames_processed, detections_inserted,
+    )
+    return {
+        "ok": True,
+        "frames_processed": frames_processed,
+        "detections_inserted": detections_inserted,
+    }
+
+
 # =========================================
 if __name__ == "__main__":
     process_live_stream(camera_id=1, source="sample.mp4", location="Main Entrance")
+

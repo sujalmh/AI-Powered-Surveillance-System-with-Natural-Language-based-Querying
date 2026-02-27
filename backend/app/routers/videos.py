@@ -137,8 +137,9 @@ async def upload_clip(
     with_captions: bool = Form(False),
 ) -> Dict[str, Any]:
     """
-    Upload an MP4 file, save it under CLIPS_DIR/camera_{camera_id}/, and index it semantically.
-    Returns the clip_url and indexing summary.
+    Upload an MP4 file, save it under CLIPS_DIR/camera_{camera_id}/, run the full
+    detection pipeline (YOLO seg + OpenVINO attributes + person FAISS), then index
+    semantically with CLIP.  Returns the clip_url and indexing summary.
     """
     try:
         if not file.filename:
@@ -169,9 +170,7 @@ async def upload_clip(
         try:
             now = datetime.now(timezone.utc).isoformat()
             camera_doc = cameras_col.find_one({"camera_id": int(camera_id)})
-            
             if camera_doc:
-                # Update existing camera
                 cameras_col.update_one(
                     {"camera_id": int(camera_id)},
                     {
@@ -181,23 +180,44 @@ async def upload_clip(
                             "source": str(dest_path.resolve()),
                             "last_error": None,
                         }
-                    }
+                    },
                 )
             else:
-                # Create new camera entry
-                cameras_col.insert_one({
-                    "camera_id": int(camera_id),
-                    "location": f"Test Camera {camera_id}",
-                    "source": str(dest_path.resolve()),
-                    "status": "active",
-                    "last_seen": now,
-                    "last_error": None,
-                })
+                cameras_col.insert_one(
+                    {
+                        "camera_id": int(camera_id),
+                        "location": f"Test Camera {camera_id}",
+                        "source": str(dest_path.resolve()),
+                        "status": "active",
+                        "last_seen": now,
+                        "last_error": None,
+                    }
+                )
         except Exception as cam_err:
-            # Log but don't fail the upload
             print(f"Warning: Failed to update camera metadata: {cam_err}")
 
-        # Index the clip (semantic VLM pipeline)
+        # --- Step 1: Full detection pipeline (YOLO + OpenVINO attrs + MongoDB + person FAISS) ---
+        # This makes the uploaded video queryable by NL: "person in red shirt", etc.
+        det_summary: Dict[str, Any] = {}
+        try:
+            from backend.object_detection import process_video_file  # lazy import (heavy deps)
+
+            def _run_detection():
+                return process_video_file(
+                    camera_id=int(camera_id),
+                    video_path=str(dest_path.resolve()),
+                    location=f"Uploaded ({name})",
+                    target_fps=2.0,
+                )
+
+            det_summary = await run_sync(_run_detection)
+        except Exception as det_err:
+            # Non-fatal: log but continue to CLIP indexing
+            print(f"Warning: Full detection pipeline failed for upload: {det_err}")
+            det_summary = {"ok": False, "error": str(det_err)}
+
+        # --- Step 2: CLIP semantic frame indexing ---
+        # Reads detections from MongoDB (now populated by step 1) to build rich captions.
         idx_res = index_clip(
             camera_id=int(camera_id),
             clip_path=str(dest_path.resolve()),
@@ -211,6 +231,7 @@ async def upload_clip(
             "camera_id": int(camera_id),
             "clip_path": str(dest_path.resolve()),
             "clip_url": clip_url,
+            "detection": det_summary,
             "indexing": idx_res,
         }
     except HTTPException:
@@ -268,31 +289,14 @@ async def list_clip_frames(
                             "timestamp": {"$gte": (dt - window).isoformat(), "$lte": (dt + window).isoformat()},
                         }
                         dd = list(_detections.find(q, {"_id": 0, "objects": 1}).limit(10))
+                        from backend.app.services.attribute_encoder import get_attribute_encoder
+                        _encoder = get_attribute_encoder()
                         out: List[str] = []
                         for di in dd:
                             for o in (di.get("objects") or []):
-                                name = str(o.get("object_name") or "").strip().lower()
-                                if not name:
-                                    continue
-                                if name == "person":
-                                    color = str(o.get("color") or "").strip()
-                                    acc = o.get("person_attributes") or {}
-                                    parts: List[str] = ["person"]
-                                    if color and color.lower() != "unknown":
-                                        parts.append(f"wearing {color.lower()} clothing")
-                                    if acc.get("hat_confidence", 0.0) > 0.5:
-                                        parts.append("hat")
-                                    if acc.get("bag_confidence", 0.0) > 0.5:
-                                        parts.append("carrying bag")
-                                    if acc.get("longsleeves_confidence", 0.0) > 0.5:
-                                        parts.append("long sleeves")
-                                    if acc.get("longpants_confidence", 0.0) > 0.5:
-                                        parts.append("long pants")
-                                    if acc.get("coat_jacket_confidence", 0.0) > 0.5:
-                                        parts.append("coat/jacket")
-                                    out.append(", ".join(parts))
-                                else:
-                                    out.append(name)
+                                caption = _encoder.object_to_caption(o)
+                                if caption:
+                                    out.append(caption)
                                 if len(out) >= 20:
                                     break
                             if len(out) >= 20:
