@@ -1737,16 +1737,19 @@ class UnifiedRetrieval:
         
         aggregated = []
         for obj_name, obj_instances in by_name.items():
-            # Calculate average confidence
-            confidences = [o.get("confidence", 0) for o in obj_instances if o.get("confidence")]
-            avg_confidence = sum(confidences) / len(confidences) if confidences else 0
+            # Calculate average confidence safely
+            confidences = [o.get("confidence") for o in obj_instances if "confidence" in o and o.get("confidence") is not None]
             
             # Collect unique colors
             colors = list(set(o.get("color") for o in obj_instances if o.get("color")))
             
             # Use first instance as template
             representative = obj_instances[0].copy()
-            representative["confidence"] = avg_confidence
+            
+            if confidences:
+                representative["confidence"] = sum(confidences) / len(confidences)
+            elif "confidence" in representative:
+                del representative["confidence"]
             
             # Add color information
             if colors:
