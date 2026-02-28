@@ -2,6 +2,8 @@ import cv2
 import logging
 import numpy as np
 import datetime
+import time
+from pathlib import Path
 from ultralytics import YOLO
 Core = None  # lazy import in ensure_openvino_loaded
 import math
@@ -516,12 +518,104 @@ def _auto_build_and_index(camera_id: int, start_iso: str, end_iso: str, every_se
         logger.warning("Auto VLM indexing failed for cam %s [%s..%s]: %s", camera_id, start_iso, end_iso, e)
 
 
+import queue
+
+def _ffmpeg_convert_worker(q: queue.Queue):
+    from imageio_ffmpeg import get_ffmpeg_exe
+    import subprocess
+    try:
+        ffmpeg_exe = get_ffmpeg_exe()
+    except Exception:
+        ffmpeg_exe = "ffmpeg"
+        
+    while True:
+        try:
+            filepath = q.get()
+            if filepath is None:
+                break
+            filepath = Path(filepath)
+            h264_path = filepath.with_suffix('.mp4') if filepath.suffix != '.mp4' else filepath.parent / f"{filepath.stem}_h264.mp4"
+            cmd = [
+                ffmpeg_exe, "-y", "-i", str(filepath),
+                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                "-loglevel", "error", str(h264_path)
+            ]
+            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300)
+            if h264_path.exists() and h264_path != filepath:
+                filepath.unlink(missing_ok=True)
+                h264_path.rename(filepath)
+        except Exception as e:
+            logger.warning("FFmpeg background conversion failed: %s", e)
+        finally:
+            q.task_done()
+
+_conversion_queue = queue.Queue()
+_conversion_thread = threading.Thread(target=_ffmpeg_convert_worker, args=(_conversion_queue,), daemon=True)
+_conversion_thread.start()
+
+class ContinuousRecorder:
+    def __init__(self, camera_id: int, fps: float, chunk_duration_sec: int = 300):
+        self.camera_id = camera_id
+        self.fps = fps if fps > 0 else 30.0
+        self.chunk_duration_sec = chunk_duration_sec
+        self.writer = None
+        self.current_chunk_start_time = 0.0
+        self.current_filepath = None
+        self.frame_size = None
+        
+        self.out_dir = settings.RECORDINGS_DIR / f"camera_{camera_id}"
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+        
+    def _open_writer(self, frame):
+        h, w = frame.shape[:2]
+        # Ensure even dimensions for mp4v
+        w = w - (w % 2)
+        h = h - (h % 2)
+        self.frame_size = (w, h)
+        target_size = (w, h)
+        
+        now = datetime.datetime.now(datetime.timezone.utc)
+        safe_ts = now.isoformat().replace(":", "-").replace(".", "-").replace("+00:00", "Z")
+        filename = f"{safe_ts}.mp4"
+        self.current_filepath = self.out_dir / filename
+        
+        _fourcc_fn = getattr(cv2, "VideoWriter_fourcc", None)
+        fourcc = _fourcc_fn(*"mp4v")
+        self.writer = cv2.VideoWriter(str(self.current_filepath), fourcc, max(1.0, float(self.fps)), target_size)
+        self.current_chunk_start_time = time.time()
+        
+    def write(self, frame):
+        now = time.time()
+        if self.writer is None:
+            self._open_writer(frame)
+        elif now - self.current_chunk_start_time >= self.chunk_duration_sec:
+            self._close_writer()
+            self._open_writer(frame)
+            
+        if self.writer is not None and self.writer.isOpened():
+            h, w = frame.shape[:2]
+            target_w, target_h = self.frame_size
+            if w != target_w or h != target_h:
+                frame = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_AREA)
+            self.writer.write(frame)
+            
+    def _close_writer(self):
+        if self.writer is not None:
+            self.writer.release()
+            self.writer = None
+            if self.current_filepath and self.current_filepath.exists():
+                _conversion_queue.put(str(self.current_filepath))
+
+    def release(self):
+        self._close_writer()
+
 # =========================================
 # Threaded frame reader — keeps capture flowing
 # even while YOLO detection blocks the main loop.
 # =========================================
 class ThreadedFrameReader:
-    """Continuously reads frames on a background thread and feeds the MJPEG store."""
+    """Continuously reads frames on a background thread, feeds MJPEG, and records."""
 
     def __init__(self, cap: "cv2.VideoCapture", camera_id: int):
         self._cap = cap
@@ -530,6 +624,11 @@ class ThreadedFrameReader:
         self._ret = False
         self._lock = threading.Lock()
         self._stopped = False
+        
+        # Initialize continuous recorder
+        fps = self._cap.get(cv2.CAP_PROP_FPS) or 30.0
+        self._recorder = ContinuousRecorder(camera_id, fps, chunk_duration_sec=300)
+        
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
@@ -544,7 +643,11 @@ class ThreadedFrameReader:
             with self._lock:
                 self._ret = ret
                 self._frame = frame
-            if ret:
+                
+            if ret and frame is not None:
+                # Record to disk
+                self._recorder.write(frame)
+                
                 try:
                     encode_ok, jpg = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
                     if encode_ok:
@@ -568,6 +671,8 @@ class ThreadedFrameReader:
         except Exception:
             pass
         self._thread.join(timeout=2)
+        if hasattr(self, '_recorder'):
+            self._recorder.release()
 
     def release(self) -> None:
         self.stop()
@@ -580,6 +685,11 @@ class ThreadedFrameReader:
         else:
             self._cap = cv2.VideoCapture(source)
         self._cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        
+        # update recorder fps just in case
+        fps = self._cap.get(cv2.CAP_PROP_FPS) or 30.0
+        self._recorder.fps = fps if fps > 0 else 30.0
+        
         self._stopped = False
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
