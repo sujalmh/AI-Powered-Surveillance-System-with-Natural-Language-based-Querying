@@ -343,7 +343,16 @@ class AnomalyDetector:
             base = baseline.get(hour)
 
             if base is None or base["n"] == 0:
-                # Off-hours: activity where historically there is none
+                # Off-hours: activity where historically there is none.
+                # Only flag if we have a reasonable baseline coverage
+                # (at least 3 days), otherwise the absence of data for
+                # this hour might simply mean the system is new.
+                total_baseline_hours = sum(
+                    1 for b in baseline.values() if b["n"] > 0
+                )
+                if total_baseline_hours < 3:
+                    # Not enough baseline data — skip off-hours detection
+                    continue
                 events.append({
                     "type": "off_hours",
                     "hour": hour,

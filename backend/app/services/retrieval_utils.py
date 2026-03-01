@@ -63,28 +63,37 @@ def parse_ts(ts: str) -> datetime:
 # ---------------------------------------------------------------------------
 def normalize_scores(scores: List[float], min_val: float = 0.0) -> List[float]:
     """
-    Normalize *scores* to [0, 1], scaling down when the absolute maximum is
-    weak so that final scores honestly reflect low confidence.
+    Normalize *scores* to [0, 1] using min-max scaling, consistent with the
+    semantic normalization in sem_search._norm_scores so that the alpha
+    blending in result_merger operates on comparable scales.
 
-    Single-result case: use the raw score directly (scaled to [0, 1]) rather
-    than mapping it to a fixed bucket.  The old bucket logic (score < 0.25 →
-    0.5, score < 0.4 → 0.8) inflated a lone detection with zero duration to
-    0.5 regardless of actual evidence strength.
+    When all scores are identical (or a single result) returns 0.5 — the
+    same neutral convention used on the semantic side.
+
+    A quality-penalty *scale* is applied when the absolute maximum is low,
+    preventing weak evidence from inflating to 1.0.
     """
     if not scores:
         return []
 
-    max_score = max(scores)
-    if max_score == 0:
+    mn = min(scores)
+    mx = max(scores)
+
+    if mx == 0:
         return [min_val] * len(scores)
 
+    if mx - mn < 1e-9:
+        # All scores identical — return neutral 0.5 (same as sem_search)
+        return [0.5 for _ in scores]
+
+    # Scale penalty for weak maximums
     scale = 1.0
-    if max_score < 0.25:
+    if mx < 0.25:
         scale = 0.5
-    elif max_score < 0.4:
+    elif mx < 0.4:
         scale = 0.8
 
-    return [max(min_val, (s / max_score) * scale) for s in scores]
+    return [max(min_val, ((s - mn) / (mx - mn)) * scale) for s in scores]
 
 
 # ---------------------------------------------------------------------------
@@ -298,9 +307,11 @@ def vlm_matches_object_filter(
         obj_low = str(obj).lower()
         aliases = {obj_low}
         if obj_low == "person":
-            aliases.update({"people", "person"})
+            aliases.update({"people", "person", "man", "woman", "child",
+                           "boy", "girl", "pedestrian", "individual"})
         elif obj_low == "car":
-            aliases.update({"car", "vehicle", "cars", "vehicles"})
+            aliases.update({"car", "vehicle", "cars", "vehicles",
+                           "automobile", "sedan", "suv"})
         obj_ok = any(any(a in c for a in aliases) for c in flat_caps)
 
     color_ok = True

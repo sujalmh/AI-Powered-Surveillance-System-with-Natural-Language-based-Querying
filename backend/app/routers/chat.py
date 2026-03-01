@@ -258,7 +258,7 @@ def parse_simple_nl_to_filter(nl: str) -> Dict[str, Any]:
 
         if count_constraint is None:
             m_cnt = re.search(
-                r"\b(\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)\s+(person|people|persons|car|cars|vehicle|vehicles)\b",
+                r"(?<!camera\s)(?<!cam\s)\b(\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)\s+(person|people|persons|car|cars|vehicle|vehicles)\b",
                 txt,
             )
             if m_cnt:

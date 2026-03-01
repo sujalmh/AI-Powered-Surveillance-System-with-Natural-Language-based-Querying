@@ -614,7 +614,12 @@ def merge_results(
     ]
 
     # --- Composite relevance rescore ------------------------------------
-    # Score = 0.5 * avg_confidence + 0.3 * object_count_norm + 0.2 * duration_norm
+    # Blends the hybrid score (semantic + structured + recency) with
+    # evidence-quality signals so that semantic-only results are not crushed.
+    #   0.45 * hybrid_score  (preserves semantic/structured ranking)
+    # + 0.25 * avg_confidence (detection quality signal)
+    # + 0.15 * object_count_norm
+    # + 0.15 * duration_norm
     for r in results:
         objs = r.get("objects") or []
         confidences = [
@@ -625,14 +630,17 @@ def merge_results(
         avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
         object_count = max(len(objs), int(r.get("matched_object_count") or 0))
         duration = float(r.get("duration_seconds", 0))
+        hybrid_score = float(r.get("score", 0.0))
         r["relevance_score"] = round(
-            (avg_conf * 0.5)
-            + (min(object_count / 5.0, 1.0) * 0.3)
-            + (min(duration / 30.0, 1.0) * 0.2),
+            (hybrid_score * 0.45)
+            + (avg_conf * 0.25)
+            + (min(object_count / 5.0, 1.0) * 0.15)
+            + (min(duration / 30.0, 1.0) * 0.15),
             4,
         )
 
-    # Primary sort: relevance_score; secondary sort keeps score (recency) order.
+    # Primary sort: relevance_score (now incorporates hybrid score);
+    # secondary sort keeps hybrid score order for ties.
     results.sort(
         key=lambda x: (x.get("relevance_score", 0.0), x.get("score", 0.0)),
         reverse=True,

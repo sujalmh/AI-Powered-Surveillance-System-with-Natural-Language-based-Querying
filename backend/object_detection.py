@@ -184,7 +184,7 @@ CSS3_COLORS = {
     'Red': '#FF0000', 'Green': '#008000', 'Blue': '#0000FF', 'Yellow': '#FFFF00',
     'Black': '#000000', 'White': '#FFFFFF', 'Purple': '#800080', 'Orange': '#FFA500',
     'Pink': '#FFC0CB', 'Brown': '#A52A2A', 'Gray': '#808080', 'Cyan': '#00FFFF',
-    'Magenta': '#FF00FF', 'Lime': '#00FF00', 'Navy': '#000080', 'Olive': '#800000',
+    'Magenta': '#FF00FF', 'Lime': '#00FF00', 'Navy': '#000080', 'Olive': '#808000',
     'Teal': '#008080', 'Violet': '#EE82EE', 'Maroon': '#800000', 'Silver': '#C0C0C0',
     'Gold': '#FFD700', 'Coral': '#FF7F50', 'Turquoise': '#40E0D0', 'Salmon': '#FA8072',
     'Indigo': '#4B0082'
@@ -299,8 +299,9 @@ def get_dominant_color(roi, mask, k=NUM_CLUSTERS):
         # Quantize LAB into 8x8x8 bins; L in [0,255], A/B in [0,255] with 128 neutral
         L, A, B = masked_pixels[:, 0], masked_pixels[:, 1], masked_pixels[:, 2]
         qL = np.minimum(L // 32, 7)
-        qA = np.minimum(np.maximum(A.astype(np.int32) + 128, 0) // 32, 7)
-        qB = np.minimum(np.maximum(B.astype(np.int32) + 128, 0) // 32, 7)
+        # OpenCV LAB stores A/B in [0,255] with 128 as neutral — no +128 offset needed
+        qA = np.minimum(A.astype(np.int32) // 32, 7)
+        qB = np.minimum(B.astype(np.int32) // 32, 7)
         flat_idx = (qL.astype(np.int32) * 64 + qA * 8 + qB).astype(np.int32)
         hist = np.bincount(flat_idx, minlength=512)
         dominant_bin = int(np.argmax(hist))

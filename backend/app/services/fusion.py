@@ -15,6 +15,12 @@ class MultimodalFusion:
     def fuse(self, visual_emb: np.ndarray, text_emb: np.ndarray) -> np.ndarray:
         """Fuse visual and text embeddings via weighted concatenation.
 
+        When the visual embedding is all-zeros (text-only query), the visual
+        weight is redistributed to the text portion so that the resulting
+        vector lives entirely in the text sub-space.  This prevents the 768
+        zero dimensions from diluting cosine similarity against stored
+        vectors that have real visual features.
+
         Args:
             visual_emb: shape (768,) float32
             text_emb: shape (384,) float32
@@ -39,8 +45,18 @@ class MultimodalFusion:
                 t2[:n] = t[:n]
             t = t2
 
-        v *= self.visual_weight
-        t *= self.text_weight
+        # Detect text-only query (visual is all zeros) and redistribute
+        # weight entirely to text to avoid diluting the signal.
+        visual_is_zero = float(np.linalg.norm(v)) < 1e-8
+        if visual_is_zero:
+            v_weight = 0.0
+            t_weight = 1.0
+        else:
+            v_weight = self.visual_weight
+            t_weight = self.text_weight
+
+        v *= v_weight
+        t *= t_weight
         fused = np.concatenate([v, t]).astype(np.float32)
 
         # L2 normalize

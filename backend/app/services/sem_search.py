@@ -112,6 +112,8 @@ def search_unstructured(
     store = get_faiss_store(dim=512)
 
     def _filter_pred(meta: Dict[str, Any]) -> bool:
+        from backend.app.services.retrieval_utils import parse_ts as _parse_ts
+
         if camera_id is not None and int(meta.get("camera_id", -1)) != int(camera_id):
             return False
         # Time window filter if available
@@ -121,10 +123,13 @@ def search_unstructured(
                 # Strict time-bounded queries should not accept rows without timestamps
                 return False
             if ts and (from_iso or to_iso):
-                dt = datetime.fromisoformat(ts)
-                if from_iso and dt < datetime.fromisoformat(from_iso):
+                # Use the shared parse_ts helper that strips timezone
+                # suffixes (Z, ±HH:MM) so naive/aware mismatches do not
+                # silently reject valid hits.
+                dt = _parse_ts(ts)
+                if from_iso and dt < _parse_ts(from_iso):
                     return False
-                if to_iso and dt > datetime.fromisoformat(to_iso):
+                if to_iso and dt > _parse_ts(to_iso):
                     return False
         except Exception:
             # If we cannot even parse the timestamp, reject the row rather than
@@ -176,8 +181,9 @@ def search_unstructured(
     # Adaptive threshold from distribution (or use fixed min_confidence)
     if getattr(settings, "ENABLE_ADAPTIVE_CONFIDENCE", True) and clip_scores:
         threshold = _adaptive_min_confidence(clip_scores, has_action=has_action, base=min_confidence)
-        # Hard floor raised to 0.25 to filter out low-quality / irrelevant clips
-        threshold = max(threshold, 0.25)
+        # Hard floor: lower for action queries (e.g. "running") whose CLIP
+        # similarities are inherently weaker; higher for object queries.
+        threshold = max(threshold, 0.15 if has_action else 0.25)
     else:
         threshold = 0.18 if has_action else max(min_confidence, 0.25)
     results = [entry for entry in by_clip.values() if entry["score"] >= threshold]
