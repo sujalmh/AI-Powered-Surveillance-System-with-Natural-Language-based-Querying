@@ -4,7 +4,7 @@ Extracted from UnifiedRetrieval to keep the orchestrator focused on detection re
 """
 from __future__ import annotations
 
-import logging
+from loguru import logger
 from typing import Any, Dict, List, Optional
 
 from backend.app.db.mongo import (
@@ -13,8 +13,6 @@ from backend.app.db.mongo import (
     cameras as cameras_col,
 )
 from backend.app.services.detection_runner import runner
-
-logger = logging.getLogger(__name__)
 
 
 def execute_alert_query(
@@ -45,7 +43,7 @@ def execute_alert_query(
     if isinstance(cam, int):
         q["camera_id"] = cam
 
-    logger.info("Alert query filter: %s", q)
+    logger.opt(exception=True).info("Alert query filter: {}", q)
 
     docs = list(
         alert_logs_col.find(q)
@@ -62,7 +60,7 @@ def execute_alert_query(
             for a in alert_docs:
                 alert_map[str(a.get("_id"))] = a
         except Exception:
-            logger.error("Failed to enrich alerts", exc_info=True)
+            logger.error("Failed to enrich alerts")
 
     results: List[Dict[str, Any]] = []
     for d in docs:
@@ -96,7 +94,7 @@ def execute_camera_query(
     if isinstance(cam, int):
         cam_filter["camera_id"] = cam
 
-    logger.info("Camera query filter: %s", cam_filter)
+    logger.info("Camera query filter: {}", cam_filter)
 
     cameras = list(cameras_col.find(cam_filter, {"_id": 0}).limit(int(limit)))
 

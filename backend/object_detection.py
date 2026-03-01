@@ -1,5 +1,5 @@
 import cv2
-import logging
+from loguru import logger
 import numpy as np
 import datetime
 import time
@@ -30,8 +30,6 @@ from backend.app.services.person_store import get_person_store
 from backend.app.services.fusion import MultimodalFusion
 from backend.app.services.alert_engine import evaluate_realtime
 from backend.app.services.task_queue import submit as task_submit
-
-logger = logging.getLogger(__name__)
 
 
 def _get_zones_for_camera(zones_collection: Any, camera_id: int) -> List[Dict[str, Any]]:
@@ -173,7 +171,7 @@ def ensure_attributes_model_loaded() -> bool:
             logger.info("OpenVINO attributes model loaded successfully (lazy).")
             return True
     except Exception as e:
-        logger.warning("Attributes model disabled (lazy loading failed): %s", e)
+        logger.warning("Attributes model disabled (lazy loading failed): {}", e)
         return False
 
 
@@ -313,7 +311,7 @@ def get_dominant_color(roi, mask, k=NUM_CLUSTERS):
         rgb_color = cv2.cvtColor(lab_arr, cv2.COLOR_LAB2RGB)[0][0]
         return tuple(map(int, rgb_color))
     except Exception as e:
-        logger.warning("Histogram color extraction failed: %s", e)
+        logger.warning("Histogram color extraction failed: {}", e)
         return (0, 0, 0)
 
 # =========================================
@@ -407,7 +405,7 @@ def get_person_attributes(person_roi, person_mask):
             "coat_jacket_confidence": round(float(sigmoid(attrs[6]) if needs_sigmoid else attrs[6]), 2),
         }
     except Exception as e:
-        logger.warning("Failed to get person attributes: %s", e)
+        logger.warning("Failed to get person attributes: {}", e)
         return {}
 
 
@@ -445,7 +443,12 @@ def get_person_attributes_batch(
             input_name = onnx_session.get_inputs()[0].name
             preds = onnx_session.run(None, {input_name: batch})[0]
         else:
-            preds = compiled_model([batch])[output_layer]
+            # OpenVINO model expects batch=1; infer one at a time
+            pred_list = []
+            for img in batch_arr:
+                single = img[np.newaxis, ...]  # (1,3,H,W)
+                pred_list.append(compiled_model([single])[output_layer])
+            preds = np.concatenate(pred_list, axis=0)
             
         out: List[Dict[str, Any]] = []
 
@@ -471,7 +474,7 @@ def get_person_attributes_batch(
             })
         return out
     except Exception as e:
-        logger.warning("Batch person attributes failed: %s", e)
+        logger.warning("Batch person attributes failed: {}", e)
         return [{} for _ in person_rois]
 
 
@@ -508,7 +511,7 @@ def _run_person_embeddings_async(
         metas = [dict(m, detection_id=det_id_str) for m in person_meta]
         person_index.vector_add(arr, metas, save=False)
     except Exception as e:
-        logger.warning("Async person embeddings failed: %s", e)
+        logger.warning("Async person embeddings failed: {}", e)
 
 
 # =========================================
@@ -533,7 +536,7 @@ def _auto_build_and_index(camera_id: int, start_iso: str, end_iso: str, every_se
         )
     except Exception as e:
         # Log to stdout; do not interrupt detection
-        logger.warning("Auto VLM indexing failed for cam %s [%s..%s]: %s", camera_id, start_iso, end_iso, e)
+        logger.warning("Auto VLM indexing failed for cam {} [{}..{}]: {}", camera_id, start_iso, end_iso, e)
 
 
 import queue
@@ -552,7 +555,7 @@ def _ffmpeg_convert_worker(q: queue.Queue):
             if filepath is None:
                 break
             filepath = Path(filepath)
-            h264_path = filepath.with_suffix('.mp4') if filepath.suffix != '.mp4' else filepath.parent / f"{filepath.stem}_h264.mp4"
+            h264_path = filepath.parent / f"{filepath.stem}._converting.mp4"
             cmd = [
                 ffmpeg_exe, "-y", "-i", str(filepath),
                 "-c:v", "libx264", "-preset", "fast", "-crf", "23",
@@ -565,14 +568,14 @@ def _ffmpeg_convert_worker(q: queue.Queue):
                 success = cp.returncode == 0
                 if not success:
                     err = cp.stderr.decode(errors="ignore") if cp.stderr else ""
-                    logger.warning("FFmpeg background conversion failed for %s: %s", filepath, err[:500])
+                    logger.warning("FFmpeg background conversion failed for {}: {}", filepath, err[:500])
             except subprocess.TimeoutExpired:
-                logger.warning("FFmpeg background conversion timed out for %s", filepath)
+                logger.warning("FFmpeg background conversion timed out for {}", filepath)
             if success and h264_path.exists() and h264_path != filepath:
                 filepath.unlink(missing_ok=True)
                 h264_path.rename(filepath)
         except Exception as e:
-            logger.warning("FFmpeg background conversion failed: %s", e)
+            logger.warning("FFmpeg background conversion failed: {}", e)
         finally:
             q.task_done()
 
@@ -635,7 +638,7 @@ class ContinuousRecorder:
                 try:
                     _conversion_queue.put(str(self.current_filepath), timeout=5.0)
                 except queue.Full:
-                    logger.warning("FFmpeg conversion queue full; dropping file %s", self.current_filepath)
+                    logger.warning("FFmpeg conversion queue full; dropping file {}", self.current_filepath)
 
     def release(self):
         self._close_writer()
@@ -751,7 +754,7 @@ def process_live_stream(
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     if not cap.isOpened():
         msg = f"Cannot open camera source {source}"
-        logger.error("%s", msg)
+        logger.error("{}", msg)
         try:
             cameras_collection.update_one(
                 {"camera_id": camera_id},
@@ -772,7 +775,7 @@ def process_live_stream(
         }},
         upsert=True
     )
-    logger.info("Camera %s registered in the database.", camera_id)
+    logger.info("Camera {} registered in the database.", camera_id)
 
     fps = cap.get(cv2.CAP_PROP_FPS) or 30
     frame_interval = int(fps / 2) # Process 2 frames per second
@@ -832,7 +835,7 @@ def process_live_stream(
         window_sec = 15.0
     window_start_iso: Optional[str] = None
 
-    logger.info("Starting live detection on Camera %s at '%s'...", camera_id, location)
+    logger.info("Starting live detection on Camera {} at '{}'...", camera_id, location)
 
     def _should_stop() -> bool:
         return stop_event is not None and stop_event.is_set()
@@ -852,23 +855,23 @@ def process_live_stream(
                 # For HTTP/MJPEG streams, try to reconnect before giving up
                 if isinstance(source, str) and reconnect_attempts < max_reconnects:
                     reconnect_attempts += 1
-                    logger.info("Stream dropped. Reconnecting (attempt %s/%s)...", reconnect_attempts, max_reconnects)
+                    logger.info("Stream dropped. Reconnecting (attempt {}/{})...", reconnect_attempts, max_reconnects)
                     import time
                     for _ in range(20):
                         if _should_stop():
                             break
                         time.sleep(0.1)
                     if reader.reopen(source, cv2.CAP_FFMPEG):
-                        logger.info("Reconnected to stream on attempt %s", reconnect_attempts)
+                        logger.info("Reconnected to stream on attempt {}", reconnect_attempts)
                         read_failures = 0
                         continue
                     else:
-                        logger.warning("Reconnect attempt %s failed", reconnect_attempts)
+                        logger.warning("Reconnect attempt {} failed", reconnect_attempts)
                         read_failures = 0
                         continue
 
                 msg = f"No frames from source after {max_read_failures} attempts"
-                logger.error("%s", msg)
+                logger.error("{}", msg)
                 try:
                     cameras_collection.update_one(
                         {"camera_id": camera_id},
@@ -1167,7 +1170,7 @@ def process_live_stream(
                     cv2.imwrite(str(snap_path), frame)
                     doc["snapshot"] = f"/media/snapshots/camera_{camera_id}/{snap_path.name}"
                 except Exception as e:
-                    logger.warning("Failed to save snapshot: %s", e)
+                    logger.warning("Failed to save snapshot: {}", e)
                 ins = detections_collection.insert_one(doc)
                 det_id = ins.inserted_id if ins is not None else None
 
@@ -1233,7 +1236,7 @@ def process_live_stream(
         # Removed cv2.imshow/waitKey to prevent crashes with opencv-python-headless
 
     
-    logger.info("Camera %s loop exited, cleaning up...", camera_id)
+    logger.info("Camera {} loop exited, cleaning up...", camera_id)
     try:
         cameras_collection.update_one(
             {"camera_id": camera_id},
@@ -1242,7 +1245,7 @@ def process_live_stream(
     except Exception:
         pass
     reader.release()
-    logger.info("Camera %s processing completed.", camera_id)
+    logger.info("Camera {} processing completed.", camera_id)
 
 
 # =========================================
@@ -1280,7 +1283,7 @@ def process_video_file(
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        logger.error("process_video_file: Cannot open video %s", video_path)
+        logger.error("process_video_file: Cannot open video {}", video_path)
         return {"ok": False, "error": f"Cannot open video: {video_path}"}
 
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
@@ -1336,7 +1339,7 @@ def process_video_file(
                 # persist=True gives consistent YOLO track IDs across frames in the file
                 results = model.track(frame, persist=True, conf=CONF_THRESHOLD, verbose=False, half=use_half)
             except Exception as e:
-                logger.warning("process_video_file: YOLO track failed frame %d: %s", frame_idx, e)
+                logger.warning("process_video_file: YOLO track failed frame {}: {}", frame_idx, e)
                 frame_idx += 1
                 continue
 
@@ -1509,7 +1512,7 @@ def process_video_file(
                     cv2.imwrite(str(snap_path), frame)
                     doc["snapshot"] = f"/media/snapshots/camera_{camera_id}/{snap_path.name}"
                 except Exception as e:
-                    logger.warning("process_video_file: snapshot failed: %s", e)
+                    logger.warning("process_video_file: snapshot failed: {}", e)
 
                 # Insert detection document
                 det_id: Optional[Any] = None
@@ -1518,7 +1521,7 @@ def process_video_file(
                     det_id = ins.inserted_id if ins is not None else None
                     detections_inserted += 1
                 except Exception as e:
-                    logger.warning("process_video_file: detection insert failed: %s", e)
+                    logger.warning("process_video_file: detection insert failed: {}", e)
 
                 # Async SigLIP + attribute fusion → person FAISS
                 if person_rois:

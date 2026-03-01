@@ -103,6 +103,13 @@ const CameraTile = memo(({ id, name, status, people, zones }: CameraCard) => {
     if (streamOk && imgRef.current) {
       imgRef.current.src = `${streamUrl}?t=${Date.now()}`;
     }
+    // On unmount (or when streamOk flips off): clear the img src to close
+    // the persistent MJPEG HTTP connection and free server resources.
+    return () => {
+      if (imgRef.current) {
+        imgRef.current.src = "";
+      }
+    };
   }, [streamOk, streamUrl]);
 
   useEffect(() => () => { if (retryTimer.current) clearTimeout(retryTimer.current); }, []);

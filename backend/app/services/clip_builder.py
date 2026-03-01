@@ -6,13 +6,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional, Set, Tuple
-import logging
+from loguru import logger
 
 import cv2
 
 from backend.app.config import settings
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -107,6 +105,20 @@ def _parse_whitelist(stamps: List[str]) -> Set[datetime]:
     return out
 
 
+def _is_mp4_readable(path: Path) -> bool:
+    """Quick check that an MP4 file has a valid moov atom and can be opened."""
+    try:
+        cap = cv2.VideoCapture(str(path))
+        if not cap.isOpened():
+            return False
+        # Try to read at least one frame to confirm usability
+        ok = cap.grab()
+        cap.release()
+        return ok
+    except Exception:
+        return False
+
+
 def _collect_recordings(
     camera_id: int,
     start_dt: datetime,
@@ -119,6 +131,9 @@ def _collect_recordings(
     files: List[Tuple[datetime, Path]] = []
     
     for p in cam_dir.glob("*.mp4"):
+        # Skip temporary files from FFmpeg background conversion
+        if p.stem.endswith("_h264") or p.stem.endswith("._converting"):
+            continue
         ts = _parse_ts_from_filename(p.name)
         if ts is None:
             try:
@@ -145,7 +160,10 @@ def _collect_recordings(
             chunk_end = chunk_start + timedelta(seconds=300)
 
         if start_dt <= chunk_end and end_dt >= chunk_start:
-            overlapping.append((chunk_start, chunk_end, p))
+            if _is_mp4_readable(p):
+                overlapping.append((chunk_start, chunk_end, p))
+            else:
+                logger.debug("Skipping unreadable/incomplete recording: {}", p.name)
             
     return overlapping
 
@@ -267,8 +285,8 @@ def _build_clip_from_snapshots_fallback(
         # Get bundled ffmpeg executable
         ffmpeg_exe = get_ffmpeg_exe()
         
-        # Create H.264 output path
-        h264_path = out_path.with_suffix('.mp4') if out_path.suffix != '.mp4' else out_path.parent / f"{out_path.stem}_h264.mp4"
+        # Create H.264 output path (use ._converting suffix to avoid being picked up by _collect_recordings)
+        h264_path = out_path.parent / f"{out_path.stem}._converting.mp4"
         
         # FFmpeg command for browser-compatible H.264
         cmd = [
@@ -293,7 +311,7 @@ def _build_clip_from_snapshots_fallback(
                 timeout=60
             )
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
-            logger.error("FFmpeg conversion failed: %s", e)
+            logger.error("FFmpeg conversion failed: {}", e)
             final_path = out_path  # Fall back to original file
             result = None
             
@@ -310,17 +328,17 @@ def _build_clip_from_snapshots_fallback(
                 final_path = final_out_path
             else:
                 final_path = h264_path
-            print(f"✅ Converted to H.264 using FFmpeg: {final_path.name}")
+            logger.info("Converted snapshot clip to H.264 via FFmpeg: {}", final_path.name)
         elif result is not None:
             err_msg = result.stderr.decode()[:200] if result.stderr else "Unknown error"
-            print(f"⚠️ FFmpeg conversion failed: {err_msg}")
+            logger.warning("FFmpeg snapshot-fallback conversion failed: {}", err_msg)
             final_path = out_path
             
     except ImportError:
-        print("⚠️ imageio-ffmpeg not installed. Run: pip install imageio-ffmpeg")
+        logger.warning("imageio-ffmpeg not installed — snapshot fallback clip uses mp4v codec (may not play in browsers). Install: pip install imageio-ffmpeg")
         final_path = out_path
     except Exception as e:
-        print(f"⚠️ FFmpeg conversion error: {e}. Using original video.")
+        logger.warning("FFmpeg snapshot-fallback conversion error: {}. Using original video.", e)
         final_path = out_path
 
     # Public URL (served by static /media/clips)
@@ -400,12 +418,12 @@ def build_clip_from_snapshots(
         try:
             cp = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
-            logger.error("build_clip_from_snapshots: ffmpeg trim failed (cmd=%s): %s", cmd, exc)
+            logger.error("build_clip_from_snapshots: ffmpeg trim failed (cmd={}): {}", cmd, exc)
             out_path.unlink(missing_ok=True)
             return _build_clip_from_snapshots_fallback(camera_id, start_iso, end_iso, fps, allowed_timestamps)
         if cp.returncode != 0:
             err = cp.stderr.decode(errors="ignore") if cp.stderr else ""
-            logger.error("build_clip_from_snapshots: ffmpeg trim failed (cmd=%s): %s", cmd, err[:500])
+            logger.error("build_clip_from_snapshots: ffmpeg trim failed (cmd={}): {}", cmd, err[:500])
             out_path.unlink(missing_ok=True)
             return _build_clip_from_snapshots_fallback(camera_id, start_iso, end_iso, fps, allowed_timestamps)
     else:
@@ -434,12 +452,12 @@ def build_clip_from_snapshots(
             try:
                 cp = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300)
             except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
-                logger.error("build_clip_from_snapshots: ffmpeg concat failed (cmd=%s): %s", cmd, exc)
+                logger.error("build_clip_from_snapshots: ffmpeg concat failed (cmd={}): {}", cmd, exc)
                 out_path.unlink(missing_ok=True)
                 return _build_clip_from_snapshots_fallback(camera_id, start_iso, end_iso, fps, allowed_timestamps)
             if cp.returncode != 0:
                 err = cp.stderr.decode(errors="ignore") if cp.stderr else ""
-                logger.error("build_clip_from_snapshots: ffmpeg concat failed (cmd=%s): %s", cmd, err[:500])
+                logger.error("build_clip_from_snapshots: ffmpeg concat failed (cmd={}): {}", cmd, err[:500])
                 out_path.unlink(missing_ok=True)
                 return _build_clip_from_snapshots_fallback(camera_id, start_iso, end_iso, fps, allowed_timestamps)
         finally:

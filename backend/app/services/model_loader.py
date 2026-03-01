@@ -1,9 +1,7 @@
 import os
 import requests
 from pathlib import Path
-import logging
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 # Official OpenVINO storage URL for the model (2023.0 release)
 MODEL_BASE_URL = "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1"

@@ -1,65 +1,112 @@
 """
-Structured logging setup for the backend.
-- Set LOG_JSON=true for JSON lines (one object per line) for production.
-- Otherwise uses a human-readable format.
+Loguru-based logging for the backend.
+- Console: INFO + ERROR only (clean output).
+- File: ALL levels (DEBUG+) for full diagnostics.
+- Log files written to data/logs/ with daily rotation.
 """
-import json
 import logging
+import os
 import sys
-from datetime import datetime, timezone
-from typing import Any, Dict
+from pathlib import Path
+
+from loguru import logger
 
 
-class JsonFormatter(logging.Formatter):
-    """Format log records as single-line JSON for structured logging."""
+class _InterceptHandler(logging.Handler):
+    """
+    Redirect all stdlib logging into Loguru so that third-party libs
+    (uvicorn, pymongo, langchain …) also go through loguru sinks.
+    """
 
-    def format(self, record: logging.LogRecord) -> str:
-        log_obj: Dict[str, Any] = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "level": record.levelname,
-            "logger": record.name,
-            "message": record.getMessage(),
-        }
-        if record.exc_info:
-            log_obj["exception"] = self.formatException(record.exc_info)
-        if hasattr(record, "request_id"):
-            log_obj["request_id"] = getattr(record, "request_id", None)
-        return json.dumps(log_obj, default=str)
+    def emit(self, record: logging.LogRecord) -> None:
+        # Find caller from where the logged message originated
+        try:
+            level = logger.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+
+        frame, depth = sys._getframe(6), 6
+        while frame and frame.f_code.co_filename == logging.__file__:
+            frame = frame.f_back  # type: ignore[assignment]
+            depth += 1
+
+        logger.opt(depth=depth, exception=record.exc_info).log(
+            level, record.getMessage()
+        )
+
+
+def _console_filter(record: dict) -> bool:
+    """Only allow INFO and ERROR (not DEBUG, WARNING, CRITICAL) to console."""
+    return record["level"].name in ("INFO", "ERROR")
 
 
 def configure_logging(
-    log_level: str = "INFO",
+    log_level: str = "DEBUG",
     log_json: bool = False,
 ) -> None:
     """
-    Configure root logger and common handlers.
-    Call once at app startup (e.g. in main.py).
+    Configure loguru sinks.  Call once at app startup.
+    - Console sink: INFO + ERROR only, human-readable.
+    - File sink: ALL levels (DEBUG+), rotated daily, kept 30 days.
     """
-    import os
-    level = getattr(logging, log_level.upper(), logging.INFO)
-    use_json = log_json or (os.getenv("LOG_JSON", "false").lower() == "true")
+    # Remove loguru's default stderr sink
+    logger.remove()
 
-    root = logging.getLogger()
-    root.setLevel(level)
-    # Avoid duplicate handlers when reloading
-    if root.handlers:
-        for h in root.handlers[:]:
-            root.removeHandler(h)
+    # ── Console sink: INFO + ERROR only ──────────────────────────────
+    logger.add(
+        sys.stdout,
+        level="DEBUG",              # accept everything, filter below
+        filter=_console_filter,     # only pass INFO and ERROR
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan> | <level>{message}</level>",
+        colorize=True,
+        backtrace=False,
+        diagnose=False,
+    )
 
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(level)
+    # ── File sink: everything (DEBUG+) ───────────────────────────────
+    log_dir = Path(os.getenv("STORAGE_ROOT", "data")).resolve() / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
 
-    if use_json:
-        handler.setFormatter(JsonFormatter())
-    else:
-        handler.setFormatter(
-            logging.Formatter(
-                "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
-            )
+    log_format = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}"
+
+    if log_json or os.getenv("LOG_JSON", "false").lower() == "true":
+        logger.add(
+            str(log_dir / "app_{time:YYYY-MM-DD}.log"),
+            level="DEBUG",
+            format=log_format,
+            rotation="00:00",       # new file every midnight
+            retention="30 days",
+            compression="gz",
+            serialize=True,         # JSON lines
+            backtrace=True,
+            diagnose=True,
+            encoding="utf-8",
         )
-    root.addHandler(handler)
+    else:
+        logger.add(
+            str(log_dir / "app_{time:YYYY-MM-DD}.log"),
+            level="DEBUG",
+            format=log_format,
+            rotation="00:00",
+            retention="30 days",
+            compression="gz",
+            backtrace=True,
+            diagnose=True,
+            encoding="utf-8",
+        )
+
+    # ── Intercept stdlib logging → loguru ────────────────────────────
+    logging.basicConfig(handlers=[_InterceptHandler()], level=0, force=True)
+
+    # Silence noisy third-party loggers
+    for noisy in ("uvicorn", "uvicorn.access", "uvicorn.error",
+                   "pymongo", "httpcore", "httpx", "openai",
+                   "langchain", "langchain_core", "langchain_openai"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
+    logger.info("Loguru logging configured — console: INFO+ERROR | file: ALL → {}", log_dir)
 
 
-def get_logger(name: str) -> logging.Logger:
-    """Return a logger for the given module name."""
-    return logging.getLogger(name)
+def get_logger(name: str):
+    """Return a loguru logger bound to the given module name."""
+    return logger.bind(name=name)

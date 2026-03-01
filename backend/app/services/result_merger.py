@@ -7,7 +7,7 @@ re-ranking.
 """
 from __future__ import annotations
 
-import logging
+from loguru import logger
 import math
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -32,8 +32,6 @@ from backend.app.services.retrieval_utils import (
     vlm_matches_object_filter,
     flatten_object_captions,
 )
-
-logger = logging.getLogger(__name__)
 
 
 # ======================================================================
@@ -72,7 +70,7 @@ def compute_adaptive_gaps(
         join_gap = max(3.0, min(30.0, max_gap * 3.0))
         return max_gap, join_gap
     except Exception:
-        logger.debug("Adaptive gaps computation failed", exc_info=True)
+        logger.opt(exception=True).debug("Adaptive gaps computation failed")
         return default_max_gap, default_join_gap
 
 
@@ -331,7 +329,7 @@ def compute_adaptive_alpha(
         alpha = base * 0.6 + 0.2 * complexity + 0.2 * struct_ratio
         return max(0.1, min(0.95, alpha))
     except Exception:
-        logger.debug("Adaptive alpha failed, using fixed", exc_info=True)
+        logger.opt(exception=True).debug("Adaptive alpha failed, using fixed")
         return _fixed_alpha(intent, has_count_constraint, has_action)
 
 
@@ -415,7 +413,7 @@ def apply_mmr_diversity(
             selected.append(remaining.pop(best_idx))
         return selected
     except Exception:
-        logger.debug("MMR diversity failed, returning original order", exc_info=True)
+        logger.opt(exception=True).debug("MMR diversity failed, returning original order")
         return results
 
 
@@ -443,16 +441,16 @@ def merge_results(
     if has_count_constraint:
         join_gap = default_join_gap
         combined_tracks = build_count_constrained_segments(structured, parsed_filter, join_gap)
-        logger.debug("Count-constrained segments: %d", len(combined_tracks))
+        logger.opt(exception=True).debug("Count-constrained segments: {}", len(combined_tracks))
     else:
         max_gap, join_gap = compute_adaptive_gaps(structured, default_max_gap, default_join_gap)
         try:
             merged_tracks = merge_structured_tracks(structured, parsed_filter, max_gap)
-            logger.debug("Merged structured tracks: %d", len(merged_tracks))
+            logger.debug("Merged structured tracks: {}", len(merged_tracks))
             combined_tracks = coalesce_tracks(merged_tracks, join_gap)
-            logger.debug("Coalesced tracks: %d", len(combined_tracks))
+            logger.debug("Coalesced tracks: {}", len(combined_tracks))
         except Exception:
-            logger.error("Track merging failed", exc_info=True)
+            logger.error("Track merging failed")
             combined_tracks = []
 
     # --- Scoring --------------------------------------------------------

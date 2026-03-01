@@ -1,10 +1,8 @@
-import logging
+from loguru import logger
 import threading
 from typing import Dict, Optional, Set, Union
 
 from backend.app.db.mongo import cameras as cameras_col
-
-logger = logging.getLogger(__name__)
 
 
 class DetectionRunner:
@@ -124,7 +122,7 @@ class DetectionRunner:
         for cid, (t, _) in pairs:
             t.join(timeout=timeout)
             if t.is_alive():
-                logger.warning("Camera %s thread did not exit within %.1fs", cid, timeout)
+                logger.warning("Camera {} thread did not exit within {}s", cid, timeout)
 
         # Clean up finished entries
         with self._lock:

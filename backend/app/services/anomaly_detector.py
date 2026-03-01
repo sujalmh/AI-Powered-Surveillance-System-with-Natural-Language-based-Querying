@@ -13,14 +13,12 @@ Anomaly types:
 from __future__ import annotations
 
 import math
-import logging
+from loguru import logger
 import time as _time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from backend.app.db.mongo import detections, anomaly_events
-
-logger = logging.getLogger(__name__)
 
 # ──────────────────────────────── Constants ────────────────────────────────
 

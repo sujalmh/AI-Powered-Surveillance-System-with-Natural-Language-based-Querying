@@ -10,7 +10,7 @@ Handles all the complexity of building MongoDB filter pipelines including:
 """
 from __future__ import annotations
 
-import logging
+from loguru import logger
 import re
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -31,15 +31,12 @@ from backend.app.services.retrieval_utils import (
     vlm_matches_object_filter,
 )
 
-logger = logging.getLogger(__name__)
-
 # ---------------------------------------------------------------------------
 # Detection quality constants
 # ---------------------------------------------------------------------------
 
 #: Only include detections whose confidence meets or exceeds this threshold.
 MIN_DETECTION_CONFIDENCE: float = 0.6
-
 
 # ---------------------------------------------------------------------------
 # Location / zone resolution
@@ -58,12 +55,12 @@ def resolve_camera_from_location(location_hint: str) -> Optional[List[int]]:
         if cameras:
             camera_ids = [cam["camera_id"] for cam in cameras]
             locations = [cam["location"] for cam in cameras]
-            logger.info("Location '%s' resolved to cameras: %s (%s)", location_hint, camera_ids, locations)
+            logger.opt(exception=True).info("Location '{}' resolved to cameras: {} ({})", location_hint, camera_ids, locations)
             return camera_ids
-        logger.warning("No cameras found for location: %s", location_hint)
+        logger.warning("No cameras found for location: {}", location_hint)
         return None
     except Exception:
-        logger.error("Error resolving location '%s'", location_hint, exc_info=True)
+        logger.error("Error resolving location '{}'", location_hint)
         return None
 
 
@@ -90,10 +87,10 @@ def resolve_zone_to_ids(
         zone_docs = list(zones_col.find(q, {"zone_id": 1}))
         zone_ids = [str(z["zone_id"]) for z in zone_docs if z.get("zone_id")]
         if zone_ids:
-            logger.info("Resolved zone '%s' -> zone_ids: %s", zone_text, zone_ids)
+            logger.opt(exception=True).info("Resolved zone '{}' -> zone_ids: {}", zone_text, zone_ids)
         return zone_ids
     except Exception:
-        logger.debug("Zone resolution for '%s' failed", zone_text, exc_info=True)
+        logger.debug("Zone resolution for '{}' failed", zone_text)
         return []
 
 
@@ -150,7 +147,7 @@ def _build_mongo_filter(
         original = mongo_filter["objects.object_name"]
         mongo_filter["objects.object_name"] = str(original).lower()
         if str(original) != mongo_filter["objects.object_name"]:
-            logger.debug("Normalized object_name: '%s' -> '%s'", original, mongo_filter["objects.object_name"])
+            logger.opt(exception=True).debug("Normalized object_name: '{}' -> '{}'", original, mongo_filter["objects.object_name"])
 
     # Normalize timestamp values (strip tz suffixes)
     _normalize_timestamp_filter(mongo_filter)
@@ -203,7 +200,7 @@ def _add_person_count_filter(
         pc = {"person_count": {"$lte": int(constraint["lte"])}}
     if pc:
         mongo_filter.update(pc)
-        logger.debug("Using person_count index: %s", pc)
+        logger.debug("Using person_count index: {}", pc)
 
 
 def _add_zone_count_filter(
@@ -226,7 +223,7 @@ def _add_zone_count_filter(
             or_conditions.append({key: {"$lte": int(constraint["lte"])}})
     if or_conditions:
         mongo_filter["$or"] = or_conditions
-        logger.debug("Using zone_counts filter: $or over %s", zone_ids)
+        logger.debug("Using zone_counts filter: $or over {}", zone_ids)
 
 
 _TZ_RE = re.compile(r"(Z|[+-]\d{2}:\d{2})$")
@@ -242,9 +239,9 @@ def _normalize_timestamp_filter(mongo_filter: Dict[str, Any]) -> None:
             original = ts_f[op]
             ts_f[op] = _TZ_RE.sub("", ts_f[op])
             if original != ts_f[op]:
-                logger.debug("Normalized timestamp %s: '%s' -> '%s'", op, original, ts_f[op])
+                logger.debug("Normalized timestamp {}: '{}' -> '{}'", op, original, ts_f[op])
     if ts_f.get("$gte") or ts_f.get("$lte"):
-        logger.debug("Timestamp range: %s to %s", ts_f.get("$gte", "N/A"), ts_f.get("$lte", "N/A"))
+        logger.debug("Timestamp range: {} to {}", ts_f.get("$gte", "N/A"), ts_f.get("$lte", "N/A"))
 
 
 # ---------------------------------------------------------------------------
@@ -275,7 +272,7 @@ def _run_local_time_fallback(
         fallback_filter = {k: v for k, v in mongo_filter.items() if k != "timestamp"}
         fallback_filter["timestamp"] = {"$gte": local_gte, "$lte": local_lte}
 
-        logger.info("Local-time fallback: converting UTC to local [%s, %s]", local_gte, local_lte)
+        logger.info("Local-time fallback: converting UTC to local [{}, {}]", local_gte, local_lte)
         results = list(
             detections_col.find(fallback_filter, {"_id": 0})
             .sort("timestamp", -1)
@@ -283,8 +280,8 @@ def _run_local_time_fallback(
         )
         if results:
             logger.warning(
-                "Local-time fallback returned %d detection(s) from a DIFFERENT time window "
-                "(%s – %s). Results are tagged __local_time_fallback=True.",
+                "Local-time fallback returned {} detection(s) from a DIFFERENT time window "
+                "({} – {}). Results are tagged __local_time_fallback=True.",
                 len(results), local_gte, local_lte,
             )
             # Tag every result so callers / the answer generator can signal that
@@ -294,7 +291,7 @@ def _run_local_time_fallback(
                 r["__local_time_fallback"] = True
         return results
     except Exception:
-        logger.debug("Local-time fallback failed", exc_info=True)
+        logger.debug("Local-time fallback failed")
         return []
 
 
@@ -317,7 +314,7 @@ def _run_diagnostic_query(mongo_filter: Dict[str, Any]) -> None:
             .limit(5)
         )
         if diag_results:
-            logger.warning("DIAGNOSTIC: %d detection(s) without object filter", len(diag_results))
+            logger.opt(exception=True).warning("DIAGNOSTIC: {} detection(s) without object filter", len(diag_results))
             obj_names = {
                 str(obj["object_name"])
                 for d in diag_results
@@ -325,11 +322,11 @@ def _run_diagnostic_query(mongo_filter: Dict[str, Any]) -> None:
                 if isinstance(obj, dict) and obj.get("object_name")
             }
             if obj_names:
-                logger.warning("DIAGNOSTIC: Object names in DB: %s", sorted(obj_names))
+                logger.warning("DIAGNOSTIC: Object names in DB: {}", sorted(obj_names))
         else:
             logger.warning("DIAGNOSTIC: No detections with time/camera filter only")
     except Exception:
-        logger.error("DIAGNOSTIC query failed", exc_info=True)
+        logger.error("DIAGNOSTIC query failed")
 
 
 def _vlm_frames_fallback(
@@ -416,10 +413,10 @@ def _vlm_frames_fallback(
                 "score_struct": 0.35,
                 "score_semantic": 0.0,
             })
-        logger.info("VLM-frames fallback added %d clips", len(extras))
+        logger.opt(exception=True).info("VLM-frames fallback added {} clips", len(extras))
         return extras
     except Exception:
-        logger.error("VLM-frames fallback error", exc_info=True)
+        logger.error("VLM-frames fallback error")
         return []
 
 
@@ -439,7 +436,7 @@ def execute_structured_query(
     """
     mongo_filter, count_constraint, is_zero_count, zone_ids = _build_mongo_filter(parsed_filter)
 
-    logger.debug("MongoDB filter: %s", mongo_filter)
+    logger.opt(exception=True).debug("MongoDB filter: {}", mongo_filter)
 
     # Compute effective limit (capped to avoid excessive results)
     query_limit = limit
@@ -454,7 +451,7 @@ def execute_structured_query(
             .sort("timestamp", -1)
             .limit(query_limit)
         )
-        logger.debug("Initial query returned %d detection(s)", len(results))
+        logger.debug("Initial query returned {} detection(s)", len(results))
 
         # Local-time fallback
         if not results and "timestamp" in mongo_filter:
@@ -506,11 +503,11 @@ def execute_structured_query(
 
         # VLM-frames fallback (disabled for count-constraint queries)
         if count_constraint is None and len(results) < 5:
-            logger.info("Few/no detections (%d), checking vlm_frames...", len(results))
+            logger.info("Few/no detections ({}), checking vlm_frames...", len(results))
             results.extend(_vlm_frames_fallback(mongo_filter, parsed_filter, query_limit))
 
         return results
 
     except Exception:
-        logger.error("Structured query error", exc_info=True)
+        logger.error("Structured query error")
         return []
