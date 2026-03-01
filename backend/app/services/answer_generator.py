@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-import logging
+from loguru import logger
 from datetime import datetime
 from dotenv import load_dotenv
-
-logger = logging.getLogger(__name__)
 
 from backend.app.config import settings
 
@@ -54,7 +52,7 @@ class AnswerGenerator:
                     temperature=0.3,
                 )
             except Exception:
-                logger.error("Failed to initialize OpenAI", exc_info=True)
+                logger.opt(exception=True).error("Failed to initialize OpenAI")
                 self.llm = None
         elif provider == "openrouter":
             try:
@@ -66,7 +64,7 @@ class AnswerGenerator:
                     temperature=0.3,
                 )
             except Exception:
-                logger.error("Failed to initialize OpenRouter", exc_info=True)
+                logger.opt(exception=True).error("Failed to initialize OpenRouter")
                 self.llm = None
         elif provider == "ollama":
             try:
@@ -77,7 +75,7 @@ class AnswerGenerator:
                     temperature=0.3
                 )
             except Exception:
-                logger.error("Failed to initialize Ollama", exc_info=True)
+                logger.opt(exception=True).error("Failed to initialize Ollama")
                 self.llm = None
     
     def generate(
@@ -116,7 +114,7 @@ class AnswerGenerator:
             response = self.llm.invoke([HumanMessage(content=context)])
             return response.content.strip()
         except Exception:
-            logger.error("LLM answering generation failed", exc_info=True)
+            logger.opt(exception=True).error("LLM answering generation failed")
             return "I apologize, but I encountered an error while trying to generate an answer."
     
     def _build_context(
@@ -230,7 +228,7 @@ Alert Logs (up to first 10):
                             dt = datetime.fromisoformat(str(trigger_ts).replace('Z', '+00:00'))
                             trigger_ts = dt.strftime("%Y-%m-%d %I:%M:%S %p")
                     except Exception as e:
-                        logger.debug("Failed to parse trigger_ts %s for alert %s: %s", trigger_ts, a.get('alert_name') or idx, e)
+                        logger.opt(exception=True).debug("Failed to parse trigger_ts {} for alert {}: {}", trigger_ts, a.get('alert_name') or idx, e)
                     prompt += f"- {idx}. [{a.get('severity', 'info')}] {a.get('alert_name') or 'Unnamed alert'} at {trigger_ts or 'unknown time'} on {cam_str}: {a.get('message')}\n"
 
                 prompt += """
@@ -394,7 +392,7 @@ Generate Natural Language Answer:"""
                 duration_min = int((end - start).total_seconds() / 60)
                 parts.append(f"  Time Range: {start_fmt} to {end_fmt} ({duration_min} min)")
             except Exception:
-                logger.debug("Timestamp formatting failed for ts=%r", ts, exc_info=True)
+                logger.debug("Timestamp formatting failed for ts={}", ts)
                 parts.append(f"  Time: {ts}")
         elif ts:
             try:
@@ -404,7 +402,7 @@ Generate Natural Language Answer:"""
                 else:
                     parts.append(f"  Time: {ts}")
             except Exception:
-                logger.debug("Timestamp formatting failed for ts=%r", ts, exc_info=True)
+                logger.opt(exception=True).debug("Timestamp formatting failed for ts={}", ts)
                 parts.append(f"  Time: {ts}")
         elif parsed_filter.get("__last_minutes"):
             parts.append(f"  Time Window: Last {parsed_filter['__last_minutes']} minutes")

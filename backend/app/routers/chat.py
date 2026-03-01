@@ -27,9 +27,7 @@ from pydantic import BaseModel, Field
 from backend.app.core.async_utils import run_sync
 from backend.app.db.mongo import chat_messages as chat_col, detections as detections_col, alerts as alerts_col
 from backend.app.config import settings
-import logging
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 router = APIRouter()
 
@@ -495,7 +493,7 @@ def _maybe_create_alert_from_nl(nl: str, parsed: Dict[str, Any]) -> Optional[Dic
                 val *= 3600.0
             cooldown_sec = val
         except Exception as e:
-            logger.debug("Failed to parse cooldown duration from %r, falling back to 60.0s: %s", m_cd.group(0), e)
+            logger.opt(exception=True).debug("Failed to parse cooldown duration from {}, falling back to 60.0s: {}", m_cd.group(0), e)
     
     doc = {
         "name": f"NL: {nl[:60]}",
@@ -512,7 +510,7 @@ def _maybe_create_alert_from_nl(nl: str, parsed: Dict[str, Any]) -> Optional[Dic
         ins = alerts_col.insert_one(doc)
         return {"id": str(ins.inserted_id), "name": doc["name"], "enabled": True}
     except Exception:
-        logger.exception("Failed to insert NL alert `%s`", doc.get("name"))
+        logger.exception("Failed to insert NL alert `{}`", doc.get("name"))
         return None
 
 
@@ -682,8 +680,8 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
             from backend.app.services.nl_parser import parse_nl_with_llm
             from backend.app.services.unified_retrieval import UnifiedRetrieval
 
-            logger.info("Received chat request. Session: %s, Message length: %d", req.session_id, len(req.message))
-            logger.debug("Full message payload omitted for PII; session: %s", req.session_id)
+            logger.info("Received chat request. Session: {}, Message length: {}", req.session_id, len(req.message))
+            logger.debug("Full message payload omitted for PII; session: {}", req.session_id)
             # Save user message
             save_message(req.session_id, "user", req.message, None)
 
@@ -693,11 +691,11 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
             else:
                 try:
                     parsed = parse_nl_with_llm(req.message)
-                    logger.info("LLM parsed query: %s", parsed)
+                    logger.info("LLM parsed query: {}", parsed)
                 except Exception as e:
-                    logger.warning("LLM parsing failed: %s. Falling back to regex parser.", e, exc_info=True)
+                    logger.warning("LLM parsing failed: {}. Falling back to regex parser.", e)
                     parsed = parse_simple_nl_to_filter(req.message)
-                    logger.info("Regex parsed query: %s", parsed)
+                    logger.opt(exception=True).info("Regex parsed query: {}", parsed)
 
             # If LLM suggested a relative window and absolute timestamp not provided, expand to [now-last_minutes, now]
             # Use UTC to keep timestamps consistent across services
@@ -712,7 +710,7 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
                     parsed["timestamp"] = {"$gte": start.isoformat(), "$lte": now.isoformat()}
                     parsed["__time_explicit"] = True  # user explicitly asked for a time range
                 except Exception as e:
-                    logger.debug("Failed to parse __last_minutes value %r: %s", parsed.get("__last_minutes"), e, exc_info=True)
+                    logger.debug("Failed to parse __last_minutes value {}: {}", parsed.get("__last_minutes"), e)
             elif has_absolute_ts:
                 parsed["__time_explicit"] = True  # LLM returned absolute timestamps from user query
 
@@ -727,7 +725,7 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
                 parsed["timestamp"] = {"$gte": start.isoformat(), "$lte": now.isoformat()}
                 parsed["__last_minutes"] = 1440
             if alert_info:
-                logger.info("Alert created from NL: %s", alert_info)
+                logger.info("Alert created from NL: {}", alert_info)
                 rule_summary = _summarize_alert_rule(parsed)
                 alert_name = alert_info.get("name", "Unnamed alert")
                 answer = (
@@ -766,7 +764,7 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
                 semantic_query=semantic_query,
                 limit=req.limit
             )
-            logger.info("Retrieval complete. Metadata: %s", search_result.get("metadata"))
+            logger.info("Retrieval complete. Metadata: {}", search_result.get("metadata"))
             
             # Extract processing steps from metadata
             processing_steps = search_result.get("processing_steps", [])

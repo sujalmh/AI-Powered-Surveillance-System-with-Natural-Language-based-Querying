@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import functools
 from typing import List, Optional
-import logging
+from loguru import logger
 
 import numpy as np
 import torch
@@ -11,8 +11,6 @@ from PIL import Image
 from backend.app.config import settings
 import os
 from backend.app.services.sem_embedder import get_embedder
-
-logger = logging.getLogger(__name__)
 
 # Lazy import transformers so backend can start even if captions are disabled
 try:
@@ -203,12 +201,9 @@ class _Captioner:
                         generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
                     )
                 except Exception as e:
-                    logger.warning(
-                        "caption_images_batched: qwen2vl generation failed for batch size %d: %s",
+                    logger.opt(exception=True).warning("caption_images_batched: qwen2vl generation failed for batch size {}: {}",
                         len(pil_list),
-                        e,
-                        exc_info=True,
-                    )
+                        e)
                     captions = [""] * len(pil_list)
             elif self.backend == "clip_labels" and getattr(self, "_label_text_emb", None) is not None:
                 # Zero-shot label guessing with CLIP embeddings (fast, always available)

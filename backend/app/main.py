@@ -9,12 +9,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+from loguru import logger
 
 from backend.app.config import settings
 from backend.app.core.logging_config import configure_logging
 
 configure_logging(
-    log_level=os.getenv("LOG_LEVEL", "INFO"),
+    log_level=os.getenv("LOG_LEVEL", "DEBUG"),
     log_json=os.getenv("LOG_JSON", "false").lower() == "true",
 )
 
@@ -27,8 +30,6 @@ from backend.app.schemas.responses import (
     ERROR_BAD_REQUEST,
     ERROR_SERVER,
 )
-
-logger = logging.getLogger(__name__)
 
 try:
     from backend.app.services.detection_runner import runner
@@ -64,18 +65,13 @@ def _graceful_shutdown_work() -> None:
 def _watchdog() -> None:
     """Daemon thread that waits for the shutdown signal, then hard-kills after a deadline."""
     _shutdown_event.wait()
-    logger.info("Shutdown watchdog started — hard deadline in %.0fs", _HARD_DEADLINE_SEC)
+    logger.opt(exception=True).info("Shutdown watchdog started — hard deadline in {:.0f}s", _HARD_DEADLINE_SEC)
     _graceful_shutdown_work()
     # Give the main thread / uvicorn a moment to exit cleanly
     main_thread = threading.main_thread()
     main_thread.join(timeout=_HARD_DEADLINE_SEC)
     if main_thread.is_alive():
         logger.warning("Graceful shutdown timed out — forcing exit")
-        for h in logging.root.handlers:
-            try:
-                h.flush()
-            except Exception:
-                pass
         os._exit(0)
 
 
@@ -85,7 +81,7 @@ _watchdog_thread.start()
 
 def _signal_handler(signum, frame):
     sig_name = signal.Signals(signum).name if hasattr(signal, "Signals") else str(signum)
-    logger.info("Received %s — initiating shutdown", sig_name)
+    logger.info("Received {} — initiating shutdown", sig_name)
     _shutdown_event.set()
     # Re-raise as KeyboardInterrupt so uvicorn's shutdown proceeds normally
     if signum == signal.SIGINT:
@@ -146,17 +142,23 @@ except Exception:
 # ── Lifespan ────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # uvicorn re-initialises its own loggers during startup — silence them
+    # so only loguru-routed messages appear.
+    for _uvicorn_logger in ("uvicorn.access", "uvicorn.error", "uvicorn"):
+        _l = logging.getLogger(_uvicorn_logger)
+        _l.setLevel(logging.WARNING)
+        for _h in _l.handlers[:]:
+            _l.removeHandler(_h)
+
     # Startup — eagerly verify that chat dependencies can be imported so
     # mis-configurations surface at startup, not on the first /send request.
     try:
         from backend.app.services.nl_parser import parse_nl_with_llm  # noqa: F401
         from backend.app.services.unified_retrieval import UnifiedRetrieval  # noqa: F401
     except Exception:
-        logger.warning(
+        logger.opt(exception=True).warning(
             "Chat dependencies (parse_nl_with_llm / UnifiedRetrieval) failed to import; "
-            "/api/chat/send will fall back to lazy import at request time",
-            exc_info=True,
-        )
+            "/api/chat/send will fall back to lazy import at request time")
 
     yield
 
@@ -214,7 +216,7 @@ async def http_exception_handler(request, exc: HTTPException):
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request, exc: Exception):
-    logger.exception("Unhandled exception: %s", exc)
+    logger.opt(exception=exc).error("Unhandled exception: {}", exc)
     return JSONResponse(
         status_code=500,
         content=error_response(
@@ -238,6 +240,35 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# CORS for /media/ static files (StaticFiles mounts bypass CORSMiddleware)
+_MEDIA_CORS_ORIGINS = settings.ALLOWED_ORIGINS or [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3012",
+    "http://127.0.0.1:3012",
+]
+
+
+class _MediaCORSMiddleware(BaseHTTPMiddleware):
+    """Inject CORS headers for /media/ requests so <video crossOrigin> works."""
+
+    async def dispatch(self, request: StarletteRequest, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/media/"):
+            origin = request.headers.get("origin", "")
+            if origin and ("*" in _MEDIA_CORS_ORIGINS or origin in _MEDIA_CORS_ORIGINS):
+                response.headers["Access-Control-Allow-Origin"] = origin
+            elif origin:
+                # Allow any origin for media files (public surveillance footage)
+                response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "Range, Content-Type"
+            response.headers["Access-Control-Expose-Headers"] = "Content-Length, Content-Range, Accept-Ranges"
+        return response
+
+
+app.add_middleware(_MediaCORSMiddleware)
 
 # Routers
 app.include_router(cameras_router, prefix="/api/cameras", tags=["cameras"])

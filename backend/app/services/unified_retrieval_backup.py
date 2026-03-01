@@ -18,10 +18,8 @@ from backend.app.services.sem_search import search_unstructured
 from backend.app.services.answer_generator import AnswerGenerator
 from backend.app.services.detection_runner import runner
 from backend.app.config import settings
-import logging
+from loguru import logger
 import re
-
-logger = logging.getLogger(__name__)
 
 SEM_RAW_THRESH_LOW = 0.22
 SEM_RAW_THRESH_MED = 0.30
@@ -743,9 +741,9 @@ class UnifiedRetrieval:
                         if fallback_results:
                             results = fallback_results
                             print(f"[UnifiedRetrieval] Local-time fallback returned {len(results)} detection(s)")
-                            logger.info("Local-time timestamp fallback returned %s detection(s)", len(results))
+                            logger.info("Local-time timestamp fallback returned {} detection(s)", len(results))
                     except Exception as fallback_err:
-                        logger.debug("Local-time fallback failed: %s", fallback_err)
+                        logger.debug("Local-time fallback failed: {}", fallback_err)
 
             # If query returned 0 results and DEBUG is on, run diagnostic fallback query (avoid extra DB hit in production)
             if settings.DEBUG and len(results) == 0:
@@ -762,18 +760,18 @@ class UnifiedRetrieval:
                         ).sort("timestamp", -1).limit(5)
                         diagnostic_results = list(diagnostic_cursor)
                         if diagnostic_results:
-                            logger.warning("DIAGNOSTIC: Found %s detection(s) without object filter", len(diagnostic_results))
+                            logger.warning("DIAGNOSTIC: Found {} detection(s) without object filter", len(diagnostic_results))
                             obj_names_found = set()
                             for d in diagnostic_results:
                                 for obj in d.get("objects", []):
                                     if isinstance(obj, dict) and obj.get("object_name"):
                                         obj_names_found.add(str(obj["object_name"]))
                             if obj_names_found:
-                                logger.warning("DIAGNOSTIC: Object names in DB: %s", sorted(obj_names_found))
+                                logger.warning("DIAGNOSTIC: Object names in DB: {}", sorted(obj_names_found))
                         else:
                             logger.warning("DIAGNOSTIC: No detections without object filter (time/camera only)")
                     except Exception as diag_err:
-                        logger.error("DIAGNOSTIC query failed: %s", diag_err)
+                        logger.error("DIAGNOSTIC query failed: {}", diag_err)
 
             # Strictly enforce count constraints in-memory.
             results = self._filter_docs_by_count_constraint(results, parsed_filter)

@@ -1,5 +1,5 @@
 import os
-import logging
+from loguru import logger
 from pathlib import Path
 from typing import List
 from dotenv import load_dotenv
@@ -111,7 +111,7 @@ class Settings:
                 }
         except Exception as e:
             # Fallback to env if DB not available or table doesn't exist yet
-            logging.exception(f"Failed to load llm_config from MongoDB in get_active_llm_config: {e}")
+            logger.exception(f"Failed to load llm_config from MongoDB in get_active_llm_config: {e}")
             
         return {
             "provider": self.LLM_PROVIDER,
