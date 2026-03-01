@@ -292,15 +292,12 @@ def _build_clip_from_snapshots_fallback(
                 stderr=subprocess.PIPE,
                 timeout=60
             )
-            success = result.returncode == 0 and h264_path.exists()
-            err_msg = result.stderr.decode()[:200] if result.stderr else "Unknown error"
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
             logger.error("FFmpeg conversion failed: %s", e)
+            final_path = out_path  # Fall back to original file
             result = None
-            success = False
-            err_msg = str(e)
             
-        if success:
+        if result is not None and result.returncode == 0 and h264_path.exists():
             # Success! Replace original with H.264 version
             if h264_path != out_path:
                 try:
@@ -314,7 +311,8 @@ def _build_clip_from_snapshots_fallback(
             else:
                 final_path = h264_path
             print(f"✅ Converted to H.264 using FFmpeg: {final_path.name}")
-        else:
+        elif result is not None:
+            err_msg = result.stderr.decode()[:200] if result.stderr else "Unknown error"
             print(f"⚠️ FFmpeg conversion failed: {err_msg}")
             final_path = out_path
             
