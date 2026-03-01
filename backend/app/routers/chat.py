@@ -84,6 +84,13 @@ class ChatSendRequest(BaseModel):
     limit: int = 50
 
 
+class ProcessingStep(BaseModel):
+    name: str
+    status: str  # "complete" | "in-progress" | "pending" | "error"
+    details: str
+    timestamp: Optional[str] = None
+
+
 class ChatSendResponse(BaseModel):
     session_id: str
     parsed_filter: Dict[str, Any]
@@ -94,6 +101,7 @@ class ChatSendResponse(BaseModel):
     # Additional fields for frontend compatibility
     semantic_results: Optional[List[Dict[str, Any]]] = None
     mode: Optional[str] = None
+    processing_steps: Optional[List[ProcessingStep]] = None
 
 
 def iso_now() -> str:
@@ -562,6 +570,9 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
             )
             logger.info("Retrieval complete. Metadata: %s", search_result.get("metadata"))
             
+            # Extract processing steps from metadata
+            processing_steps = search_result.get("processing_steps", [])
+            
             results = search_result["results"]
             answer = search_result["answer"]
             metadata = search_result.get("metadata")
@@ -575,23 +586,28 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
             if parsed_intent in ("create", "update", "delete", "") or parsed_subtype in ("alerts", ""):
                 alert_info = _maybe_create_alert_from_nl(req.message, parsed)
 
-            # Save assistant message (compact payload — store count + preview IDs, not full results)
-            result_ids = [
-                r.get("_id") or r.get("clip_url") or r.get("track_id")
-                for r in results[:5]
-            ]
+            # Save assistant message with full payload for proper restoration from history
+            assistant_payload = {
+                "session_id": req.session_id,
+                "parsed_filter": parsed,
+                "results": results,  # Full results array for video display
+                "answer": answer,
+                "metadata": metadata,
+                "semantic_results": results,  # Also store as semantic_results for frontend compatibility
+                "mode": "unstructured" if parsed.get("action") else "hybrid",  # Include mode for proper frontend rendering
+            }
+            
+            if alert_info:
+                assistant_payload["alert_created"] = alert_info
+            
+            if processing_steps:
+                assistant_payload["processing_steps"] = processing_steps
+            
             save_message(
                 req.session_id,
                 "assistant",
                 answer,
-                {
-                    "session_id": req.session_id,
-                    "parsed_filter": parsed,
-                    "results_count": len(results),
-                    "results_preview": result_ids,
-                    "metadata": metadata,
-                    "answer": answer,
-                },
+                assistant_payload,
             )
 
             # Build response compatible with frontend expectations
@@ -602,6 +618,7 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
                 "answer": answer,
                 "metadata": metadata,
                 "alert_created": alert_info,
+                "processing_steps": [ProcessingStep(**step) for step in processing_steps] if processing_steps else None,
             }
             
             # Add fields expected by frontend for video display

@@ -910,7 +910,8 @@ def process_live_stream(
                 results = model(frame, half=use_half)
             if _should_stop():
                 break
-            timestamp = datetime.datetime.now().isoformat()
+            # Use UTC and strip timezone suffix so MongoDB string comparison matches chat retrieval (which uses UTC range with normalized timestamps)
+            timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "").rstrip("Z")
 
             doc = {"camera_id": camera_id, "timestamp": timestamp, "objects": []}
 

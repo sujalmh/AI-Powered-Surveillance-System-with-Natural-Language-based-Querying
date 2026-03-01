@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import { createPortal } from "react-dom"
 import { Play, X, Download } from "lucide-react"
 import { API_BASE, type ChatSendResponse } from "@/lib/api"
@@ -16,6 +16,8 @@ export const QueryResults = React.memo(({ onShowSteps, response }: QueryResultsP
   const [selectedVideoUrl, setSelectedVideoUrl] = useState<string | null>(null)
   const [showVideoModal, setShowVideoModal] = useState(false)
   const [selectedItem, setSelectedItem] = useState<any>(null)
+  const [actualVideoDuration, setActualVideoDuration] = useState<number | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   const combined = (response?.combined_tracks as any[]) || []
   const merged = (response?.merged_tracks as any[]) || []
@@ -48,6 +50,7 @@ export const QueryResults = React.memo(({ onShowSteps, response }: QueryResultsP
   const handleVideoClick = (clipUrl: string, item: any) => {
     setSelectedVideoUrl(`${API_BASE}${clipUrl}`)
     setSelectedItem(item)
+    setActualVideoDuration(null) // Reset duration when opening modal
     setShowVideoModal(true)
   }
 
@@ -55,6 +58,7 @@ export const QueryResults = React.memo(({ onShowSteps, response }: QueryResultsP
     setShowVideoModal(false)
     setSelectedVideoUrl(null)
     setSelectedItem(null)
+    setActualVideoDuration(null)
   }
 
   return (
@@ -144,12 +148,18 @@ export const QueryResults = React.memo(({ onShowSteps, response }: QueryResultsP
               <div className="grid lg:grid-cols-3 gap-0 h-full max-h-[85vh]">
                 <div className="lg:col-span-2 bg-black flex items-center justify-center">
                   <video
+                    ref={videoRef}
                     src={selectedVideoUrl}
                     className="w-full max-h-full object-contain"
                     controls
                     autoPlay
                     playsInline
                     crossOrigin="anonymous"
+                    onLoadedMetadata={() => {
+                      if (videoRef.current) {
+                        setActualVideoDuration(videoRef.current.duration)
+                      }
+                    }}
                   />
                 </div>
 
@@ -175,10 +185,14 @@ export const QueryResults = React.memo(({ onShowSteps, response }: QueryResultsP
                   )}
 
                   <div className="grid grid-cols-2 gap-4 mt-5">
-                    {selectedItem.duration_seconds != null && (
+                    {(actualVideoDuration !== null || selectedItem.duration_seconds != null) && (
                       <div className="p-3 rounded-xl bg-muted border border-border">
                         <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wide">Duration</p>
-                        <p className="text-xl font-bold text-foreground mt-1">{selectedItem.duration_seconds}s</p>
+                        <p className="text-xl font-bold text-foreground mt-1">
+                          {actualVideoDuration !== null 
+                            ? `${actualVideoDuration.toFixed(2)}s`
+                            : `${selectedItem.duration_seconds}s`}
+                        </p>
                       </div>
                     )}
                     {selectedItem.score_norm != null && (

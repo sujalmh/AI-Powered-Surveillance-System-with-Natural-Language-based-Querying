@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Zap, AlertCircle, Send, ChevronLeft, ChevronRight } from "lucide-react"
 import { ChatMessage } from "./chat-message"
-import { api, type ChatSendResponse } from "@/lib/api"
+import { api, type ChatSendResponse, type ProcessingStep } from "@/lib/api"
 
 interface ChatInterfaceProps {
   onShowSteps: () => void
+  onStepsUpdate?: (steps: ProcessingStep[] | undefined, responseTime: number | undefined) => void
 }
 
 type UIMessage = { id: number; type: "user" | "assistant"; content: string; payload?: any }
@@ -28,7 +29,7 @@ function useChatSessionId() {
   return sid
 }
 
-export function ChatInterface({ onShowSteps }: ChatInterfaceProps) {
+export function ChatInterface({ onShowSteps, onStepsUpdate }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<UIMessage[]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
@@ -39,6 +40,7 @@ export function ChatInterface({ onShowSteps }: ChatInterfaceProps) {
   const sessionId = useChatSessionId()
   const nextIdRef = useRef(2)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const requestStartTimeRef = useRef<number | null>(null)
 
   const canSend = useMemo(() => !!input.trim() && !!sessionId && !loading, [input, sessionId, loading])
 
@@ -65,15 +67,89 @@ export function ChatInterface({ onShowSteps }: ChatInterfaceProps) {
     const userMsg: UIMessage = { id: nextIdRef.current++, type: "user", content: isAlert ? `[Alert] ${text}` : text }
     setMessages((prev) => [...prev, userMsg])
     setLoading(true); setError(null)
+    
+    // Track request start time
+    requestStartTimeRef.current = Date.now()
+    
+    // Initialize progressive steps simulation
+    const progressiveSteps: ProcessingStep[] = [
+      { name: "Parse Query", status: "pending", details: "Waiting..." },
+      { name: "MongoDB Query", status: "pending", details: "Not started" },
+      { name: "Vector Search", status: "pending", details: "Not started" },
+      { name: "Fusion & Ranking", status: "pending", details: "Not started" },
+      { name: "Build Clips", status: "pending", details: "Not started" },
+      { name: "Return Results", status: "pending", details: "Not started" },
+    ]
+    
+    // Show initial steps
+    onStepsUpdate?.(progressiveSteps, undefined)
+    
+    // Simulate progressive status updates while waiting for backend
+    const stepTimings = [100, 500, 1000, 1500, 2000, 2500] // Timings for each step
+    const stepUpdates = stepTimings.map((delay, index) => 
+      setTimeout(() => {
+        const updatedSteps = progressiveSteps.map((step, i) => {
+          if (i < index) {
+            return { ...step, status: "complete" as const, details: "✓ Done" }
+          } else if (i === index) {
+            return { 
+              ...step, 
+              status: "in-progress" as const, 
+              details: index === 0 ? "Analyzing query..." :
+                       index === 1 ? "Searching database..." :
+                       index === 2 ? "Searching embeddings..." :
+                       index === 3 ? "Merging results..." :
+                       index === 4 ? "Building clips..." :
+                       "Preparing response..."
+            }
+          }
+          return step
+        })
+        onStepsUpdate?.(updatedSteps, undefined)
+      }, delay)
+    )
+    
     try {
       if (isAlert) {
+        // Clear simulation timers
+        stepUpdates.forEach(clearTimeout)
+        
         setMessages((prev) => [...prev, { id: nextIdRef.current++, type: "assistant", content: `Alert created: "${text}"` }])
+        const responseTime = (Date.now() - requestStartTimeRef.current) / 1000
+        onStepsUpdate?.(undefined, responseTime)
       } else {
         const resp = await api.chatSend(sessionId, text, 50)
+        
+        // Clear simulation timers
+        stepUpdates.forEach(clearTimeout)
+        
+        const responseTime = (Date.now() - requestStartTimeRef.current) / 1000
+        
+        // Update with actual steps from backend
+        onStepsUpdate?.(resp.processing_steps, responseTime)
+        
         setMessages((prev) => [...prev, { id: nextIdRef.current++, type: "assistant", content: resp.answer, payload: resp }])
+        
+        // Notify sidebar to refresh sessions list
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("chat:message:sent", { detail: { session_id: sessionId } }))
+        }
       }
     } catch (e: any) {
+      // Clear simulation timers on error
+      stepUpdates.forEach(clearTimeout)
+      
       const msg = e?.message || "Request failed"; setError(msg)
+      const responseTime = requestStartTimeRef.current ? (Date.now() - requestStartTimeRef.current) / 1000 : undefined
+      
+      // Show error state
+      const errorSteps: ProcessingStep[] = progressiveSteps.map(step => ({
+        ...step,
+        status: "error" as const,
+        details: "Request failed"
+      }))
+      onStepsUpdate?.(errorSteps, responseTime)
+      
       setMessages((prev) => [...prev, { id: nextIdRef.current++, type: "assistant", content: `Error: ${msg}` }])
     } finally { setLoading(false) }
   }
