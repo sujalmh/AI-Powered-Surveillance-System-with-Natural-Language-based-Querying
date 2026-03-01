@@ -5,6 +5,12 @@ export type ProcessingStep = {
     timestamp?: string;
 };
 
+export type IntentClassification = {
+    intent: "alert_creation" | "search_retrieval";
+    confidence: number;
+    reasoning: string;
+};
+
 export type ChatSendResponse = {
     session_id: string;
     parsed_filter: Record<string, any>;
@@ -102,6 +108,12 @@ export const api = {
                 limit,
             }),
         }),
+
+    chatClassifyIntent: (message: string) =>
+        http<IntentClassification>("/api/chat/classify-intent", {
+            method: "POST",
+            body: JSON.stringify({ message }),
+        }, 10000), // 10 second timeout for LLM classification
 
     chatHistory: (sessionId: string) =>
         http<{ session_id: string; messages: Array<{ role: string; content: string; created_at: string; payload?: any }> }>(

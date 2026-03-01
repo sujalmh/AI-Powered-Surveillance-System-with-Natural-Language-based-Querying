@@ -1,5 +1,5 @@
 import React from "react"
-import { Bot, User } from "lucide-react"
+import { Bot, User, Bell, CheckCircle2 } from "lucide-react"
 import { QueryResults } from "./query-results"
 import type { ChatSendResponse } from "@/lib/api"
 
@@ -64,6 +64,40 @@ export const ChatMessage = React.memo(({ message, onShowSteps }: ChatMessageProp
         }}>
           {message.content}
         </p>
+        {!isUser && resp?.alert_created && (
+          <div style={{
+            marginTop: "10px",
+            padding: "10px 12px",
+            background: "linear-gradient(135deg, rgba(22, 163, 74, 0.08), rgba(21, 128, 61, 0.04))",
+            border: "1px solid rgba(22, 163, 74, 0.25)",
+            borderRadius: "var(--radius-md)",
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "10px",
+          }}>
+            <div style={{
+              width: "28px", height: "28px",
+              borderRadius: "var(--radius-full)",
+              background: "rgba(22, 163, 74, 0.15)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0, marginTop: "1px",
+            }}>
+              <Bell style={{ width: "14px", height: "14px", color: "#16A34A" }} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                <CheckCircle2 style={{ width: "13px", height: "13px", color: "#16A34A" }} />
+                <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#16A34A" }}>Alert Active</span>
+              </div>
+              <p style={{
+                fontSize: "0.8125rem", color: "var(--color-text-muted)",
+                margin: 0, lineHeight: 1.45,
+              }}>
+                {resp.alert_created.name || "New alert"}
+              </p>
+            </div>
+          </div>
+        )}
         {!isUser && hasMedia && (
           <div style={{ marginTop: "12px" }}>
             <QueryResults onShowSteps={onShowSteps || (() => {})} response={resp} />

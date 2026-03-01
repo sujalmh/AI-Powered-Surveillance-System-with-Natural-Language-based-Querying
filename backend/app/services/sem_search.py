@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from datetime import datetime
 from functools import lru_cache
@@ -10,6 +11,8 @@ import numpy as np
 from backend.app.config import settings
 from backend.app.services.sem_embedder import get_embedder
 from backend.app.services.sem_store import get_faiss_store
+
+logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=128)
@@ -177,79 +180,6 @@ def search_unstructured(
     # Sort by normalized score desc
     results.sort(key=lambda x: x.get("score_norm", 0.0), reverse=True)
     
-    print(f"[SemanticSearch] Filtered results: {len(results)} clips with confidence >= {threshold}")
+    logger.info("Filtered results: %d clips with confidence >= %.2f", len(results), threshold)
     
     return {"mode": "unstructured", "semantic_results": results}
-
-
-def combine_hybrid(
-    structured: List[Dict[str, Any]],
-    semantic: List[Dict[str, Any]],
-    alpha: float = 0.5,
-) -> List[Dict[str, Any]]:
-    """
-    Combine structured clips and semantic clips via weighted normalized scoring.
-    structured: list of dicts with at least {"clip_url"?, "score_struct" or fallbacks}
-    semantic: output from search_unstructured()["semantic_results"]
-    alpha: weight for structured; (1-alpha) for semantic.
-    Returns merged ranked list.
-    """
-    # Build maps by clip_url or clip_path if clip_url missing
-    s_map: Dict[str, Dict[str, Any]] = {}
-    for s in structured:
-        key = s.get("clip_url") or s.get("clip_path") or ""
-        if not key:
-            continue
-        s_map[key] = s
-
-    # Normalize structured scores
-    s_scores = []
-    for s in structured:
-        sc = float(s.get("score_struct") or s.get("duration_seconds") or 0.0)
-        s["_score_struct_raw"] = sc
-        s_scores.append(sc)
-    s_norm = _norm_scores(s_scores)
-    for s, ns in zip(structured, s_norm):
-        s["score_struct_norm"] = ns
-
-    out_map: Dict[str, Dict[str, Any]] = {}
-    # Seed with semantic entries
-    for m in semantic:
-        key = m.get("clip_url") or m.get("clip_path") or ""
-        if not key:
-            continue
-        out_map[key] = {
-            "clip_url": m.get("clip_url"),
-            "clip_path": m.get("clip_path"),
-            "camera_id": m.get("camera_id"),
-            "score_sem_norm": float(m.get("score_norm") or 0.0),
-            "score_struct_norm": 0.0,
-            "frames": m.get("frames", []),
-        }
-
-    # Merge structured
-    for s in structured:
-        key = s.get("clip_url") or s.get("clip_path") or ""
-        if not key:
-            continue
-        if key not in out_map:
-            out_map[key] = {
-                "clip_url": s.get("clip_url"),
-                "clip_path": s.get("clip_path"),
-                "camera_id": s.get("camera_id"),
-                "score_sem_norm": 0.0,
-                "score_struct_norm": float(s.get("score_struct_norm") or 0.0),
-                "frames": [],
-            }
-        else:
-            out_map[key]["score_struct_norm"] = float(s.get("score_struct_norm") or 0.0)
-
-    # Final score
-    merged: List[Dict[str, Any]] = []
-    for v in out_map.values():
-        fs = alpha * float(v.get("score_struct_norm") or 0.0) + (1.0 - alpha) * float(v.get("score_sem_norm") or 0.0)
-        v["score"] = fs
-        merged.append(v)
-
-    merged.sort(key=lambda x: x.get("score", 0.0), reverse=True)
-    return merged
