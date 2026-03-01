@@ -1,8 +1,9 @@
 "use client";
 
 import { AlertTriangle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
+import { timeAgo } from "@/lib/time";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 type AlertLog = {
@@ -13,70 +14,69 @@ type AlertLog = {
   message: string;
 };
 
-function timeAgo(ts: string): string {
-  const d = new Date(ts);
-  const diffMs = Date.now() - d.getTime();
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+/** Normalise a raw API alert object into an AlertLog. */
+function toAlertLog(raw: any): AlertLog {
+  return {
+    id: String(raw.id),
+    alert_id: String(raw.alert_id),
+    triggered_at: raw.triggered_at,
+    camera_id: typeof raw.camera_id === "number" ? raw.camera_id : undefined,
+    message: raw.message || "Alert triggered",
+  };
 }
 
 export function RecentAlerts() {
   const [logs, setLogs] = useState<AlertLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const evtSourceRef = useRef<EventSource | null>(null);
+
+  /** Append a new log (deduped) at the front. */
+  const pushLog = useCallback(
+    (log: AlertLog) =>
+      setLogs((prev) => (prev.some((p) => p.id === log.id) ? prev : [log, ...prev])),
+    [],
+  );
 
   useEffect(() => {
-    let evtSource: EventSource | null = null;
     let aborted = false;
 
-    (async () => {
+    async function load() {
       setLoading(true);
       try {
-        const res = (await api.listAlertLogs()) as any[];
-        if (!aborted) {
-          const list: AlertLog[] = res.map((l) => ({
-            id: String(l.id),
-            alert_id: String(l.alert_id),
-            triggered_at: l.triggered_at,
-            camera_id: typeof l.camera_id === "number" ? l.camera_id : undefined,
-            message: l.message || "Alert triggered",
-          }));
-          setLogs(list);
-          setLoading(false);
+        const raw = (await api.listAlertLogs()) as any[];
+        if (aborted) return;
 
-          evtSource = api.streamAlerts({ last_ts: list[0]?.triggered_at });
-          evtSource.onmessage = (e: MessageEvent) => {
-            if (aborted) return;
-            try {
-              const data = JSON.parse(e.data);
-              const newLog: AlertLog = {
-                id: String(data.id),
-                alert_id: String(data.alert_id),
-                triggered_at: data.triggered_at,
-                camera_id: typeof data.camera_id === "number" ? data.camera_id : undefined,
-                message: data.message || "Alert triggered",
-              };
-              setLogs((prev) => prev.some((p) => p.id === newLog.id) ? prev : [newLog, ...prev]);
-            } catch {}
-          };
-        }
+        const list = raw.map(toAlertLog);
+        setLogs(list);
+        setLoading(false);
+
+        // Start SSE stream for live updates
+        const es = api.streamAlerts({ last_ts: list[0]?.triggered_at });
+        evtSourceRef.current = es;
+        es.onmessage = (e: MessageEvent) => {
+          if (aborted) return;
+          try {
+            pushLog(toAlertLog(JSON.parse(e.data)));
+          } catch {
+            /* malformed SSE payload — skip */
+          }
+        };
       } catch (e: any) {
         if (!aborted) {
           setErr(e?.message || "Failed to load");
           setLoading(false);
         }
       }
-    })();
+    }
+
+    load();
 
     return () => {
       aborted = true;
-      if (evtSource) evtSource.close();
+      evtSourceRef.current?.close();
     };
-  }, []);
+  }, [pushLog]);
 
   return (
     <div

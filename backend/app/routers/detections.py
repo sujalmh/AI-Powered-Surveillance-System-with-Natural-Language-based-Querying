@@ -11,6 +11,10 @@ from backend.app.db.mongo import detections as detections_col
 router = APIRouter()
 
 
+# ------------------------------------------------------------------
+# Schemas
+# ------------------------------------------------------------------
+
 class DetectionObject(BaseModel):
     object_name: str
     track_id: int
@@ -24,6 +28,37 @@ class DetectionDoc(BaseModel):
     timestamp: str
     objects: List[DetectionObject]
 
+
+# ------------------------------------------------------------------
+# Shared filter builder (DRY)
+# ------------------------------------------------------------------
+
+def _build_base_filter(
+    camera_id: Optional[int],
+    from_ts: Optional[str],
+    to_ts: Optional[str],
+    last_minutes: Optional[int],
+    *,
+    object_name: Optional[str] = None,
+    color: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Build the common MongoDB filter dict used by all detection endpoints."""
+    query: Dict[str, Any] = {}
+    if camera_id is not None:
+        query["camera_id"] = camera_id
+    time_filter = build_time_filter(from_ts=from_ts, to_ts=to_ts, last_minutes=last_minutes)
+    if time_filter:
+        query["timestamp"] = time_filter
+    if object_name:
+        query["objects.object_name"] = object_name
+    if color:
+        query["objects.color"] = color
+    return query
+
+
+# ------------------------------------------------------------------
+# Endpoints
+# ------------------------------------------------------------------
 
 @router.get("/", response_model=List[Dict[str, Any]])
 async def list_detections(
@@ -40,18 +75,7 @@ async def list_detections(
 
     def _block():
         try:
-            query: Dict[str, Any] = {}
-            if camera_id is not None:
-                query["camera_id"] = camera_id
-            time_filter = build_time_filter(from_ts=from_ts, to_ts=to_ts, last_minutes=last_minutes)
-            if time_filter:
-                query["timestamp"] = time_filter
-            obj_sub: Dict[str, Any] = {}
-            if object:
-                obj_sub["objects.object_name"] = object
-            if color:
-                obj_sub["objects.color"] = color
-            query.update(obj_sub)
+            query = _build_base_filter(camera_id, from_ts, to_ts, last_minutes, object_name=object, color=color)
             return list(detections_col.find(query, {"_id": 0}).sort("timestamp", -1).skip(skip).limit(limit))
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to query detections: {e}") from e
@@ -70,12 +94,7 @@ async def object_counts(
 
     def _block():
         try:
-            match: Dict[str, Any] = {}
-            if camera_id is not None:
-                match["camera_id"] = camera_id
-            time_filter = build_time_filter(from_ts=from_ts, to_ts=to_ts, last_minutes=last_minutes)
-            if time_filter:
-                match["timestamp"] = time_filter
+            match = _build_base_filter(camera_id, from_ts, to_ts, last_minutes)
             pipeline = [
                 {"$match": match},
                 {"$unwind": "$objects"},
@@ -103,12 +122,7 @@ async def color_counts(
 
     def _block():
         try:
-            match: Dict[str, Any] = {}
-            if camera_id is not None:
-                match["camera_id"] = camera_id
-            time_filter = build_time_filter(from_ts=from_ts, to_ts=to_ts, last_minutes=last_minutes)
-            if time_filter:
-                match["timestamp"] = time_filter
+            match = _build_base_filter(camera_id, from_ts, to_ts, last_minutes)
             pipeline: List[Dict[str, Any]] = [{"$match": match}, {"$unwind": "$objects"}]
             if object:
                 pipeline.append({"$match": {"objects.object_name": object}})

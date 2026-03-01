@@ -794,7 +794,7 @@ def process_live_stream(
         _cam_fps = int(cap.get(cv2.CAP_PROP_FPS) or 30) if hasattr(cap, 'get') else 30
         try:
             tracker = BoTSORT(
-                reid_weights=reid_weights,
+                reid_weights=Path(reid_weights),
                 device=device,
                 half=(device == "cuda"),
                 # --- Surveillance-tuned params ---

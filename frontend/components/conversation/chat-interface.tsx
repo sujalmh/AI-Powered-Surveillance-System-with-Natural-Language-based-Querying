@@ -64,15 +64,43 @@ export function ChatInterface({ onShowSteps, onStepsUpdate }: ChatInterfaceProps
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }) }, [messages])
 
   const sendMessage = async (text: string, isAlert: boolean) => {
-    const userMsg: UIMessage = { id: nextIdRef.current++, type: "user", content: isAlert ? `[Alert] ${text}` : text }
+    // First, classify intent using LLM (unless user explicitly selected alert mode)
+    let isActuallyAlert = isAlert
+    
+    if (!isAlert) {
+      // User didn't explicitly select alert mode, use LLM to classify
+      try {
+        const classification = await api.chatClassifyIntent(text)
+        isActuallyAlert = classification.intent === "alert_creation"
+        
+        // Auto-switch mode if LLM detected different intent
+        if (isActuallyAlert && mode !== "alert") {
+          setMode("alert")
+        } else if (!isActuallyAlert && mode === "alert") {
+          setMode("retrieve")
+        }
+      } catch (err) {
+        console.warn("Intent classification failed, using current mode:", err)
+        // Fallback to current mode if classification fails
+        isActuallyAlert = mode === "alert"
+      }
+    }
+    
+    const userMsg: UIMessage = { id: nextIdRef.current++, type: "user", content: isActuallyAlert ? `[Alert] ${text}` : text }
     setMessages((prev) => [...prev, userMsg])
     setLoading(true); setError(null)
     
     // Track request start time
     requestStartTimeRef.current = Date.now()
     
-    // Initialize progressive steps simulation
-    const progressiveSteps: ProcessingStep[] = [
+    // Initialize progressive steps simulation - different for alert vs search
+    const progressiveSteps: ProcessingStep[] = isActuallyAlert ? [
+      { name: "Parse Conditions", status: "pending", details: "Waiting..." },
+      { name: "Validate Rule", status: "pending", details: "Not started" },
+      { name: "Create Alert", status: "pending", details: "Not started" },
+      { name: "Register Monitor", status: "pending", details: "Not started" },
+      { name: "Confirm Active", status: "pending", details: "Not started" },
+    ] : [
       { name: "Parse Query", status: "pending", details: "Waiting..." },
       { name: "MongoDB Query", status: "pending", details: "Not started" },
       { name: "Vector Search", status: "pending", details: "Not started" },
@@ -85,7 +113,9 @@ export function ChatInterface({ onShowSteps, onStepsUpdate }: ChatInterfaceProps
     onStepsUpdate?.(progressiveSteps, undefined)
     
     // Simulate progressive status updates while waiting for backend
-    const stepTimings = [100, 500, 1000, 1500, 2000, 2500] // Timings for each step
+    const stepTimings = isActuallyAlert 
+      ? [100, 400, 700, 1000, 1300] // Faster for alert creation
+      : [100, 500, 1000, 1500, 2000, 2500] // Original timings for search
     const stepUpdates = stepTimings.map((delay, index) => 
       setTimeout(() => {
         const updatedSteps = progressiveSteps.map((step, i) => {
@@ -95,12 +125,18 @@ export function ChatInterface({ onShowSteps, onStepsUpdate }: ChatInterfaceProps
             return { 
               ...step, 
               status: "in-progress" as const, 
-              details: index === 0 ? "Analyzing query..." :
-                       index === 1 ? "Searching database..." :
-                       index === 2 ? "Searching embeddings..." :
-                       index === 3 ? "Merging results..." :
-                       index === 4 ? "Building clips..." :
-                       "Preparing response..."
+              details: isActuallyAlert 
+                ? (index === 0 ? "Analyzing alert conditions..." :
+                   index === 1 ? "Checking rule validity..." :
+                   index === 2 ? "Creating alert rule..." :
+                   index === 3 ? "Registering with monitor..." :
+                   "Activating alert...")
+                : (index === 0 ? "Analyzing query..." :
+                   index === 1 ? "Searching database..." :
+                   index === 2 ? "Searching embeddings..." :
+                   index === 3 ? "Merging results..." :
+                   index === 4 ? "Building clips..." :
+                   "Preparing response...")
             }
           }
           return step
@@ -110,30 +146,33 @@ export function ChatInterface({ onShowSteps, onStepsUpdate }: ChatInterfaceProps
     )
     
     try {
-      if (isAlert) {
-        // Clear simulation timers
-        stepUpdates.forEach(clearTimeout)
-        
-        setMessages((prev) => [...prev, { id: nextIdRef.current++, type: "assistant", content: `Alert created: "${text}"` }])
-        const responseTime = (Date.now() - requestStartTimeRef.current) / 1000
-        onStepsUpdate?.(undefined, responseTime)
-      } else {
-        const resp = await api.chatSend(sessionId, text, 50)
-        
-        // Clear simulation timers
-        stepUpdates.forEach(clearTimeout)
-        
-        const responseTime = (Date.now() - requestStartTimeRef.current) / 1000
-        
-        // Update with actual steps from backend
+      // In alert mode, prefix message so backend detects creation intent
+      const messageForApi = isActuallyAlert ? `Create alert: ${text}` : text
+      const resp = await api.chatSend(sessionId, messageForApi, 50)
+      
+      // Clear simulation timers
+      stepUpdates.forEach(clearTimeout)
+      
+      const responseTime = (Date.now() - requestStartTimeRef.current) / 1000
+      
+      // Update with actual steps from backend, or complete simulated steps if none returned
+      if (resp.processing_steps && resp.processing_steps.length > 0) {
         onStepsUpdate?.(resp.processing_steps, responseTime)
-        
-        setMessages((prev) => [...prev, { id: nextIdRef.current++, type: "assistant", content: resp.answer, payload: resp }])
-        
-        // Notify sidebar to refresh sessions list
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("chat:message:sent", { detail: { session_id: sessionId } }))
-        }
+      } else {
+        // Mark all simulated steps as complete
+        const completedSteps = progressiveSteps.map(step => ({
+          ...step,
+          status: "complete" as const,
+          details: "✓ Done"
+        }))
+        onStepsUpdate?.(completedSteps, responseTime)
+      }
+      
+      setMessages((prev) => [...prev, { id: nextIdRef.current++, type: "assistant", content: resp.answer, payload: resp }])
+      
+      // Notify sidebar to refresh sessions list
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("chat:message:sent", { detail: { session_id: sessionId } }))
       }
     } catch (e: any) {
       // Clear simulation timers on error
