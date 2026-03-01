@@ -385,17 +385,25 @@ def get_person_attributes(person_roi, person_mask):
         def sigmoid(x):
             return 1 / (1 + np.exp(-x))
 
+        # Detect if outputs need sigmoid (some ONNX models already output 0-1)
+        needs_sigmoid = True
+        try:
+            if attrs.size > 0 and np.all((attrs >= 0.0) & (attrs <= 1.0)):
+                needs_sigmoid = False
+        except Exception:
+            needs_sigmoid = True
+
         # 5. Return confidence scores for richer data
         # Note: Index mapping assumes Intel model format for both for now. 
         # A true ONNX PAR replacement would need an index mapping dict.
         return {
-            "male_confidence": round(float(sigmoid(attrs[0]) if onnx_session is None else attrs[0]), 2), # Some ONNX models return sigmoids directly
-            "bag_confidence": round(float(sigmoid(attrs[1]) if onnx_session is None else attrs[1]), 2),
-            "hat_confidence": round(float(sigmoid(attrs[2]) if onnx_session is None else attrs[2]), 2),
-            "longhair_confidence": round(float(sigmoid(attrs[3]) if onnx_session is None else attrs[3]), 2),
-            "longpants_confidence": round(float(sigmoid(attrs[4]) if onnx_session is None else attrs[4]), 2),
-            "longsleeves_confidence": round(float(sigmoid(attrs[5]) if onnx_session is None else attrs[5]), 2),
-            "coat_jacket_confidence": round(float(sigmoid(attrs[6]) if onnx_session is None else attrs[6]), 2),
+            "male_confidence": round(float(sigmoid(attrs[0]) if needs_sigmoid else attrs[0]), 2),
+            "bag_confidence": round(float(sigmoid(attrs[1]) if needs_sigmoid else attrs[1]), 2),
+            "hat_confidence": round(float(sigmoid(attrs[2]) if needs_sigmoid else attrs[2]), 2),
+            "longhair_confidence": round(float(sigmoid(attrs[3]) if needs_sigmoid else attrs[3]), 2),
+            "longpants_confidence": round(float(sigmoid(attrs[4]) if needs_sigmoid else attrs[4]), 2),
+            "longsleeves_confidence": round(float(sigmoid(attrs[5]) if needs_sigmoid else attrs[5]), 2),
+            "coat_jacket_confidence": round(float(sigmoid(attrs[6]) if needs_sigmoid else attrs[6]), 2),
         }
     except Exception as e:
         logger.warning("Failed to get person attributes: %s", e)
@@ -439,17 +447,26 @@ def get_person_attributes_batch(
             preds = compiled_model([batch])[output_layer]
             
         out: List[Dict[str, Any]] = []
-        sigmoid = lambda x: 1 / (1 + np.exp(-x))
+
+        def sigmoid(x):
+            return 1 / (1 + np.exp(-x))
+
+        needs_sigmoid = True
+        try:
+            if preds.size > 0 and np.all((preds >= 0.0) & (preds <= 1.0)):
+                needs_sigmoid = False
+        except Exception:
+            needs_sigmoid = True
         for i in range(preds.shape[0]):
             attrs = preds[i].flatten()
             out.append({
-                "male_confidence": round(float(sigmoid(attrs[0]) if onnx_session is None else attrs[0]), 2),
-                "bag_confidence": round(float(sigmoid(attrs[1]) if onnx_session is None else attrs[1]), 2),
-                "hat_confidence": round(float(sigmoid(attrs[2]) if onnx_session is None else attrs[2]), 2),
-                "longhair_confidence": round(float(sigmoid(attrs[3]) if onnx_session is None else attrs[3]), 2),
-                "longpants_confidence": round(float(sigmoid(attrs[4]) if onnx_session is None else attrs[4]), 2),
-                "longsleeves_confidence": round(float(sigmoid(attrs[5]) if onnx_session is None else attrs[5]), 2),
-                "coat_jacket_confidence": round(float(sigmoid(attrs[6]) if onnx_session is None else attrs[6]), 2),
+                "male_confidence": round(float(sigmoid(attrs[0]) if needs_sigmoid else attrs[0]), 2),
+                "bag_confidence": round(float(sigmoid(attrs[1]) if needs_sigmoid else attrs[1]), 2),
+                "hat_confidence": round(float(sigmoid(attrs[2]) if needs_sigmoid else attrs[2]), 2),
+                "longhair_confidence": round(float(sigmoid(attrs[3]) if needs_sigmoid else attrs[3]), 2),
+                "longpants_confidence": round(float(sigmoid(attrs[4]) if needs_sigmoid else attrs[4]), 2),
+                "longsleeves_confidence": round(float(sigmoid(attrs[5]) if needs_sigmoid else attrs[5]), 2),
+                "coat_jacket_confidence": round(float(sigmoid(attrs[6]) if needs_sigmoid else attrs[6]), 2),
             })
         return out
     except Exception as e:

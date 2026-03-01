@@ -188,10 +188,15 @@ class _Captioner:
                         **inputs,
                         max_new_tokens=self.max_new_tokens,
                     )
-                    
+
+                    if len(inputs.input_ids) != len(generated_ids):
+                        raise ValueError(
+                            f"Mismatch between input and generated batch sizes: {len(inputs.input_ids)} vs {len(generated_ids)}"
+                        )
+
                     # Trim the input prompt tokens from the generated output
                     generated_ids_trimmed = [
-                        out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids, strict=True)
+                        out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
                     ]
                     
                     captions = self.processor.batch_decode(
