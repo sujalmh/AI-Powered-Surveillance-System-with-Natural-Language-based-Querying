@@ -24,12 +24,20 @@ def _cached_text_embed(query_tuple: Tuple[str, ...]) -> np.ndarray:
 
 
 def _norm_scores(scores: List[float]) -> List[float]:
+    """Normalize semantic scores to [0, 1].
+
+    When all scores are identical (mx - mn ≈ 0) we return 0.5 instead of 1.0
+    because mapping a cluster of mediocre scores to perfect 1.0 inflates
+    their weight during result merging (alpha blending with structured scores).
+    """
     if not scores:
         return []
     mn = min(scores)
     mx = max(scores)
     if mx - mn < 1e-9:
-        return [1.0 for _ in scores]
+        # All scores are the same — return a neutral value rather than
+        # the maximum so that uniform mediocre results are not promoted.
+        return [0.5 for _ in scores]
     return [(s - mn) / (mx - mn) for s in scores]
 
 
@@ -119,7 +127,11 @@ def search_unstructured(
                 if to_iso and dt > datetime.fromisoformat(to_iso):
                     return False
         except Exception:
-            pass
+            # If we cannot even parse the timestamp, reject the row rather than
+            # silently accepting it — an un-parseable timestamp should not
+            # pass a time-bounded filter.
+            logger.debug("Rejecting FAISS hit with unparseable frame_ts=%r", meta.get("frame_ts"))
+            return False
         return True
 
     # Over-fetch to compensate for post-filtering losses (camera/time filters)

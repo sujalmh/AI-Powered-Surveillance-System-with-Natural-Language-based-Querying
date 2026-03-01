@@ -33,6 +33,13 @@ from backend.app.services.retrieval_utils import (
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Detection quality constants
+# ---------------------------------------------------------------------------
+
+#: Only include detections whose confidence meets or exceeds this threshold.
+MIN_DETECTION_CONFIDENCE: float = 0.6
+
 
 # ---------------------------------------------------------------------------
 # Location / zone resolution
@@ -275,7 +282,16 @@ def _run_local_time_fallback(
             .limit(query_limit)
         )
         if results:
-            logger.info("Local-time fallback returned %d detection(s)", len(results))
+            logger.warning(
+                "Local-time fallback returned %d detection(s) from a DIFFERENT time window "
+                "(%s – %s). Results are tagged __local_time_fallback=True.",
+                len(results), local_gte, local_lte,
+            )
+            # Tag every result so callers / the answer generator can signal that
+            # the requested time window had no data and these come from a local-
+            # time reinterpretation of the same wall-clock range.
+            for r in results:
+                r["__local_time_fallback"] = True
         return results
     except Exception:
         logger.debug("Local-time fallback failed", exc_info=True)
@@ -362,18 +378,42 @@ def _vlm_frames_fallback(
             if not vlm_matches_object_filter(flat_caps, parsed_filter):
                 continue
             objects_set = set(extract_object_tokens(flat_caps))
+
+            # Compute real duration from first/last frame timestamps.
+            # The old code stored frame_count (an integer frame count) in
+            # duration_seconds, which was wrong and inflated the relevance score.
+            first_ts_str = vlm_doc.get("first_frame_ts")
+            last_ts_str = vlm_doc.get("last_frame_ts")
+            try:
+                from backend.app.services.retrieval_utils import parse_ts as _pts
+                duration_sec = max(0, int(
+                    (_pts(last_ts_str) - _pts(first_ts_str)).total_seconds()
+                )) if first_ts_str and last_ts_str else 0
+            except Exception:
+                duration_sec = 0
+
+            # VLM-frame objects have no YOLO confidence score.  We assign a
+            # moderate placeholder (0.65) so they are not silently discarded by
+            # the confidence threshold filter (0.6) while still scoring lower
+            # than high-confidence structured detections.
+            VLM_CONFIDENCE_PLACEHOLDER = 0.65
             extras.append({
                 "camera_id": vlm_doc.get("camera_id"),
                 "clip_path": vlm_doc.get("clip_path"),
                 "clip_url": vlm_doc.get("clip_url"),
-                "timestamp": vlm_doc.get("first_frame_ts"),
-                "start": vlm_doc.get("first_frame_ts"),
-                "end": vlm_doc.get("last_frame_ts"),
-                "duration_seconds": vlm_doc.get("frame_count", 0),
+                "timestamp": first_ts_str,
+                "start": first_ts_str,
+                "end": last_ts_str,
+                "duration_seconds": duration_sec,
                 "object_name": ", ".join(sorted(objects_set)) if objects_set else "unknown",
-                "objects": [{"object_name": obj} for obj in sorted(objects_set)],
+                "objects": [
+                    {"object_name": obj, "confidence": VLM_CONFIDENCE_PLACEHOLDER}
+                    for obj in sorted(objects_set)
+                ],
                 "source": "vlm_fallback",
-                "score_struct": 0.5,
+                # Use a conservative struct score – not 0.5 which would
+                # inflate these above genuine low-confidence detections.
+                "score_struct": 0.35,
                 "score_semantic": 0.0,
             })
         logger.info("VLM-frames fallback added %d clips", len(extras))
@@ -430,6 +470,39 @@ def execute_structured_query(
         results = filter_docs_by_count_constraint(results, parsed_filter)
         if not results and not is_zero_count:
             logger.debug("After count-constraint filtering: 0 results")
+
+        # Confidence threshold + exact object class filter.
+        # For every returned doc keep only objects that (a) meet the
+        # confidence floor and (b) match the requested class exactly.
+        # Docs where no object survives the filter are excluded entirely.
+        if not is_zero_count:
+            requested_class = parsed_filter.get("objects.object_name")
+            filtered_by_conf: List[Dict[str, Any]] = []
+            for doc in results:
+                obj_list = doc.get("objects") or []
+                matching = [
+                    obj for obj in obj_list
+                    if isinstance(obj, dict)
+                    and float(obj.get("confidence", 0.0)) >= MIN_DETECTION_CONFIDENCE
+                    and (
+                        not requested_class
+                        or obj.get("object_name", "").lower() == str(requested_class).lower()
+                    )
+                ]
+                if matching:
+                    doc = dict(doc)
+                    doc["objects"] = matching
+                    doc["matched_object_count"] = len(matching)
+                    filtered_by_conf.append(doc)
+            if results:  # only log if we had something to filter
+                logger.info(
+                    "Conf/class filter (conf>=%.2f, class=%s): %d -> %d docs",
+                    MIN_DETECTION_CONFIDENCE,
+                    requested_class or "any",
+                    len(results),
+                    len(filtered_by_conf),
+                )
+            results = filtered_by_conf
 
         # VLM-frames fallback (disabled for count-constraint queries)
         if count_constraint is None and len(results) < 5:

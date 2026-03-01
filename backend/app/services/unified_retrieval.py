@@ -173,7 +173,19 @@ class UnifiedRetrieval:
             query_type = "informational"
         elif query_type == "visual" and merged:
             _step(steps, "Build Clips", "in-progress", "Creating video clips...")
-            clips = self._build_clips(merged[:effective_limit], parsed_filter)
+            # Exclude merged segments that carry no matched detections
+            # (zero-object results would produce empty / misleading clips).
+            MAX_RESULTS = 10
+            valid_merged = [
+                r for r in merged
+                if r.get("source") == "semantic"
+                or (r.get("matched_object_count") or len(r.get("objects") or [])) > 0
+            ][:MAX_RESULTS]
+            logger.info(
+                "Clip building: %d valid results (from %d merged, capped at %d)",
+                len(valid_merged), len(merged), MAX_RESULTS,
+            )
+            clips = self._build_clips(valid_merged[:effective_limit], parsed_filter)
             steps[-1]["status"] = "complete"
             steps[-1]["details"] = f"Generated {len(clips)} clips"
             logger.info("Generated %d clips", len(clips))
@@ -344,6 +356,11 @@ class UnifiedRetrieval:
                       parsed_filter.get("action") is not None,
                       parsed_filter.get("count_constraint") is not None,
                       parsed_filter.get("objects.object_name") is not None)
+
+        # Hard cap: never build more than MAX_RESULTS clips
+        MAX_RESULTS = 10
+        results = results[:MAX_RESULTS]
+
         enriched: List[Dict[str, Any]] = []
         for result in results:
             rc = dict(result)
@@ -352,8 +369,19 @@ class UnifiedRetrieval:
                 continue
             try:
                 cam = rc.get("camera_id")
-                start = rc.get("start")
-                end = rc.get("end")
+
+                # Derive tightest possible window from matched_timestamps so
+                # the clip starts at the first real detection and ends at the
+                # last – then pad with ±buffer_sec to avoid cutting the event.
+                matched_ts = rc.get("matched_timestamps")
+                if matched_ts and len(matched_ts) > 0:
+                    sorted_ts = sorted(matched_ts)
+                    start = sorted_ts[0]
+                    end = sorted_ts[-1]
+                else:
+                    start = rc.get("start")
+                    end = rc.get("end")
+
                 if cam is not None and start and end:
                     allowed_ts = rc.get("matched_timestamps")
                     try:

@@ -108,7 +108,7 @@ def _expand_parsed_filter(f: Dict[str, Any]) -> None:
         if expanded:
             f["__expanded_terms"] = expanded
     except Exception:
-        pass
+        logger.warning("Query expansion failed — continuing without expanded terms", exc_info=True)
 
 
 def _word_to_int(tok: str) -> Optional[int]:

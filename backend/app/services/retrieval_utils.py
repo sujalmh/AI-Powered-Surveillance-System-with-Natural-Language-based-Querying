@@ -42,7 +42,10 @@ def parse_ts(ts: str) -> datetime:
 
     Strips trailing Z / timezone offsets so that stored detection timestamps
     (which are naive-local or naive-UTC) can be compared consistently.
-    Falls back to ``datetime.now(timezone.utc)`` when parsing fails entirely.
+
+    Returns ``datetime.min`` (epoch sentinel) when parsing fails entirely so
+    that malformed timestamps sort to the *bottom* of any result list instead
+    of silently appearing at the top (which ``datetime.now()`` would cause).
     """
     try:
         safe = _TZ_SUFFIX_RE.sub("", ts)
@@ -51,7 +54,8 @@ def parse_ts(ts: str) -> datetime:
         try:
             return datetime.strptime(ts.split(".")[0], "%Y-%m-%dT%H:%M:%S")
         except Exception:
-            return datetime.now(timezone.utc).replace(tzinfo=None)
+            logger.warning("parse_ts: could not parse %r – using datetime.min sentinel", ts)
+            return datetime.min
 
 
 # ---------------------------------------------------------------------------
@@ -61,16 +65,14 @@ def normalize_scores(scores: List[float], min_val: float = 0.0) -> List[float]:
     """
     Normalize *scores* to [0, 1], scaling down when the absolute maximum is
     weak so that final scores honestly reflect low confidence.
+
+    Single-result case: use the raw score directly (scaled to [0, 1]) rather
+    than mapping it to a fixed bucket.  The old bucket logic (score < 0.25 →
+    0.5, score < 0.4 → 0.8) inflated a lone detection with zero duration to
+    0.5 regardless of actual evidence strength.
     """
     if not scores:
         return []
-    if len(scores) == 1:
-        s = scores[0]
-        if s < 0.25:
-            return [max(min_val, 0.5)]
-        if s < 0.4:
-            return [max(min_val, 0.8)]
-        return [max(min_val, 1.0)]
 
     max_score = max(scores)
     if max_score == 0:

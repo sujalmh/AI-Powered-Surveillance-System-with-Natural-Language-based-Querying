@@ -605,4 +605,45 @@ def merge_results(
         mmr_lambda = getattr(settings, "MMR_DIVERSITY_LAMBDA", 0.3)
         results = apply_mmr_diversity(results, lambda_=mmr_lambda)
 
+    # --- Exclude zero-detection structured/hybrid results ---------------
+    # Semantic-only results are kept because they may lack object lists.
+    results = [
+        r for r in results
+        if r.get("source") == "semantic"
+        or (r.get("matched_object_count") or len(r.get("objects") or [])) > 0
+    ]
+
+    # --- Composite relevance rescore ------------------------------------
+    # Score = 0.5 * avg_confidence + 0.3 * object_count_norm + 0.2 * duration_norm
+    for r in results:
+        objs = r.get("objects") or []
+        confidences = [
+            float(obj.get("confidence", 0.0))
+            for obj in objs
+            if isinstance(obj, dict) and obj.get("confidence") is not None
+        ]
+        avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
+        object_count = max(len(objs), int(r.get("matched_object_count") or 0))
+        duration = float(r.get("duration_seconds", 0))
+        r["relevance_score"] = round(
+            (avg_conf * 0.5)
+            + (min(object_count / 5.0, 1.0) * 0.3)
+            + (min(duration / 30.0, 1.0) * 0.2),
+            4,
+        )
+
+    # Primary sort: relevance_score; secondary sort keeps score (recency) order.
+    results.sort(
+        key=lambda x: (x.get("relevance_score", 0.0), x.get("score", 0.0)),
+        reverse=True,
+    )
+
+    # --- Hard cap: return at most MAX_RESULTS = 10 ----------------------
+    MAX_RESULTS = 10
+    if len(results) > MAX_RESULTS:
+        logger.info(
+            "Capping results from %d to %d (MAX_RESULTS)", len(results), MAX_RESULTS
+        )
+        results = results[:MAX_RESULTS]
+
     return results
