@@ -27,7 +27,15 @@ export function ConversationSidebar() {
       
       // Load pending sessions from localStorage
       const pendingSessionsJson = typeof window !== "undefined" ? window.localStorage.getItem(PENDING_SESSIONS_KEY) : null;
-      const pendingSessions: SessionItem[] = pendingSessionsJson ? JSON.parse(pendingSessionsJson) : [];
+      let pendingSessions: SessionItem[] = [];
+      if (pendingSessionsJson) {
+        try {
+          pendingSessions = JSON.parse(pendingSessionsJson);
+        } catch (parseErr) {
+          console.error("Failed to parse pending sessions from localStorage:", parseErr);
+          pendingSessions = [];
+        }
+      }
       
       // Get IDs of sessions from backend
       const backendSessionIds = new Set(backendSessions.map(s => s.session_id));
@@ -80,7 +88,15 @@ export function ConversationSidebar() {
     // Save pending session to localStorage
     const PENDING_SESSIONS_KEY = "ai_surveillance_pending_sessions";
     const pendingSessionsJson = typeof window !== "undefined" ? window.localStorage.getItem(PENDING_SESSIONS_KEY) : null;
-    const pendingSessions: SessionItem[] = pendingSessionsJson ? JSON.parse(pendingSessionsJson) : [];
+    let pendingSessions: SessionItem[] = [];
+    if (pendingSessionsJson) {
+      try {
+        pendingSessions = JSON.parse(pendingSessionsJson);
+      } catch (parseErr) {
+        console.error("Failed to parse pending sessions from localStorage:", parseErr);
+        pendingSessions = [];
+      }
+    }
     
     const newSession: SessionItem = {
       session_id: sid,
