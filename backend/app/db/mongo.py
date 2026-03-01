@@ -1,12 +1,10 @@
-import logging
+from loguru import logger
 from typing import Any, Dict
 from pymongo import MongoClient, ASCENDING, DESCENDING, TEXT
 from pymongo.collection import Collection
 from pymongo.database import Database
 
 from backend.app.config import settings
-
-logger = logging.getLogger(__name__)
 
 client: MongoClient = MongoClient(settings.MONGODB_URI)
 db: Database = client[settings.MONGO_DB_NAME]
@@ -117,4 +115,4 @@ try:
     init_indexes()
 except Exception as e:
     # Avoid crashing the app if the DB is temporarily unavailable at import time.
-    logger.warning("Failed to initialize MongoDB indexes at import time: %s", e, exc_info=True)
+    logger.opt(exception=True).warning("Failed to initialize MongoDB indexes at import time: {}", e)

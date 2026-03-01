@@ -13,7 +13,7 @@ dedicated helper modules.
 """
 from __future__ import annotations
 
-import logging
+from loguru import logger
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -30,8 +30,6 @@ from backend.app.services.result_merger import merge_results
 from backend.app.services.retrieval_utils import normalize_count_constraint, parse_ts
 from backend.app.services.sem_search import search_unstructured
 from backend.app.services.structured_search import execute_structured_query
-
-logger = logging.getLogger(__name__)
 
 
 # ======================================================================
@@ -114,14 +112,14 @@ class UnifiedRetrieval:
         if has_action:
             _step(steps, "Parse Query", "complete", f"Action query: {parsed_filter.get('action')}")
             _step(steps, "MongoDB Query", "complete", "Skipped (action query uses semantic only)")
-            logger.info("Skipping structured query for action '%s'", parsed_filter.get("action"))
+            logger.opt(exception=True).info("Skipping structured query for action '{}'", parsed_filter.get("action"))
         else:
             _step(steps, "Parse Query", "complete", f"Extracted filters (intent: {intent})")
             _step(steps, "MongoDB Query", "in-progress", "Searching detections...")
             structured_results = execute_structured_query(parsed_filter, limit)
             steps[-1]["status"] = "complete"
             steps[-1]["details"] = f"{len(structured_results)} matches"
-            logger.info("Structured query returned %d results", len(structured_results))
+            logger.info("Structured query returned {} results", len(structured_results))
 
         # --- Step 2: Semantic FAISS search --------------------------------
         semantic_results: List[Dict[str, Any]] = []
@@ -137,14 +135,14 @@ class UnifiedRetrieval:
             )
             steps[-1]["status"] = "complete"
             steps[-1]["details"] = f"{len(semantic_results)} semantic matches"
-            logger.info("Semantic search returned %d results", len(semantic_results))
+            logger.info("Semantic search returned {} results", len(semantic_results))
         else:
             _step(steps, "Vector Search", "complete", "Skipped")
 
         # Action queries REQUIRE semantic results
         if has_action and not semantic_results:
             _step(steps, "Return Results", "complete", "No matches for action query")
-            logger.warning("Action query '%s' found no semantic matches.", parsed_filter.get("action"))
+            logger.warning("Action query '{}' found no semantic matches.", parsed_filter.get("action"))
             return self._build_response(
                 [], parsed_filter, intent, query_type, steps,
                 structured_count=len(structured_results),
@@ -164,7 +162,7 @@ class UnifiedRetrieval:
         )
         steps[-1]["status"] = "complete"
         steps[-1]["details"] = f"{len(merged)} unified results"
-        logger.info("Merged results: %d", len(merged))
+        logger.info("Merged results: {}", len(merged))
 
         # --- Step 4: Clip generation (conditional) -----------------------
         clips: List[Dict[str, Any]] = []
@@ -176,7 +174,7 @@ class UnifiedRetrieval:
             clips = self._build_clips(merged[:effective_limit], parsed_filter)
             steps[-1]["status"] = "complete"
             steps[-1]["details"] = f"Generated {len(clips)} clips"
-            logger.info("Generated %d clips", len(clips))
+            logger.info("Generated {} clips", len(clips))
         else:
             _step(steps, "Build Clips", "complete", "Skipped")
 
@@ -209,7 +207,7 @@ class UnifiedRetrieval:
         handler = execute_alert_query if subtype == "alerts" else execute_camera_query
         _step(steps, "Parse Query", "complete", f"Detected {subtype} query (intent: {intent})")
         _step(steps, "MongoDB Query", "complete", f"Querying {subtype}")
-        logger.info("Handling query as %s informational query", subtype.upper())
+        logger.info("Handling query as {} informational query", subtype.upper())
 
         results = handler(parsed_filter, limit)
         _step(steps, "Return Results", "complete", f"Found {len(results)} {subtype}")
@@ -227,7 +225,7 @@ class UnifiedRetrieval:
                 "final_count": len(results),
             },
         )
-        logger.info("Final %s result count: %d", subtype.upper(), len(results))
+        logger.info("Final {} result count: {}", subtype.upper(), len(results))
         return {
             "results": [],
             "answer": answer,
@@ -285,7 +283,7 @@ class UnifiedRetrieval:
             )
             return result.get("semantic_results", [])
         except Exception:
-            logger.error("Semantic query error", exc_info=True)
+            logger.error("Semantic query error")
             return []
 
     @staticmethod
@@ -368,9 +366,9 @@ class UnifiedRetrieval:
                 if info:
                     r["location"] = info.get("location", "Unknown")
                     r["camera_status"] = info.get("status", "unknown")
-            logger.debug("Enriched %d results with camera metadata", len(results))
+            logger.opt(exception=True).debug("Enriched {} results with camera metadata", len(results))
         except Exception:
-            logger.error("Error enriching camera metadata", exc_info=True)
+            logger.error("Error enriching camera metadata")
         return results
 
     @staticmethod
@@ -412,9 +410,9 @@ class UnifiedRetrieval:
                         r["scene_caption"] = docs[0]["caption"]
             enriched_count = sum(1 for r in results if r.get("vlm_frames"))
             if enriched_count:
-                logger.debug("Enriched %d results with VLM frame data", enriched_count)
+                logger.opt(exception=True).debug("Enriched {} results with VLM frame data", enriched_count)
         except Exception:
-            logger.error("Error enriching VLM frames", exc_info=True)
+            logger.error("Error enriching VLM frames")
         return results
 
     # ------------------------------------------------------------------

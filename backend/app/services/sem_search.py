@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from loguru import logger
 from collections import defaultdict
 from datetime import datetime
 from functools import lru_cache
@@ -11,8 +11,6 @@ import numpy as np
 from backend.app.config import settings
 from backend.app.services.sem_embedder import get_embedder
 from backend.app.services.sem_store import get_faiss_store
-
-logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=128)
@@ -180,6 +178,6 @@ def search_unstructured(
     # Sort by normalized score desc
     results.sort(key=lambda x: x.get("score_norm", 0.0), reverse=True)
     
-    logger.info("Filtered results: %d clips with confidence >= %.2f", len(results), threshold)
+    logger.info("Filtered results: {} clips with confidence >= {}", len(results), threshold)
     
     return {"mode": "unstructured", "semantic_results": results}

@@ -17,6 +17,8 @@ export const QueryResults = React.memo(({ onShowSteps, response }: QueryResultsP
   const [showVideoModal, setShowVideoModal] = useState(false)
   const [selectedItem, setSelectedItem] = useState<any>(null)
   const [actualVideoDuration, setActualVideoDuration] = useState<number | null>(null)
+  const [videoError, setVideoError] = useState<string | null>(null)
+  const [thumbErrors, setThumbErrors] = useState<Set<number>>(new Set())
   const videoRef = useRef<HTMLVideoElement>(null)
 
   const combined = (response?.combined_tracks as any[]) || []
@@ -51,6 +53,7 @@ export const QueryResults = React.memo(({ onShowSteps, response }: QueryResultsP
     setSelectedVideoUrl(`${API_BASE}${clipUrl}`)
     setSelectedItem(item)
     setActualVideoDuration(null) // Reset duration when opening modal
+    setVideoError(null)
     setShowVideoModal(true)
   }
 
@@ -90,7 +93,7 @@ export const QueryResults = React.memo(({ onShowSteps, response }: QueryResultsP
                 }
               }}
             >
-              {(item as any).clip_url ? (
+              {(item as any).clip_url && !thumbErrors.has(i) ? (
                 <video
                   key={(item as any).clip_url}
                   src={`${API_BASE}${(item as any).clip_url}#t=0.001`}
@@ -106,10 +109,13 @@ export const QueryResults = React.memo(({ onShowSteps, response }: QueryResultsP
                     v.pause();
                     v.currentTime = 0;
                   }}
+                  onError={() => setThumbErrors(prev => new Set(prev).add(i))}
                 />
               ) : (
                 <div className="absolute inset-0 bg-stone-800 flex items-center justify-center">
-                  <div className="text-xs text-stone-500 font-medium">No preview</div>
+                  <div className="text-xs text-stone-500 font-medium">
+                    {(item as any).clip_url ? "Video unavailable" : "No preview"}
+                  </div>
                 </div>
               )}
 
@@ -147,20 +153,42 @@ export const QueryResults = React.memo(({ onShowSteps, response }: QueryResultsP
 
               <div className="grid lg:grid-cols-3 gap-0 h-full max-h-[85vh]">
                 <div className="lg:col-span-2 bg-black flex items-center justify-center">
-                  <video
-                    ref={videoRef}
-                    src={selectedVideoUrl}
-                    className="w-full max-h-full object-contain"
-                    controls
-                    autoPlay
-                    playsInline
-                    crossOrigin="anonymous"
-                    onLoadedMetadata={() => {
-                      if (videoRef.current) {
-                        setActualVideoDuration(videoRef.current.duration)
-                      }
-                    }}
-                  />
+                  {videoError ? (
+                    <div className="flex flex-col items-center justify-center gap-3 p-12 text-center">
+                      <div className="text-red-400 text-sm font-medium">Failed to load video</div>
+                      <div className="text-stone-500 text-xs max-w-xs">{videoError}</div>
+                      <button
+                        onClick={() => { setVideoError(null); if (videoRef.current) videoRef.current.load(); }}
+                        className="mt-2 px-3 py-1.5 rounded-md bg-stone-800 hover:bg-stone-700 text-xs text-stone-300 transition-colors"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  ) : (
+                    <video
+                      ref={videoRef}
+                      src={selectedVideoUrl}
+                      className="w-full max-h-full object-contain"
+                      controls
+                      autoPlay
+                      playsInline
+                      crossOrigin="anonymous"
+                      onLoadedMetadata={() => {
+                        if (videoRef.current) {
+                          setActualVideoDuration(videoRef.current.duration)
+                        }
+                      }}
+                      onError={(e) => {
+                        const v = e.target as HTMLVideoElement;
+                        const code = v.error?.code;
+                        const msg = code === 4 ? "Video format not supported by browser"
+                          : code === 2 ? "Network error loading video"
+                          : code === 3 ? "Video decoding failed"
+                          : "Could not play this video clip";
+                        setVideoError(msg);
+                      }}
+                    />
+                  )}
                 </div>
 
                 <div className="p-6 bg-card max-h-[85vh] overflow-y-auto border-l border-border">

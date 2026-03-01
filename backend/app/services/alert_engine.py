@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from loguru import logger as _log
 import time
 import zoneinfo
 from collections import deque, defaultdict
@@ -17,8 +17,6 @@ from backend.app.db.mongo import (
     detections as detections_col,
     zones as zones_col,
 )
-
-_log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------
 # Zone Capacity Cache
@@ -44,13 +42,10 @@ def _get_zone_capacity(camera_id: int, zone_id: str) -> Optional[int]:
         _ZONE_CAP_CACHE[key] = (cap, now)
         return cap
     except Exception as e:
-        _log.warning(
-            "Failed to get zone capacity for camera_id=%s zone_id=%s: %s",
+        _log.opt(exception=True).warning("Failed to get zone capacity for camera_id={} zone_id={}: {}",
             camera_id,
             zone_id,
-            e,
-            exc_info=True,
-        )
+            e)
         return None
 
 
@@ -395,7 +390,7 @@ def evaluate_realtime(
         if tod:
             win = _parse_local_time_window(tod)
             if not win:
-                _log.warning("Skipping rule %s due to malformed time_of_day: %r", rid, tod)
+                _log.warning("Skipping rule {} due to malformed time_of_day: {}", rid, tod)
                 continue
             
             # Apply the requested timezone to the UTC `now_dt`
@@ -403,11 +398,16 @@ def evaluate_realtime(
                 tz_name = win[2]
                 local_dt = now_dt.astimezone(zoneinfo.ZoneInfo(tz_name))
             except Exception as e:
-                _log.warning("Timezone conversion failed for rule %s (tz=%s): %s", rid, win[2], e)
+                _log.warning("Timezone conversion failed for rule {} (tz={}): {}", rid, win[2], e)
                 continue
 
             if not _in_local_window(win, local_dt):
                 continue
+
+        # ---------------- Camera filter ----------------
+        rule_cameras = rule.get("cameras")
+        if rule_cameras and camera_id not in rule_cameras:
+            continue
 
         # ---------------- Crowd Density ----------------
         if event_type == "crowd_density" and want_name:
@@ -468,3 +468,25 @@ def evaluate_realtime(
                     },
                 )
             continue
+
+        # ---------------- Generic count-based rule (fallback) ----------------
+        if want_name:
+            if zone_id and zone_counts is not None:
+                cnt = zone_counts.get(zone_id, 0)
+            else:
+                cnt = presence.get(want_name.lower(), 0)
+        else:
+            # No specific object — sum all detected objects
+            cnt = sum(presence.values())
+
+        if matches_count_condition(cnt, rule.get("count")) and _cooldown_ok(rid, camera_id, cooldown):
+            label = want_name or "objects"
+            _insert_alert_log(
+                rd,
+                camera_id,
+                {
+                    "message": f"Alert '{rd.get('name')}': {cnt} {label} detected",
+                    "snapshot": snapshot_url,
+                    "count": cnt,
+                },
+            )

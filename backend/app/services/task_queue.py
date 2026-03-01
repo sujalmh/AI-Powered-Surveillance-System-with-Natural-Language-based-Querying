@@ -4,11 +4,9 @@ Uses ThreadPoolExecutor for backpressure and error logging instead of unbounded 
 """
 from __future__ import annotations
 
-import logging
+from loguru import logger as _log
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable
-
-_log = logging.getLogger(__name__)
 
 _pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ai-tasks")
 
@@ -17,7 +15,7 @@ def _done_callback(fut: Any) -> None:
     try:
         exc = fut.exception()
         if exc is not None:
-            _log.error("Task error: %s", exc, exc_info=True)
+            _log.opt(exception=True).error("Task error: {}", exc)
     except Exception:
         pass
 
