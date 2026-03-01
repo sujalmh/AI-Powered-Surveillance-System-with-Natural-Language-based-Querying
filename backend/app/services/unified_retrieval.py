@@ -70,7 +70,7 @@ class UnifiedRetrieval:
         self,
         parsed_filter: Dict[str, Any],
         semantic_query: Optional[str] = None,
-        limit: int = 50,
+        limit: int = 10,
     ) -> Dict[str, Any]:
         """
         Execute unified hybrid search.
@@ -171,7 +171,19 @@ class UnifiedRetrieval:
             query_type = "informational"
         elif query_type == "visual" and merged:
             _step(steps, "Build Clips", "in-progress", "Creating video clips...")
-            clips = self._build_clips(merged[:effective_limit], parsed_filter)
+            # Exclude merged segments that carry no matched detections
+            # (zero-object results would produce empty / misleading clips).
+            MAX_RESULTS = 10
+            valid_merged = [
+                r for r in merged
+                if r.get("source") == "semantic"
+                or (r.get("matched_object_count") or len(r.get("objects") or [])) > 0
+            ][:MAX_RESULTS]
+            logger.info(
+                "Clip building: %d valid results (from %d merged, capped at %d)",
+                len(valid_merged), len(merged), MAX_RESULTS,
+            )
+            clips = self._build_clips(valid_merged[:effective_limit], parsed_filter)
             steps[-1]["status"] = "complete"
             steps[-1]["details"] = f"Generated {len(clips)} clips"
             logger.info("Generated {} clips", len(clips))
@@ -263,7 +275,7 @@ class UnifiedRetrieval:
             to_iso = ts_filter.get("$lte")
 
         has_action = parsed_filter.get("action") is not None
-        min_confidence = 0.10 if has_action else 0.15
+        min_confidence = 0.20 if has_action else 0.25
 
         # Query expansion
         expanded_queries: Optional[List[str]] = None
@@ -308,11 +320,45 @@ class UnifiedRetrieval:
     # Clip building + enrichment
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _compute_buffer_seconds(parsed_filter: Dict[str, Any]) -> float:
+        """
+        Determine clip buffer (seconds added before/after the event window)
+        based on query type so clips are tightly cropped around relevant content.
+
+        - Object/person queries: ±1s (minimal context, precision needed)
+        - Action queries: ±2s (needs motion context before/after)
+        - Count queries: ±1s (precise counting windows)
+        - General / fallback: ±2s (balanced)
+        """
+        has_action = parsed_filter.get("action") is not None
+        has_count = parsed_filter.get("count_constraint") is not None
+        has_object = parsed_filter.get("objects.object_name") is not None
+
+        if has_action:
+            return 2.0
+        if has_count:
+            return 1.0
+        if has_object:
+            return 1.0
+        return 2.0
+
     def _build_clips(
         self,
         results: List[Dict[str, Any]],
         parsed_filter: Dict[str, Any],
     ) -> List[Dict[str, Any]]:
+        buffer_sec = self._compute_buffer_seconds(parsed_filter)
+        logger.debug("Clip buffer: ±%.1fs (action=%s, count=%s, object=%s)",
+                      buffer_sec,
+                      parsed_filter.get("action") is not None,
+                      parsed_filter.get("count_constraint") is not None,
+                      parsed_filter.get("objects.object_name") is not None)
+
+        # Hard cap: never build more than MAX_RESULTS clips
+        MAX_RESULTS = 10
+        results = results[:MAX_RESULTS]
+
         enriched: List[Dict[str, Any]] = []
         for result in results:
             rc = dict(result)
@@ -321,13 +367,24 @@ class UnifiedRetrieval:
                 continue
             try:
                 cam = rc.get("camera_id")
-                start = rc.get("start")
-                end = rc.get("end")
+
+                # Derive tightest possible window from matched_timestamps so
+                # the clip starts at the first real detection and ends at the
+                # last – then pad with ±buffer_sec to avoid cutting the event.
+                matched_ts = rc.get("matched_timestamps")
+                if matched_ts and len(matched_ts) > 0:
+                    sorted_ts = sorted(matched_ts)
+                    start = sorted_ts[0]
+                    end = sorted_ts[-1]
+                else:
+                    start = rc.get("start")
+                    end = rc.get("end")
+
                 if cam is not None and start and end:
                     allowed_ts = rc.get("matched_timestamps")
                     try:
-                        s_dt = parse_ts(start) - timedelta(seconds=3)
-                        e_dt = parse_ts(end) + timedelta(seconds=3)
+                        s_dt = parse_ts(start) - timedelta(seconds=buffer_sec)
+                        e_dt = parse_ts(end) + timedelta(seconds=buffer_sec)
                         start_iso, end_iso = s_dt.isoformat(), e_dt.isoformat()
                     except Exception:
                         start_iso, end_iso = start, end
@@ -433,7 +490,7 @@ class UnifiedRetrieval:
         merged_count: int = 0,
         is_zero_count: bool = False,
         requested_limit: Any = None,
-        effective_limit: int = 50,
+        effective_limit: int = 10,
     ) -> Dict[str, Any]:
         final_clips = clips if clips else []
         answer = AnswerGenerator().generate(

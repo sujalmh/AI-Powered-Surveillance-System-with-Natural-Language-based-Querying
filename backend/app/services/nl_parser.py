@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional
 import re
 
 from pydantic import BaseModel, Field
 
 from backend.app.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Optional LangChain imports are deferred to runtime; we keep fallbacks if unavailable.
 # We will try OpenAI via langchain-openai if OPENAI_API_KEY is set, otherwise try Ollama via langchain-community.
@@ -108,7 +111,7 @@ def _expand_parsed_filter(f: Dict[str, Any]) -> None:
         if expanded:
             f["__expanded_terms"] = expanded
     except Exception:
-        pass
+        logger.warning("Query expansion failed — continuing without expanded terms", exc_info=True)
 
 
 def _word_to_int(tok: str) -> Optional[int]:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -34,6 +35,7 @@ class PersonFaissStore:
         self.meta_path: Path = self.dir / "meta.json"
         self._index = None  # type: ignore
         self._meta: List[Dict[str, Any]] = []
+        self._lock = threading.RLock()
         self._load_or_init()
 
     def _load_or_init(self) -> None:
@@ -108,29 +110,31 @@ class PersonFaissStore:
         if embeddings.dtype != np.float32:
             embeddings = embeddings.astype(np.float32)
         embeddings = np.ascontiguousarray(embeddings)
-        start_id = self.count()
-        self._index.add(embeddings)  # type: ignore
 
-        ids: List[int] = []
-        for i, m in enumerate(metas):
-            row_id = start_id + i
-            ids.append(row_id)
-            # Store minimal, query-relevant meta
-            self._meta.append(
-                {
-                    "faiss_id": row_id,
-                    "detection_id": m.get("detection_id"),
-                    "object_index": int(m.get("object_index", -1)),
-                    "camera_id": int(m.get("camera_id", -1)),
-                    "track_id": int(m.get("track_id", -1)),
-                    "timestamp": m.get("timestamp"),
-                    "color": m.get("color"),
-                    "attribute_text": m.get("attribute_text"),
-                }
-            )
+        with self._lock:
+            start_id = self.count()
+            self._index.add(embeddings)  # type: ignore
 
-        if save:
-            self.save()
+            ids: List[int] = []
+            for i, m in enumerate(metas):
+                row_id = start_id + i
+                ids.append(row_id)
+                # Store minimal, query-relevant meta
+                self._meta.append(
+                    {
+                        "faiss_id": row_id,
+                        "detection_id": m.get("detection_id"),
+                        "object_index": int(m.get("object_index", -1)),
+                        "camera_id": int(m.get("camera_id", -1)),
+                        "track_id": int(m.get("track_id", -1)),
+                        "timestamp": m.get("timestamp"),
+                        "color": m.get("color"),
+                        "attribute_text": m.get("attribute_text"),
+                    }
+                )
+
+            if save:
+                self.save()
         return ids
 
     def vector_search(self, query_vec: np.ndarray, top_k: int = 50, filter_pred: Optional[Any] = None) -> List[Dict[str, Any]]:
@@ -146,18 +150,20 @@ class PersonFaissStore:
         query_vec = np.ascontiguousarray(query_vec)
 
         top_k = max(1, int(top_k))
-        D, I = self._index.search(query_vec, top_k)  # type: ignore
-        scores = D[0].tolist() if len(D) > 0 else []
-        ids = I[0].tolist() if len(I) > 0 else []
 
-        out: List[Dict[str, Any]] = []
-        for score, idx in zip(scores, ids):
-            if idx < 0 or idx >= len(self._meta):
-                continue
-            meta = self._meta[idx]
-            if filter_pred and not filter_pred(meta):
-                continue
-            out.append({"score": float(score), "meta": meta})
+        with self._lock:
+            D, I = self._index.search(query_vec, top_k)  # type: ignore
+            scores = D[0].tolist() if len(D) > 0 else []
+            ids = I[0].tolist() if len(I) > 0 else []
+
+            out: List[Dict[str, Any]] = []
+            for score, idx in zip(scores, ids):
+                if idx < 0 or idx >= len(self._meta):
+                    continue
+                meta = self._meta[idx]
+                if filter_pred and not filter_pred(meta):
+                    continue
+                out.append({"score": float(score), "meta": meta})
         return out
 
 

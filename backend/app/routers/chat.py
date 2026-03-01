@@ -85,7 +85,7 @@ class ChatSendRequest(BaseModel):
     message: str = Field(..., description="Natural language query or command")
     # Optional: allow a direct structured filter override (bypass NL parsing)
     filter_override: Optional[Dict[str, Any]] = None
-    limit: int = 50
+    limit: int = 10
 
 
 class ProcessingStep(BaseModel):
@@ -186,8 +186,11 @@ def parse_simple_nl_to_filter(nl: str) -> Dict[str, Any]:
     elif re.search(r"\b(car|cars|vehicle|vehicles)\b", txt):
         object_name = "car"  # adjust as per your YOLO class names
     elif re.search(r"\b(bag|backpack)\b", txt):
-        # Not a YOLO class by default; we will keep object as person but later filter by attributes if available
-        object_name = "person"
+        # 'bag' / 'backpack' is a YOLO class in many models ("backpack").
+        # Previously mapped silently to "person" which returned entirely
+        # wrong clips.  Use "backpack" as the primary object name and let
+        # the pipeline decide whether to soften via semantic search.
+        object_name = "backpack"
 
     # count constraints (very common in user requests)
     count_constraint: Optional[Dict[str, int]] = None
@@ -253,7 +256,7 @@ def parse_simple_nl_to_filter(nl: str) -> Dict[str, Any]:
 
         if count_constraint is None:
             m_cnt = re.search(
-                r"\b(\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)\s+(person|people|persons|car|cars|vehicle|vehicles)\b",
+                r"(?<!camera\s)(?<!cam\s)\b(\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)\s+(person|people|persons|car|cars|vehicle|vehicles)\b",
                 txt,
             )
             if m_cnt:
@@ -329,8 +332,35 @@ def parse_simple_nl_to_filter(nl: str) -> Dict[str, Any]:
     f["__raw"] = nl
     f["__semantic_query"] = nl
 
-    # Basic intent/query type inference for fallback mode
-    if re.search(r"\b(how many|count|number of)\b", txt):
+    # Action detection (running, walking, fighting, etc.)
+    action_match = re.search(
+        r"\b(running|walking|fighting|carrying|falling|standing|sitting|climbing|jumping|loitering)\b",
+        txt,
+    )
+    if action_match:
+        f["action"] = action_match.group(1)
+
+    # Zone / area detection
+    zone_match = re.search(
+        r"\b(?:in|at|near|around)\s+(?:the\s+)?(entrance|exit|hallway|corridor|parking|gate|lobby|reception|stairway|loading\s+dock)\b",
+        txt,
+    )
+    if zone_match:
+        f["zone"] = zone_match.group(1).strip()
+
+    # Informational query subtype: alerts / cameras
+    if re.search(r"\b(show|list|get|find|any|are\s+there|display|view|recent)\b.*\balerts?\b", txt) or \
+       re.search(r"\balerts?\b.*\b(show|list|get|find|display|view)\b", txt):
+        f["query_type"] = "informational"
+        f["__query_subtype"] = "alerts"
+        f["__intent"] = "find"
+    elif re.search(r"\b(camera|cameras)\b.*\b(status|active|online|offline|running|list)\b", txt) or \
+         re.search(r"\b(status|active|online|offline|running|list)\b.*\b(camera|cameras)\b", txt) or \
+         re.search(r"\bhow many cameras\b", txt):
+        f["query_type"] = "informational"
+        f["__query_subtype"] = "cameras"
+        f["__intent"] = "find"
+    elif re.search(r"\b(how many|count|number of)\b", txt):
         f["query_type"] = "informational"
         f["__intent"] = "count"
     elif re.search(r"\b(track|where|went|follow)\b", txt):
@@ -347,6 +377,14 @@ def parse_simple_nl_to_filter(nl: str) -> Dict[str, Any]:
 
     if ask_color:
         f["__ask_color"] = True
+
+    # Run query expansion so downstream recall-improvement works even in
+    # regex fallback mode (was previously only done by the LLM path).
+    try:
+        from backend.app.services.nl_parser import _expand_parsed_filter
+        _expand_parsed_filter(f)
+    except Exception:
+        pass
 
     return f
 

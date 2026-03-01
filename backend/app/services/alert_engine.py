@@ -296,8 +296,18 @@ def _fight_heuristic(person_boxes: List[Tuple[int, int, int, int]], energy_hist:
 
     centers = [((x1 + x2) / 2, (y1 + y2) / 2) for x1, y1, x2, y2 in person_boxes]
 
+    # Compute average bounding box diagonal to normalise the proximity threshold
+    diags = [
+        ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
+        for x1, y1, x2, y2 in person_boxes
+    ]
+    avg_diag = sum(diags) / len(diags) if diags else 100.0
+    # Two people are "close" when their centres are within 40% of the
+    # average bounding-box diagonal — scales naturally with resolution.
+    proximity_thresh = max(24.0, avg_diag * 0.4)
+
     close = any(
-        ((cx1 - cx2) ** 2 + (cy1 - cy2) ** 2) ** 0.5 < 24
+        ((cx1 - cx2) ** 2 + (cy1 - cy2) ** 2) ** 0.5 < proximity_thresh
         for i, (cx1, cy1) in enumerate(centers)
         for cx2, cy2 in centers[i + 1:]
     )
@@ -305,7 +315,8 @@ def _fight_heuristic(person_boxes: List[Tuple[int, int, int, int]], energy_hist:
     if not close or not energy_hist:
         return False
 
-    avg_energy = sum(list(energy_hist)[-10:]) / max(1, len(energy_hist))
+    recent = list(energy_hist)[-10:]
+    avg_energy = sum(recent) / max(1, len(recent))
     return avg_energy >= 0.03
 
 

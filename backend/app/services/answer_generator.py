@@ -114,8 +114,11 @@ class AnswerGenerator:
             response = self.llm.invoke([HumanMessage(content=context)])
             return response.content.strip()
         except Exception:
-            logger.opt(exception=True).error("LLM answering generation failed")
-            return "I apologize, but I encountered an error while trying to generate an answer."
+            logger.opt(exception=True).error("LLM answer generation failed — using data-driven fallback")
+            # Instead of returning a generic apology that discards all
+            # retrieval data, fall through to the template-based fallback
+            # which constructs an answer from the actual results.
+            return self._fallback_answer(query_type, results, parsed_filter)
     
     def _build_context(
         self,

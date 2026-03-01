@@ -29,6 +29,8 @@ from backend.app.services.retrieval_utils import (
     normalize_scores,
     object_matches,
     parse_ts,
+    vlm_matches_object_filter,
+    flatten_object_captions,
 )
 
 
@@ -514,6 +516,43 @@ def merge_results(
                     "frames": sem.get("frames", []),
                 }
 
+    # --- Validate semantic-only results against requested object types ---
+    # When the query asks for a specific object (e.g. "person"), reject
+    # semantic-only clips whose captions don't mention that object.
+    requested_obj = parsed_filter.get("objects.object_name")
+    requested_color = parsed_filter.get("objects.color")
+    if requested_obj or requested_color:
+        keys_to_drop: List[str] = []
+        for _key, result in results_map.items():
+            if result.get("source") != "semantic":
+                continue  # structured / hybrid results already validated
+            # Attempt caption-based validation from frame metadata
+            frames = result.get("frames") or []
+            captions = [str(f.get("caption", "")).lower() for f in frames if f.get("caption")]
+            if captions:
+                if not vlm_matches_object_filter(captions, parsed_filter):
+                    keys_to_drop.append(_key)
+                    logger.debug(
+                        "Filtered semantic result (object mismatch): %s – captions: %s",
+                        result.get("clip_path", _key), captions[:2],
+                    )
+            elif requested_obj:
+                # No captions available and user asked for a specific object –
+                # semantic similarity alone is unreliable, demote heavily
+                raw_sem = result.get("score_raw_semantic", 0.0)
+                if raw_sem < SEM_RAW_THRESH_MED:
+                    keys_to_drop.append(_key)
+                    logger.debug(
+                        "Filtered semantic result (no caption, low score %.3f): %s",
+                        raw_sem, result.get("clip_path", _key),
+                    )
+        for k in keys_to_drop:
+            del results_map[k]
+        if keys_to_drop:
+            logger.info(
+                "Object-validation filter removed %d semantic-only results", len(keys_to_drop),
+            )
+
     # --- Final scoring with recency boost & semantic penalties ----------
     now = datetime.now()
     halflife_hours = getattr(settings, "RECENCY_HALFLIFE_HOURS", 24.0) or 24.0
@@ -551,9 +590,66 @@ def merge_results(
 
     results.sort(key=lambda x: x["score"], reverse=True)
 
+    # --- Post-merge quality gate: drop results below hard score floor ---
+    MIN_FINAL_SCORE = 0.15
+    pre_filter_count = len(results)
+    results = [r for r in results if r["score"] >= MIN_FINAL_SCORE]
+    dropped = pre_filter_count - len(results)
+    if dropped:
+        logger.info("Post-merge score filter removed %d low-quality results (threshold %.2f)", dropped, MIN_FINAL_SCORE)
+
     # MMR diversity
     if getattr(settings, "ENABLE_RESULT_DIVERSITY", True):
         mmr_lambda = getattr(settings, "MMR_DIVERSITY_LAMBDA", 0.3)
         results = apply_mmr_diversity(results, lambda_=mmr_lambda)
+
+    # --- Exclude zero-detection structured/hybrid results ---------------
+    # Semantic-only results are kept because they may lack object lists.
+    results = [
+        r for r in results
+        if r.get("source") == "semantic"
+        or (r.get("matched_object_count") or len(r.get("objects") or [])) > 0
+    ]
+
+    # --- Composite relevance rescore ------------------------------------
+    # Blends the hybrid score (semantic + structured + recency) with
+    # evidence-quality signals so that semantic-only results are not crushed.
+    #   0.45 * hybrid_score  (preserves semantic/structured ranking)
+    # + 0.25 * avg_confidence (detection quality signal)
+    # + 0.15 * object_count_norm
+    # + 0.15 * duration_norm
+    for r in results:
+        objs = r.get("objects") or []
+        confidences = [
+            float(obj.get("confidence", 0.0))
+            for obj in objs
+            if isinstance(obj, dict) and obj.get("confidence") is not None
+        ]
+        avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
+        object_count = max(len(objs), int(r.get("matched_object_count") or 0))
+        duration = float(r.get("duration_seconds", 0))
+        hybrid_score = float(r.get("score", 0.0))
+        r["relevance_score"] = round(
+            (hybrid_score * 0.45)
+            + (avg_conf * 0.25)
+            + (min(object_count / 5.0, 1.0) * 0.15)
+            + (min(duration / 30.0, 1.0) * 0.15),
+            4,
+        )
+
+    # Primary sort: relevance_score (now incorporates hybrid score);
+    # secondary sort keeps hybrid score order for ties.
+    results.sort(
+        key=lambda x: (x.get("relevance_score", 0.0), x.get("score", 0.0)),
+        reverse=True,
+    )
+
+    # --- Hard cap: return at most MAX_RESULTS = 10 ----------------------
+    MAX_RESULTS = 10
+    if len(results) > MAX_RESULTS:
+        logger.info(
+            "Capping results from %d to %d (MAX_RESULTS)", len(results), MAX_RESULTS
+        )
+        results = results[:MAX_RESULTS]
 
     return results

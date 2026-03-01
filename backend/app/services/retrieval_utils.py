@@ -17,15 +17,15 @@ from loguru import logger
 # ---------------------------------------------------------------------------
 # Semantic score thresholds & penalty factors
 # ---------------------------------------------------------------------------
-SEM_RAW_THRESH_LOW = 0.22
-SEM_RAW_THRESH_MED = 0.30
-SEM_RAW_THRESH_HIGH = 0.40
-SEM_NO_STRUCTURED_THRESH = 0.35
+SEM_RAW_THRESH_LOW = 0.30
+SEM_RAW_THRESH_MED = 0.40
+SEM_RAW_THRESH_HIGH = 0.50
+SEM_NO_STRUCTURED_THRESH = 0.42
 
-SEM_PENALTY_STRONG = 0.3
-SEM_PENALTY_MED = 0.6
-SEM_PENALTY_LIGHT = 0.8
-SEM_PENALTY_NO_STRUCTURED = 0.7
+SEM_PENALTY_STRONG = 0.2
+SEM_PENALTY_MED = 0.4
+SEM_PENALTY_LIGHT = 0.7
+SEM_PENALTY_NO_STRUCTURED = 0.5
 
 
 # ---------------------------------------------------------------------------
@@ -40,7 +40,10 @@ def parse_ts(ts: str) -> datetime:
 
     Strips trailing Z / timezone offsets so that stored detection timestamps
     (which are naive-local or naive-UTC) can be compared consistently.
-    Falls back to ``datetime.now(timezone.utc)`` when parsing fails entirely.
+
+    Returns ``datetime.min`` (epoch sentinel) when parsing fails entirely so
+    that malformed timestamps sort to the *bottom* of any result list instead
+    of silently appearing at the top (which ``datetime.now()`` would cause).
     """
     try:
         safe = _TZ_SUFFIX_RE.sub("", ts)
@@ -49,7 +52,8 @@ def parse_ts(ts: str) -> datetime:
         try:
             return datetime.strptime(ts.split(".")[0], "%Y-%m-%dT%H:%M:%S")
         except Exception:
-            return datetime.now(timezone.utc).replace(tzinfo=None)
+            logger.warning("parse_ts: could not parse %r – using datetime.min sentinel", ts)
+            return datetime.min
 
 
 # ---------------------------------------------------------------------------
@@ -57,30 +61,37 @@ def parse_ts(ts: str) -> datetime:
 # ---------------------------------------------------------------------------
 def normalize_scores(scores: List[float], min_val: float = 0.0) -> List[float]:
     """
-    Normalize *scores* to [0, 1], scaling down when the absolute maximum is
-    weak so that final scores honestly reflect low confidence.
+    Normalize *scores* to [0, 1] using min-max scaling, consistent with the
+    semantic normalization in sem_search._norm_scores so that the alpha
+    blending in result_merger operates on comparable scales.
+
+    When all scores are identical (or a single result) returns 0.5 — the
+    same neutral convention used on the semantic side.
+
+    A quality-penalty *scale* is applied when the absolute maximum is low,
+    preventing weak evidence from inflating to 1.0.
     """
     if not scores:
         return []
-    if len(scores) == 1:
-        s = scores[0]
-        if s < 0.25:
-            return [max(min_val, 0.5)]
-        if s < 0.4:
-            return [max(min_val, 0.8)]
-        return [max(min_val, 1.0)]
 
-    max_score = max(scores)
-    if max_score == 0:
+    mn = min(scores)
+    mx = max(scores)
+
+    if mx == 0:
         return [min_val] * len(scores)
 
+    if mx - mn < 1e-9:
+        # All scores identical — return neutral 0.5 (same as sem_search)
+        return [0.5 for _ in scores]
+
+    # Scale penalty for weak maximums
     scale = 1.0
-    if max_score < 0.25:
+    if mx < 0.25:
         scale = 0.5
-    elif max_score < 0.4:
+    elif mx < 0.4:
         scale = 0.8
 
-    return [max(min_val, (s / max_score) * scale) for s in scores]
+    return [max(min_val, ((s - mn) / (mx - mn)) * scale) for s in scores]
 
 
 # ---------------------------------------------------------------------------
@@ -294,9 +305,11 @@ def vlm_matches_object_filter(
         obj_low = str(obj).lower()
         aliases = {obj_low}
         if obj_low == "person":
-            aliases.update({"people", "person"})
+            aliases.update({"people", "person", "man", "woman", "child",
+                           "boy", "girl", "pedestrian", "individual"})
         elif obj_low == "car":
-            aliases.update({"car", "vehicle", "cars", "vehicles"})
+            aliases.update({"car", "vehicle", "cars", "vehicles",
+                           "automobile", "sedan", "suv"})
         obj_ok = any(any(a in c for a in aliases) for c in flat_caps)
 
     color_ok = True

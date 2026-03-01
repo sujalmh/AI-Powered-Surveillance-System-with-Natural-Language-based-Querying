@@ -22,12 +22,20 @@ def _cached_text_embed(query_tuple: Tuple[str, ...]) -> np.ndarray:
 
 
 def _norm_scores(scores: List[float]) -> List[float]:
+    """Normalize semantic scores to [0, 1].
+
+    When all scores are identical (mx - mn ≈ 0) we return 0.5 instead of 1.0
+    because mapping a cluster of mediocre scores to perfect 1.0 inflates
+    their weight during result merging (alpha blending with structured scores).
+    """
     if not scores:
         return []
     mn = min(scores)
     mx = max(scores)
     if mx - mn < 1e-9:
-        return [1.0 for _ in scores]
+        # All scores are the same — return a neutral value rather than
+        # the maximum so that uniform mediocre results are not promoted.
+        return [0.5 for _ in scores]
     return [(s - mn) / (mx - mn) for s in scores]
 
 
@@ -102,6 +110,8 @@ def search_unstructured(
     store = get_faiss_store(dim=512)
 
     def _filter_pred(meta: Dict[str, Any]) -> bool:
+        from backend.app.services.retrieval_utils import parse_ts as _parse_ts
+
         if camera_id is not None and int(meta.get("camera_id", -1)) != int(camera_id):
             return False
         # Time window filter if available
@@ -111,17 +121,24 @@ def search_unstructured(
                 # Strict time-bounded queries should not accept rows without timestamps
                 return False
             if ts and (from_iso or to_iso):
-                dt = datetime.fromisoformat(ts)
-                if from_iso and dt < datetime.fromisoformat(from_iso):
+                # Use the shared parse_ts helper that strips timezone
+                # suffixes (Z, ±HH:MM) so naive/aware mismatches do not
+                # silently reject valid hits.
+                dt = _parse_ts(ts)
+                if from_iso and dt < _parse_ts(from_iso):
                     return False
-                if to_iso and dt > datetime.fromisoformat(to_iso):
+                if to_iso and dt > _parse_ts(to_iso):
                     return False
         except Exception:
-            pass
+            # If we cannot even parse the timestamp, reject the row rather than
+            # silently accepting it — an un-parseable timestamp should not
+            # pass a time-bounded filter.
+            logger.debug("Rejecting FAISS hit with unparseable frame_ts=%r", meta.get("frame_ts"))
+            return False
         return True
 
     # Over-fetch to compensate for post-filtering losses (camera/time filters)
-    fetch_multiplier = 4 if (camera_id is not None or from_iso or to_iso) else 1
+    fetch_multiplier = 2 if (camera_id is not None or from_iso or to_iso) else 1
     hits = store.vector_search(query_emb, top_k=top_k * fetch_multiplier, filter_pred=_filter_pred)
 
     # Group by clip to form clip-level results
@@ -162,10 +179,11 @@ def search_unstructured(
     # Adaptive threshold from distribution (or use fixed min_confidence)
     if getattr(settings, "ENABLE_ADAPTIVE_CONFIDENCE", True) and clip_scores:
         threshold = _adaptive_min_confidence(clip_scores, has_action=has_action, base=min_confidence)
-        # Increase the hard floor to 0.18 for better precision
-        threshold = max(threshold, 0.18)
+        # Hard floor: lower for action queries (e.g. "running") whose CLIP
+        # similarities are inherently weaker; higher for object queries.
+        threshold = max(threshold, 0.15 if has_action else 0.25)
     else:
-        threshold = 0.12 if has_action else max(min_confidence, 0.18)
+        threshold = 0.18 if has_action else max(min_confidence, 0.25)
     results = [entry for entry in by_clip.values() if entry["score"] >= threshold]
 
     # Normalize scores for consistent merging later

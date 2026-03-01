@@ -91,29 +91,45 @@ class HybridSearchEngine:
     def _apply_mongo_filters(self, cand: List[Dict[str, Any]], parsed: ParsedQuery, top_k: int) -> List[Dict[str, Any]]:
         from bson import ObjectId  # type: ignore
 
+        # Batch-fetch all detection docs in a single $in query (avoids N+1)
+        det_id_by_idx: Dict[int, str] = {}
+        for i, c in enumerate(cand):
+            det_id = (c.get("meta") or {}).get("detection_id")
+            if det_id:
+                det_id_by_idx[i] = det_id
+
+        if not det_id_by_idx:
+            return []
+
+        unique_ids = list(set(det_id_by_idx.values()))
+        try:
+            oid_list = [ObjectId(d) for d in unique_ids]
+            docs_cursor = detections_col.find({"_id": {"$in": oid_list}})
+            docs_map: Dict[str, Dict[str, Any]] = {str(d["_id"]): d for d in docs_cursor}
+        except Exception:
+            docs_map = {}
+
+        # Normalize colors for case-insensitive comparison
+        parsed_colors_lower = [c.lower() for c in parsed.colors]
+
         out: List[Dict[str, Any]] = []
-        for c in cand:
-            meta = c.get("meta", {})
-            det_id = meta.get("detection_id")
+        for i, c in enumerate(cand):
+            det_id = det_id_by_idx.get(i)
             if not det_id:
                 continue
-
-            # Fetch the detection document by ObjectId
-            try:
-                doc = detections_col.find_one({"_id": ObjectId(det_id)})
-            except Exception:
-                doc = None
+            doc = docs_map.get(det_id)
             if doc is None:
                 continue
+            meta = c.get("meta", {})
 
-            # Color filter at object level
-            if parsed.colors:
+            # Color filter at object level (case-insensitive)
+            if parsed_colors_lower:
                 try:
                     obj_idx = int(meta.get("object_index", -1))
                     if 0 <= obj_idx < len(doc.get("objects", [])):
                         ob = doc["objects"][obj_idx]
-                        col = (ob.get("color") or "").strip()
-                        if col and col not in parsed.colors:
+                        col = (ob.get("color") or "").strip().lower()
+                        if col and col not in parsed_colors_lower:
                             continue
                 except Exception:
                     pass
