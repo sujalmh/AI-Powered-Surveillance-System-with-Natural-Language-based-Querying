@@ -10,16 +10,15 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
 from backend.app.config import settings
-from backend.object_detection import ContinuousRecorder
 from backend.app.services.clip_builder import build_clip_from_snapshots
 
 def run_test():
+    from backend.object_detection import ContinuousRecorder  # Lazy import to avoid heavy init at module import
     cam_id = 999
     fps = 10.0
     recorder = ContinuousRecorder(camera_id=cam_id, fps=fps, chunk_duration_sec=3)
     
     print("Writing frames...")
-    start_time = datetime.now(timezone.utc)
     
     for i in range(50):
         frame = np.zeros((480, 640, 3), dtype=np.uint8)

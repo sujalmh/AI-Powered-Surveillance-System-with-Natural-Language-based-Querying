@@ -541,8 +541,16 @@ def _ffmpeg_convert_worker(q: queue.Queue):
                 "-pix_fmt", "yuv420p", "-movflags", "+faststart",
                 "-loglevel", "error", str(h264_path)
             ]
-            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300)
-            if h264_path.exists() and h264_path != filepath:
+            success = False
+            try:
+                cp = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300)
+                success = cp.returncode == 0
+                if not success:
+                    err = cp.stderr.decode(errors="ignore") if cp.stderr else ""
+                    logger.warning("FFmpeg background conversion failed for %s: %s", filepath, err[:500])
+            except subprocess.TimeoutExpired:
+                logger.warning("FFmpeg background conversion timed out for %s", filepath)
+            if success and h264_path.exists() and h264_path != filepath:
                 filepath.unlink(missing_ok=True)
                 h264_path.rename(filepath)
         except Exception as e:
@@ -756,12 +764,7 @@ def process_live_stream(
     tracker = None
 
     # Initialize multimodal encoders and person index
-    visual_encoder = get_visual_embedder()
     attr_encoder = get_attribute_encoder()
-    fusion = MultimodalFusion(
-        visual_weight=getattr(settings, "FUSION_VISUAL_WEIGHT", 0.6),
-        text_weight=getattr(settings, "FUSION_TEXT_WEIGHT", 0.4),
-    )
     person_index = get_person_store(dim=1152)
     if BoTSORT is not None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -1281,12 +1284,7 @@ def process_video_file(
     )
 
     # Initialize encoders (singletons — no overhead if already loaded)
-    visual_encoder = get_visual_embedder()
     attr_encoder = get_attribute_encoder()
-    fusion = MultimodalFusion(
-        visual_weight=getattr(settings, "FUSION_VISUAL_WEIGHT", 0.6),
-        text_weight=getattr(settings, "FUSION_TEXT_WEIGHT", 0.4),
-    )
     person_index = get_person_store(dim=1152)
 
     frames_processed = 0

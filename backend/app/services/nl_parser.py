@@ -431,10 +431,10 @@ def parse_nl_with_llm(nl: str) -> Dict[str, Any]:
         f["count_constraint"] = result.count_constraint
     _augment_count_constraint_from_query(nl, f)
 
-    # Regex backstop for query classification
-    # If the query is about camera status/active/online, force subtype to "cameras"
-    if re.search(r"\b(camera|cameras)\b.*\b(active|running|status|online|online|up|down|on|off|live)\b", nl_low) or \
-       re.search(r"\b(active|running|status|online|up|down|on|off|live)\b.*\b(camera|cameras)\b", nl_low):
+    # Regex backstop for camera status questions — match explicit constructs only
+    status_terms = r"(online|offline|active|inactive|down|up|running|stopped|on|off|live)"
+    camera_status_pattern = rf"\b(?:status\s+of\s+(?:the\s+)?(?:camera|cameras)\s*(?:is|are)?\s+{status_terms}|(?:camera|cameras)\s*(?:'s|is|are)\s+{status_terms})\b"
+    if re.search(camera_status_pattern, nl_low):
         f["query_type"] = "informational"
         f["__query_subtype"] = "cameras"
 

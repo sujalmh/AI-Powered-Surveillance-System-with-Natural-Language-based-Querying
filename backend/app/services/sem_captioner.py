@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 from typing import List, Optional
+import logging
 
 import numpy as np
 import torch
@@ -10,6 +11,8 @@ from PIL import Image
 from backend.app.config import settings
 import os
 from backend.app.services.sem_embedder import get_embedder
+
+logger = logging.getLogger(__name__)
 
 # Lazy import transformers so backend can start even if captions are disabled
 try:
@@ -31,7 +34,7 @@ def _to_pil_rgb(x: np.ndarray) -> Image.Image:
 
 class _Captioner:
     """
-    BLIP-2 captioner for per-frame captions.
+    Qwen2-VL primary captioner for per-frame captions with fallbacks (HF pipeline or CLIP labels).
     Loads only if ENABLE_CAPTIONS=true. Uses CPU by default unless EMBED_DEVICE=cuda and torch has CUDA.
     """
 
@@ -85,7 +88,12 @@ class _Captioner:
                 cache_dir=cache_dir,
             )
             # Send to device if device_map wasn't used natively
-            if not getattr(self.model.config, "quantization_config", None) and getattr(self.model, "device", self.device) != self.device:
+            device_map = getattr(self.model.config, "device_map", None)
+            if (
+                device_map is None
+                and not getattr(self.model.config, "quantization_config", None)
+                and getattr(self.model, "device", self.device) != self.device
+            ):
                 self.model.to(self.device)
             self.model.eval()
 
@@ -136,8 +144,7 @@ class _Captioner:
     @torch.no_grad()
     def caption_images_batched(self, images: List[np.ndarray]) -> List[str]:
         """
-        Generate captions for a batch of images using BLIP-2.
-        For BLIP-2 FLAN-T5 checkpoints, provide a text prompt to steer captioning.
+        Generate captions for a batch of images using Qwen2-VL (primary) with pipeline/CLIP fallbacks.
         """
         if not images:
             return []
@@ -177,13 +184,19 @@ class _Captioner:
                     
                     # Trim the input prompt tokens from the generated output
                     generated_ids_trimmed = [
-                        out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+                        out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids, strict=True)
                     ]
                     
                     captions = self.processor.batch_decode(
                         generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
                     )
-                except Exception:
+                except Exception as e:
+                    logger.warning(
+                        "caption_images_batched: qwen2vl generation failed for batch size %d: %s",
+                        len(pil_list),
+                        e,
+                        exc_info=True,
+                    )
                     captions = [""] * len(pil_list)
             elif self.backend == "clip_labels" and getattr(self, "_label_text_emb", None) is not None:
                 # Zero-shot label guessing with CLIP embeddings (fast, always available)

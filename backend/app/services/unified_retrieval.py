@@ -23,6 +23,15 @@ import re
 
 logger = logging.getLogger(__name__)
 
+SEM_RAW_THRESH_LOW = 0.22
+SEM_RAW_THRESH_MED = 0.30
+SEM_RAW_THRESH_HIGH = 0.40
+SEM_NO_STRUCTURED_THRESH = 0.35
+SEM_PENALTY_STRONG = 0.3
+SEM_PENALTY_MED = 0.6
+SEM_PENALTY_LIGHT = 0.8
+SEM_PENALTY_NO_STRUCTURED = 0.7
+
 
 class UnifiedRetrieval:
     """
@@ -928,19 +937,17 @@ class UnifiedRetrieval:
             )
             # Final penalty for weak semantic-only results to prevent false positives filling the list
             if result.get("source") == "semantic":
-                # If absolute semantic confidence is low, penalize heavily
-                # We expect "good" semantic matches to be > 0.35
+                # Penalties for weak semantic-only matches; tune via constants above. Penalties can compound (e.g., low raw score + no structured results).
                 raw_sem = result.get("score_raw_semantic", 0.0)
-                if raw_sem < 0.22:
-                    final_score *= 0.3 # Strong penalty for very weak matches
-                elif raw_sem < 0.30:
-                    final_score *= 0.6
-                elif raw_sem < 0.40:
-                    final_score *= 0.8
+                if raw_sem < SEM_RAW_THRESH_LOW:
+                    final_score *= SEM_PENALTY_STRONG
+                elif raw_sem < SEM_RAW_THRESH_MED:
+                    final_score *= SEM_PENALTY_MED
+                elif raw_sem < SEM_RAW_THRESH_HIGH:
+                    final_score *= SEM_PENALTY_LIGHT
                 
-                # If no structured results at all, be even more conservative with weak semantic matches
-                if len(combined_tracks) == 0 and raw_sem < 0.35:
-                    final_score *= 0.7
+                if len(combined_tracks) == 0 and raw_sem < SEM_NO_STRUCTURED_THRESH:
+                    final_score *= SEM_PENALTY_NO_STRUCTURED
 
             if enable_recency and halflife_hours > 0:
                 try:
@@ -1577,20 +1584,30 @@ class UnifiedRetrieval:
         if len(scores) == 1:
             # For weak single results, don't boost to 1.0
             s = scores[0]
-            if s < 0.25: return [0.5]
-            if s < 0.4: return [0.8]
-            return [1.0]
+            if s < 0.25:
+                return [max(min_val, 0.5)]
+            if s < 0.4:
+                return [max(min_val, 0.8)]
+            return [max(min_val, 1.0)]
         
         max_score = max(scores)
         if max_score == 0:
-            return [0.0] * len(scores)
+            return [max(min_val, 0.0)] * len(scores)
             
         # If max score is weak, don't normalize to 1.0
         scale = 1.0
-        if max_score < 0.25: scale = 0.5
-        elif max_score < 0.4: scale = 0.8
+        if max_score < 0.25:
+            scale = 0.5
+        elif max_score < 0.4:
+            scale = 0.8
         
-        return [(s / max_score) * scale for s in scores]
+        normalized: List[float] = []
+        for s in scores:
+            norm = (s / max_score) * scale
+            if min_val is not None:
+                norm = max(min_val, norm)
+            normalized.append(norm)
+        return normalized
 
     def _compute_adaptive_alpha(
         self,

@@ -169,30 +169,22 @@ async def upload_clip(
         # Create/update camera metadata in cameras collection
         try:
             now = datetime.now(timezone.utc).isoformat()
-            camera_doc = cameras_col.find_one({"camera_id": int(camera_id)})
-            if camera_doc:
-                cameras_col.update_one(
-                    {"camera_id": int(camera_id)},
-                    {
-                        "$set": {
-                            "last_seen": now,
-                            "status": "active",
-                            "source": str(dest_path.resolve()),
-                            "last_error": None,
-                        }
+            cameras_col.update_one(
+                {"camera_id": int(camera_id)},
+                {
+                    "$set": {
+                        "last_seen": now,
+                        "status": "active",
+                        "source": str(dest_path.resolve()),
+                        "last_error": None,
                     },
-                )
-            else:
-                cameras_col.insert_one(
-                    {
+                    "$setOnInsert": {
                         "camera_id": int(camera_id),
                         "location": f"Test Camera {camera_id}",
-                        "source": str(dest_path.resolve()),
-                        "status": "active",
-                        "last_seen": now,
-                        "last_error": None,
-                    }
-                )
+                    },
+                },
+                upsert=True,
+            )
         except Exception as cam_err:
             print(f"Warning: Failed to update camera metadata: {cam_err}")
 
@@ -274,6 +266,11 @@ async def list_clip_frames(
                 _detections = None  # type: ignore
 
             if _detections is not None:
+                try:
+                    from backend.app.services.attribute_encoder import get_attribute_encoder
+                    _encoder = get_attribute_encoder()
+                except Exception:
+                    _encoder = None
                 for d in docs:
                     if d.get("object_captions"):
                         continue
@@ -289,8 +286,8 @@ async def list_clip_frames(
                             "timestamp": {"$gte": (dt - window).isoformat(), "$lte": (dt + window).isoformat()},
                         }
                         dd = list(_detections.find(q, {"_id": 0, "objects": 1}).limit(10))
-                        from backend.app.services.attribute_encoder import get_attribute_encoder
-                        _encoder = get_attribute_encoder()
+                        if _encoder is None:
+                            continue
                         out: List[str] = []
                         for di in dd:
                             for o in (di.get("objects") or []):

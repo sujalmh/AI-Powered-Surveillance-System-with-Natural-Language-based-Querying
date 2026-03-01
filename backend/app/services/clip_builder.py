@@ -6,10 +6,13 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional, Set, Tuple
+import logging
 
 import cv2
 
 from backend.app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -81,10 +84,9 @@ def _collect_snapshots(
         return []
     files: List[Tuple[datetime, Path]] = []
     
-    # Parse allowed timestamps into a set of datetime objects for efficient lookup
-    whitelist_dts: Optional[Set[datetime]] = None
-    if allowed_timestamps:
-        whitelist_dts = _parse_whitelist(allowed_timestamps)
+    parsed_whitelist = whitelist_dts
+    if parsed_whitelist is None and allowed_timestamps:
+        parsed_whitelist = _parse_whitelist(allowed_timestamps)
 
     for p in cam_dir.glob("*.jpg"):
         ts = _parse_ts_from_filename(p.name)
@@ -96,8 +98,8 @@ def _collect_snapshots(
                 continue
         if start_dt <= ts <= end_dt:
             # If whitelist is provided, only include snapshots near a whitelisted timestamp
-            if whitelist_dts is not None:
-                if not any(abs((ts - wt).total_seconds()) <= whitelist_tolerance_sec for wt in whitelist_dts):
+            if parsed_whitelist is not None:
+                if not any(abs((ts - wt).total_seconds()) <= whitelist_tolerance_sec for wt in parsed_whitelist):
                     continue
             files.append((ts, p))
     files.sort(key=lambda x: x[0])
@@ -178,6 +180,10 @@ def _build_clip_from_snapshots_fallback(
     try:
         start_dt = datetime.fromisoformat(start_iso)
         end_dt = datetime.fromisoformat(end_iso)
+        if start_dt.tzinfo is not None:
+            start_dt = start_dt.astimezone(timezone.utc).replace(tzinfo=None)
+        if end_dt.tzinfo is not None:
+            end_dt = end_dt.astimezone(timezone.utc).replace(tzinfo=None)
     except Exception as e:
         raise ValueError(f"Invalid start/end ISO timestamps: {e}")
 
@@ -398,7 +404,17 @@ def build_clip_from_snapshots(
             "-pix_fmt", "yuv420p", "-movflags", "+faststart",
             "-loglevel", "error", str(out_path)
         ]
-        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+        try:
+            cp = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+        except subprocess.TimeoutExpired:
+            logger.error("build_clip_from_snapshots: ffmpeg trim timed out (cmd=%s)", cmd)
+            out_path.unlink(missing_ok=True)
+            return _build_clip_from_snapshots_fallback(camera_id, start_iso, end_iso, fps, allowed_timestamps)
+        if cp.returncode != 0:
+            err = cp.stderr.decode(errors="ignore") if cp.stderr else ""
+            logger.error("build_clip_from_snapshots: ffmpeg trim failed (cmd=%s): %s", cmd, err[:500])
+            out_path.unlink(missing_ok=True)
+            return _build_clip_from_snapshots_fallback(camera_id, start_iso, end_iso, fps, allowed_timestamps)
     else:
         # Merge via concat demuxer
         concat_file = out_dir / f"{base_name}_concat.txt"
@@ -421,11 +437,23 @@ def build_clip_from_snapshots(
             "-pix_fmt", "yuv420p", "-movflags", "+faststart",
             "-loglevel", "error", str(out_path)
         ]
-        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300)
         try:
-            concat_file.unlink(missing_ok=True)
-        except Exception:
-            pass
+            try:
+                cp = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300)
+            except subprocess.TimeoutExpired:
+                logger.error("build_clip_from_snapshots: ffmpeg concat timed out (cmd=%s)", cmd)
+                out_path.unlink(missing_ok=True)
+                return _build_clip_from_snapshots_fallback(camera_id, start_iso, end_iso, fps, allowed_timestamps)
+            if cp.returncode != 0:
+                err = cp.stderr.decode(errors="ignore") if cp.stderr else ""
+                logger.error("build_clip_from_snapshots: ffmpeg concat failed (cmd=%s): %s", cmd, err[:500])
+                out_path.unlink(missing_ok=True)
+                return _build_clip_from_snapshots_fallback(camera_id, start_iso, end_iso, fps, allowed_timestamps)
+        finally:
+            try:
+                concat_file.unlink(missing_ok=True)
+            except Exception:
+                pass
             
     if not out_path.exists():
         # Fallback to snaps if ffmpeg fails
