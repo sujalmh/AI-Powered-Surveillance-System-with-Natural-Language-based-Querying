@@ -5,6 +5,8 @@ import useSWR from "swr";
 import { api, API_BASE } from "@/lib/api";
 import { Users } from "lucide-react";
 
+/* ── Types ───────────────────────────────────────── */
+
 type ZoneInfo = {
   zone_id: string;
   name: string;
@@ -21,46 +23,66 @@ type CameraCard = {
   zones?: ZoneInfo[];
 };
 
+/* ── Shared overlay-badge style builder ──────────── */
+
+const overlayBadge = (extra?: React.CSSProperties): React.CSSProperties => ({
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+  padding: "2px 8px",
+  borderRadius: "var(--radius-full)",
+  background: "rgba(0,0,0,0.55)",
+  backdropFilter: "blur(4px)",
+  WebkitBackdropFilter: "blur(4px)",
+  fontSize: "0.6875rem",
+  border: "1px solid rgba(255,255,255,0.1)",
+  ...extra,
+});
+
+/* ── Data fetching ───────────────────────────────── */
+
+async function enrichWithOccupancy(cam: CameraCard): Promise<CameraCard> {
+  try {
+    const occ = (await api.getOccupancy(cam.id)) as any;
+    cam.people = occ?.person_count ?? 0;
+    if (Array.isArray(occ?.zones) && occ.zones.length > 0) {
+      cam.zones = occ.zones.map((z: any) => ({
+        zone_id: z.zone_id,
+        name: z.name,
+        count: z.count ?? 0,
+        capacity: z.capacity,
+      }));
+    }
+  } catch {
+    // Fallback: count persons from recent detections
+    try {
+      const p = new URLSearchParams();
+      p.set("camera_id", String(cam.id));
+      p.set("object", "person");
+      p.set("last_minutes", "5");
+      p.set("limit", "50");
+      const dets = (await api.listDetections(p)) as any[];
+      cam.people = dets.reduce((acc: number, d: any) => {
+        const objs = Array.isArray(d.objects) ? d.objects : [];
+        return acc + objs.filter((o: any) => o.object_name === "person").length;
+      }, 0);
+    } catch {
+      /* best-effort */
+    }
+  }
+  return cam;
+}
+
 const fetchCameras = async (): Promise<CameraCard[]> => {
   const cams = (await api.listCameras()) as any[];
   const base: CameraCard[] = cams.map((c) => ({
     id: Number(c.camera_id),
-    name: c.location ? c.location : `Camera ${c.camera_id}`,
+    name: c.location || `Camera ${c.camera_id}`,
     location: c.location,
     status: c.running ? "live" : "stopped",
     people: 0,
   }));
-
-  const fetchPromises = base.map(async (cam) => {
-    try {
-      const occ = (await api.getOccupancy(cam.id)) as any;
-      cam.people = occ?.person_count ?? 0;
-      if (Array.isArray(occ?.zones) && occ.zones.length > 0) {
-        cam.zones = occ.zones.map((z: any) => ({
-          zone_id: z.zone_id,
-          name: z.name,
-          count: z.count ?? 0,
-          capacity: z.capacity,
-        }));
-      }
-    } catch {
-      try {
-        const p = new URLSearchParams();
-        p.set("camera_id", String(cam.id));
-        p.set("object", "person");
-        p.set("last_minutes", "5");
-        p.set("limit", "50");
-        const dets = (await api.listDetections(p)) as any[];
-        cam.people = dets.reduce((acc: number, d: any) => {
-          const objs = Array.isArray(d.objects) ? d.objects : [];
-          return acc + objs.filter((o: any) => o.object_name === "person").length;
-        }, 0);
-      } catch {}
-    }
-    return cam;
-  });
-
-  return Promise.all(fetchPromises);
+  return Promise.all(base.map(enrichWithOccupancy));
 };
 
 /* ────────────────────────────────────────────── */
@@ -129,16 +151,8 @@ const CameraTile = memo(({ id, name, status, people, zones }: CameraCard) => {
       )}
 
       {/* Top-right: status badge */}
-      <div style={{ position: "absolute", top: "8px", right: "8px" }}>
-        <span style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "4px",
-          padding: "2px 8px",
-          borderRadius: "var(--radius-full)",
-          background: "rgba(0,0,0,0.55)",
-          backdropFilter: "blur(4px)",
-          WebkitBackdropFilter: "blur(4px)",
+      <div style={{ position: "absolute", top: 8, right: 8 }}>
+        <span style={overlayBadge({
           fontSize: "0.625rem",
           fontFamily: "var(--font-mono)",
           fontWeight: 600,
@@ -146,48 +160,24 @@ const CameraTile = memo(({ id, name, status, people, zones }: CameraCard) => {
           textTransform: "uppercase",
           color: isLive ? "#4ADE80" : "#888",
           border: `1px solid ${isLive ? "rgba(74,222,128,0.3)" : "rgba(255,255,255,0.1)"}`,
-        }}>
-          {isLive && <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#4ADE80", display: "inline-block", animation: "pulse 2s ease-in-out infinite" }} />}
+        })}>
+          {isLive && <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#4ADE80", display: "inline-block", animation: "pulse 2s ease-in-out infinite" }} />}
           {isLive ? "LIVE" : "STOPPED"}
         </span>
       </div>
 
       {/* Bottom-left: camera label */}
-      <div style={{ position: "absolute", bottom: "8px", left: "8px" }}>
-        <span style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "5px",
-          padding: "2px 8px",
-          borderRadius: "var(--radius-full)",
-          background: "rgba(0,0,0,0.65)",
-          backdropFilter: "blur(4px)",
-          WebkitBackdropFilter: "blur(4px)",
-          fontSize: "0.6875rem",
-          color: "#ddd",
-          border: "1px solid rgba(255,255,255,0.1)",
-        }}>
+      <div style={{ position: "absolute", bottom: 8, left: 8 }}>
+        <span style={overlayBadge({ gap: 5, background: "rgba(0,0,0,0.65)", color: "#ddd" })}>
           <span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: "0.625rem" }}>#{id}</span>
           <span>{name}</span>
         </span>
       </div>
 
       {/* Bottom-right: people chip */}
-      <div style={{ position: "absolute", bottom: "8px", right: "8px" }}>
-        <span style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "4px",
-          padding: "2px 8px",
-          borderRadius: "var(--radius-full)",
-          background: "rgba(0,0,0,0.55)",
-          backdropFilter: "blur(4px)",
-          WebkitBackdropFilter: "blur(4px)",
-          fontSize: "0.6875rem",
-          color: "#ccc",
-          border: "1px solid rgba(255,255,255,0.1)",
-        }}>
-          <Users style={{ width: "10px", height: "10px" }} />
+      <div style={{ position: "absolute", bottom: 8, right: 8 }}>
+        <span style={overlayBadge({ color: "#ccc" })}>
+          <Users style={{ width: 10, height: 10 }} />
           {people}
         </span>
       </div>

@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 from pymongo.collection import Collection
 
-from backend.app.db.mongo import detections as detections_col, db as _db
+from backend.app.db.mongo import detections as detections_col
 from backend.app.services.person_store import get_person_store
 from backend.app.services.attribute_encoder import get_attribute_encoder
 from backend.app.services.fusion import MultimodalFusion
@@ -89,21 +89,20 @@ class HybridSearchEngine:
         return _pred
 
     def _apply_mongo_filters(self, cand: List[Dict[str, Any]], parsed: ParsedQuery, top_k: int) -> List[Dict[str, Any]]:
+        from bson import ObjectId  # type: ignore
+
         out: List[Dict[str, Any]] = []
         for c in cand:
             meta = c.get("meta", {})
             det_id = meta.get("detection_id")
+            if not det_id:
+                continue
+
+            # Fetch the detection document by ObjectId
             try:
-                doc = _db["detections"].find_one({"_id": {"$eq": _db.codec_options.uuid_representation and None or None, "$oid": det_id}})  # not used; fallback below
+                doc = detections_col.find_one({"_id": ObjectId(det_id)})
             except Exception:
                 doc = None
-            if doc is None and det_id:
-                # Try standard ObjectId conversion
-                try:
-                    from bson import ObjectId  # type: ignore
-                    doc = detections_col.find_one({"_id": ObjectId(det_id)})
-                except Exception:
-                    doc = None
             if doc is None:
                 continue
 
@@ -124,7 +123,6 @@ class HybridSearchEngine:
             doc2["_person_meta"] = meta
             out.append(doc2)
 
-        # Sort by similarity desc
         out.sort(key=lambda x: x.get("_similarity", 0.0), reverse=True)
         return out[:top_k]
 

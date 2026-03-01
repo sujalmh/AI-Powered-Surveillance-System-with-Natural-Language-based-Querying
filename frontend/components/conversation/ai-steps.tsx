@@ -1,4 +1,3 @@
-import { useMemo } from "react"
 import type { ProcessingStep } from "@/lib/api"
 
 type AIStepsProps = {
@@ -7,16 +6,8 @@ type AIStepsProps = {
 }
 
 export function AISteps({ steps, responseTime }: AIStepsProps) {
-  const defaultSteps: ProcessingStep[] = useMemo(() => [
-    { name: "Parse Query", status: "pending", details: "Waiting for query..." },
-    { name: "MongoDB Query", status: "pending", details: "Not started" },
-    { name: "Vector Search", status: "pending", details: "Not started" },
-    { name: "Fusion & Ranking", status: "pending", details: "Not started" },
-    { name: "Build Clips", status: "pending", details: "Not started" },
-    { name: "Return Results", status: "pending", details: "Not started" },
-  ], [])
-
-  const displaySteps = steps && steps.length > 0 ? steps : defaultSteps
+  const hasSteps = steps && steps.length > 0
+  const displaySteps = hasSteps ? steps : []
 
   const getStyle = (status: string) => {
     if (status === "complete") return {
@@ -69,32 +60,67 @@ export function AISteps({ steps, responseTime }: AIStepsProps) {
 
       {/* Steps */}
       <div style={{ flex: 1, overflowY: "auto", padding: "12px", display: "flex", flexDirection: "column", gap: "6px" }}>
-        {displaySteps.map((step, idx) => {
-          const s = getStyle(step.status)
-          return (
-            <div key={idx} style={{
-              border: `1px solid ${(s.card as any).borderColor}`,
-              background: (s.card as any).background,
-              borderRadius: "var(--radius-md)",
-              padding: "8px 10px",
+        {displaySteps.length === 0 ? (
+          <div style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            height: "100%",
+            padding: "20px",
+            textAlign: "center",
+          }}>
+            <div style={{
+              width: "48px",
+              height: "48px",
+              borderRadius: "var(--radius-full)",
+              background: "var(--color-surface-raised)",
+              border: "2px dashed var(--color-border)",
               display: "flex",
-              alignItems: "flex-start",
-              gap: "8px",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: "12px",
             }}>
-              <div style={{
-                width: "6px", height: "6px",
-                borderRadius: "50%",
-                marginTop: "5px",
-                flexShrink: 0,
-                ...s.dot,
-              }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: "0.8125rem", fontWeight: 600, margin: 0, ...s.name }}>{step.name}</p>
-                <p style={{ fontSize: "0.6875rem", color: "var(--color-text-faint)", marginTop: "2px", fontFamily: "var(--font-mono)" }}>{step.details}</p>
-              </div>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: "var(--color-text-faint)" }}>
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
             </div>
-          )
-        })}
+            <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-muted)", marginBottom: "4px" }}>
+              Ready
+            </p>
+            <p style={{ fontSize: "0.6875rem", color: "var(--color-text-faint)", lineHeight: 1.5 }}>
+              Send a message to see processing steps
+            </p>
+          </div>
+        ) : (
+          displaySteps.map((step, idx) => {
+            const s = getStyle(step.status)
+            return (
+              <div key={idx} style={{
+                border: `1px solid ${(s.card as any).borderColor}`,
+                background: (s.card as any).background,
+                borderRadius: "var(--radius-md)",
+                padding: "8px 10px",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "8px",
+              }}>
+                <div style={{
+                  width: "6px", height: "6px",
+                  borderRadius: "50%",
+                  marginTop: "5px",
+                  flexShrink: 0,
+                  ...s.dot,
+                }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: "0.8125rem", fontWeight: 600, margin: 0, ...s.name }}>{step.name}</p>
+                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-faint)", marginTop: "2px", fontFamily: "var(--font-mono)" }}>{step.details}</p>
+                </div>
+              </div>
+            )
+          })
+        )}
       </div>
 
       {/* Footer */}

@@ -7,7 +7,12 @@ import re
 
 _ALERT_CREATION_RE = re.compile(
     r'\b(?:create|set|make|add|new|schedule)\b.*\balerts?\b'
-    r'|\balerts?\b.*\b(?:create|set|make|add|new|schedule)\b',
+    r'|\balerts?\b.*\b(?:create|set|make|add|new|schedule)\b'
+    r'|\balert\s+me\b'
+    r'|\bnotify\s+me\b'
+    r'|\bwarn\s+me\b'
+    r'|\bsend\s+(?:an?\s+)?alerts?\b'
+    r'|\btrigger\s+(?:an?\s+)?alerts?\b',
     re.IGNORECASE,
 )
 _ALERT_RETRIEVAL_RE = re.compile(
@@ -21,6 +26,7 @@ from pydantic import BaseModel, Field
 
 from backend.app.core.async_utils import run_sync
 from backend.app.db.mongo import chat_messages as chat_col, detections as detections_col, alerts as alerts_col
+from backend.app.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -102,6 +108,16 @@ class ChatSendResponse(BaseModel):
     semantic_results: Optional[List[Dict[str, Any]]] = None
     mode: Optional[str] = None
     processing_steps: Optional[List[ProcessingStep]] = None
+
+
+class IntentClassifyRequest(BaseModel):
+    message: str = Field(..., description="User's message to classify")
+
+
+class IntentClassifyResponse(BaseModel):
+    intent: str = Field(..., description="Classification: 'alert_creation' or 'search_retrieval'")
+    confidence: float = Field(..., description="Confidence score 0.0-1.0")
+    reasoning: str = Field(..., description="Brief explanation of the classification")
 
 
 def iso_now() -> str:
@@ -352,17 +368,43 @@ def _guess_count_from_text(nl: str) -> Optional[int]:
             return None
     return None
 
+def _is_alert_creation_intent(nl: str) -> bool:
+    """Return True if the natural language input expresses alert creation intent."""
+    return bool(_ALERT_CREATION_RE.search(nl)) and not bool(_ALERT_RETRIEVAL_RE.search(nl))
+
+
+def _summarize_alert_rule(parsed: Dict[str, Any]) -> str:
+    """Build a human-readable summary of the created alert rule."""
+    parts = []
+    obj = parsed.get("objects.object_name")
+    if obj:
+        parts.append(f"Object: **{obj}**")
+    color = parsed.get("objects.color")
+    if color:
+        parts.append(f"Color: **{color}**")
+    cam = parsed.get("camera_id")
+    if cam is not None:
+        parts.append(f"Camera: **{cam}**")
+    count = parsed.get("count_constraint")
+    if count:
+        ops = {"eq": "exactly", "gt": "more than", "gte": "at least", "lt": "less than", "lte": "at most"}
+        for op, val in count.items():
+            parts.append(f"Count: {ops.get(op, op)} **{val}**")
+    action = parsed.get("action")
+    if action:
+        parts.append(f"Behavior: **{action}**")
+    zone = parsed.get("zone")
+    if zone:
+        parts.append(f"Zone: **{zone}**")
+    return "\n".join(f"- {p}" for p in parts) if parts else "- General surveillance alert"
+
+
 def _maybe_create_alert_from_nl(nl: str, parsed: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
     Heuristic NL→alert creation: if the user asks to "alert"/"notify" etc., compile a basic rule and save it.
     """
     low = nl.lower()
-    # Require an explicit creation verb near "alert"; reject retrieval verbs
-    intent = bool(_ALERT_CREATION_RE.search(nl)) and not bool(_ALERT_RETRIEVAL_RE.search(nl))
-    # Also accept "notify me" (word-boundary) as creation intent
-    if not intent:
-        intent = bool(re.search(r"\bnotify\b", low)) and not bool(_ALERT_RETRIEVAL_RE.search(nl))
-    if not intent:
+    if not _is_alert_creation_intent(nl):
         return None
     obj = parsed.get("objects.object_name") or "person"
     color = parsed.get("objects.color")
@@ -423,8 +465,10 @@ def _maybe_create_alert_from_nl(nl: str, parsed: Dict[str, Any]) -> Optional[Dic
         "area": area,
     }
     
-    # Incorporate time window if specified explicitly in NLP
-    if "timestamp" in parsed and isinstance(parsed["timestamp"], dict):
+    # Only incorporate time window if the user EXPLICITLY mentioned a time range
+    # (not the auto-injected default search window). Alerts should be persistent
+    # monitoring rules unless the user asks for a specific schedule.
+    if parsed.get("__time_explicit") and "timestamp" in parsed and isinstance(parsed["timestamp"], dict):
         ts = parsed["timestamp"]
         if "$gte" in ts and "$lte" in ts:
             rule["time"] = {"from": ts["$gte"], "to": ts["$lte"]}
@@ -513,6 +557,124 @@ async def sessions(limit: int = 20) -> List[ChatSession]:
     return await run_sync(_block)
 
 
+@router.post("/classify-intent", response_model=IntentClassifyResponse, tags=["chat"])
+async def classify_intent(req: IntentClassifyRequest):
+    """
+    Use LLM to intelligently classify user intent as either 'alert_creation' or 'search_retrieval'.
+    This provides more accurate classification than regex patterns.
+    """
+    def _block():
+        # Initialize LLM using same config as NL parser
+        llm_cfg = settings.get_active_llm_config()
+        provider = llm_cfg["provider"].strip().lower()
+        model = llm_cfg["model"]
+        api_key = llm_cfg["api_key"]
+        
+        llm = None
+        try:
+            if provider == "openai":
+                from langchain_openai import ChatOpenAI
+                llm = ChatOpenAI(model=model or "gpt-4o-mini", api_key=api_key, temperature=0.0)
+            elif provider == "openrouter":
+                from langchain_openai import ChatOpenAI
+                llm = ChatOpenAI(
+                    model=model or "gpt-4o-mini",
+                    base_url=settings.OPENROUTER_BASE_URL,
+                    api_key=api_key,
+                    temperature=0.0
+                )
+            elif provider == "ollama":
+                from langchain_community.chat_models import ChatOllama
+                llm = ChatOllama(model=model or "llama3.1", base_url=settings.OLLAMA_BASE_URL, temperature=0.0)
+            elif not provider and api_key:
+                from langchain_openai import ChatOpenAI
+                llm = ChatOpenAI(model=model or "gpt-4o-mini", api_key=api_key, temperature=0.0)
+            else:
+                # Fallback to regex if no LLM configured
+                logger.warning("No LLM configured for intent classification, using regex fallback")
+                is_creation = bool(_ALERT_CREATION_RE.search(req.message))
+                is_retrieval = bool(_ALERT_RETRIEVAL_RE.search(req.message))
+                intent = "alert_creation" if (is_creation and not is_retrieval) else "search_retrieval"
+                return IntentClassifyResponse(
+                    intent=intent,
+                    confidence=0.7,
+                    reasoning="Classified using regex patterns (no LLM configured)"
+                )
+        except Exception as e:
+            logger.exception(f"Failed to initialize LLM: {e}")
+            # Fallback to regex
+            is_creation = bool(_ALERT_CREATION_RE.search(req.message))
+            is_retrieval = bool(_ALERT_RETRIEVAL_RE.search(req.message))
+            intent = "alert_creation" if (is_creation and not is_retrieval) else "search_retrieval"
+            return IntentClassifyResponse(
+                intent=intent,
+                confidence=0.7,
+                reasoning=f"Classified using regex fallback (LLM initialization failed: {str(e)[:100]})"
+            )
+        
+        # Prepare classification prompt
+        prompt = f"""You are an intent classifier for a surveillance video search system. 
+Classify the following user message into one of two categories:
+
+1. "alert_creation" - User wants to CREATE a new alert/notification rule that will monitor for future events
+   Examples:
+   - "Alert me when someone wears a red jacket"
+   - "Notify me if a car is detected"
+   - "Create an alert for people with bags"
+   - "Warn me when someone enters at night"
+
+2. "search_retrieval" - User wants to SEARCH/RETRIEVE existing footage or view past events
+   Examples:
+   - "Show me people wearing red jackets"
+   - "Find cars from yesterday"
+   - "When did someone with a bag appear?"
+   - "List all alerts" (viewing existing alerts, not creating new ones)
+
+User message: "{req.message}"
+
+Respond with ONLY a JSON object in this exact format:
+{{"intent": "alert_creation" or "search_retrieval", "confidence": 0.0-1.0, "reasoning": "brief explanation"}}"""
+
+        try:
+            from langchain_core.messages import HumanMessage
+            response = llm.invoke([HumanMessage(content=prompt)])
+            content = response.content
+            
+            # Handle both string and list responses
+            if isinstance(content, list):
+                content = " ".join(str(item) for item in content)
+            content = str(content).strip()
+            
+            # Parse JSON response
+            import json
+            # Handle cases where LLM wraps response in markdown code blocks
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+            
+            result = json.loads(content)
+            
+            return IntentClassifyResponse(
+                intent=result.get("intent", "search_retrieval"),
+                confidence=float(result.get("confidence", 0.8)),
+                reasoning=result.get("reasoning", "Classified by LLM")
+            )
+        except Exception as e:
+            logger.exception(f"LLM classification failed: {e}")
+            # Fallback to regex
+            is_creation = bool(_ALERT_CREATION_RE.search(req.message))
+            is_retrieval = bool(_ALERT_RETRIEVAL_RE.search(req.message))
+            intent = "alert_creation" if (is_creation and not is_retrieval) else "search_retrieval"
+            return IntentClassifyResponse(
+                intent=intent,
+                confidence=0.6,
+                reasoning=f"Classified using regex fallback (LLM parsing failed: {str(e)[:100]})"
+            )
+    
+    return await run_sync(_block)
+
+
 @router.post("/send", response_model=ChatSendResponse)
 async def send(req: ChatSendRequest) -> ChatSendResponse:
     def _block():
@@ -548,17 +710,53 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
                     now = datetime.now(timezone.utc)
                     start = now - timedelta(minutes=minutes)
                     parsed["timestamp"] = {"$gte": start.isoformat(), "$lte": now.isoformat()}
+                    parsed["__time_explicit"] = True  # user explicitly asked for a time range
                 except Exception as e:
                     logger.debug("Failed to parse __last_minutes value %r: %s", parsed.get("__last_minutes"), e, exc_info=True)
+            elif has_absolute_ts:
+                parsed["__time_explicit"] = True  # LLM returned absolute timestamps from user query
+
+            # ── Check for alert creation intent BEFORE default time injection ──
+            alert_info = _maybe_create_alert_from_nl(req.message, parsed)
 
             # Default time window: if no time filter at all, default to last 24 hours (UTC)
+            # Applied AFTER alert check so auto-default doesn't leak into alert rules
             if "timestamp" not in parsed and "__last_minutes" not in parsed:
                 now = datetime.now(timezone.utc)
                 start = now - timedelta(hours=24)
                 parsed["timestamp"] = {"$gte": start.isoformat(), "$lte": now.isoformat()}
                 parsed["__last_minutes"] = 1440
+            if alert_info:
+                logger.info("Alert created from NL: %s", alert_info)
+                rule_summary = _summarize_alert_rule(parsed)
+                alert_name = alert_info.get("name", "Unnamed alert")
+                answer = (
+                    f"Alert created successfully!\n\n"
+                    f"{alert_name}\n\n"
+                    f"Monitoring conditions:\n{rule_summary}\n\n"
+                    f"The alert is now active and will monitor your cameras in real-time. "
+                    f"You can manage it from the Alerts page."
+                )
+                metadata: Dict[str, Any] = {"query_type": "alert_creation"}
+                assistant_payload = {
+                    "session_id": req.session_id,
+                    "parsed_filter": parsed,
+                    "results": [],
+                    "answer": answer,
+                    "metadata": metadata,
+                    "alert_created": alert_info,
+                }
+                save_message(req.session_id, "assistant", answer, assistant_payload)
+                return ChatSendResponse(
+                    session_id=req.session_id,
+                    parsed_filter=parsed,
+                    results=[],
+                    answer=answer,
+                    metadata=metadata,
+                    alert_created=alert_info,
+                )
 
-            # Execute unified hybrid retrieval
+            # ── Execute unified hybrid retrieval ──
             logger.info("Starting unified hybrid retrieval...")
             retrieval = UnifiedRetrieval()
             semantic_query = parsed.get("__semantic_query", req.message)
@@ -579,13 +777,6 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
             if not isinstance(metadata, dict):
                 metadata = {}
 
-            # Maybe create alert from NL — only if parsed intent suggests creation
-            alert_info = None
-            parsed_intent = parsed.get("__intent", "")
-            parsed_subtype = parsed.get("__query_subtype", "")
-            if parsed_intent in ("create", "update", "delete", "") or parsed_subtype in ("alerts", ""):
-                alert_info = _maybe_create_alert_from_nl(req.message, parsed)
-
             # Save assistant message with full payload for proper restoration from history
             assistant_payload = {
                 "session_id": req.session_id,
@@ -596,9 +787,6 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
                 "semantic_results": results,  # Also store as semantic_results for frontend compatibility
                 "mode": "unstructured" if parsed.get("action") else "hybrid",  # Include mode for proper frontend rendering
             }
-            
-            if alert_info:
-                assistant_payload["alert_created"] = alert_info
             
             if processing_steps:
                 assistant_payload["processing_steps"] = processing_steps
@@ -617,7 +805,7 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
                 "results": results,  # Unified results with clip_url
                 "answer": answer,
                 "metadata": metadata,
-                "alert_created": alert_info,
+                "alert_created": None,
                 "processing_steps": [ProcessingStep(**step) for step in processing_steps] if processing_steps else None,
             }
             
