@@ -700,17 +700,41 @@ class UnifiedRetrieval:
 
             # Fallback: if 0 results and we have a timestamp range, retry with local-time window so we find
             # detections stored with local timestamps (e.g. camera pipeline before UTC fix or different process).
+            # IMPORTANT: Preserve the user's original requested timestamp window by converting from UTC to local time.
             if len(results) == 0 and "timestamp" in mongo_filter:
                 ts_f = mongo_filter["timestamp"]
                 if isinstance(ts_f, dict) and "$gte" in ts_f and "$lte" in ts_f:
                     try:
-                        now_local = datetime.now()
-                        start_local = now_local - timedelta(hours=24)
-                        local_gte = start_local.isoformat()
-                        local_lte = now_local.isoformat()
-                        local_ts = {"$gte": local_gte, "$lte": local_lte}
+                        # Parse original ISO timestamps and convert from UTC to local timezone
+                        original_gte_str = ts_f["$gte"]
+                        original_lte_str = ts_f["$lte"]
+                        
+                        # Parse ISO strings to datetime objects
+                        original_gte_utc = datetime.fromisoformat(original_gte_str)
+                        original_lte_utc = datetime.fromisoformat(original_lte_str)
+                        
+                        # Ensure they are timezone-aware (assume UTC if naive)
+                        if original_gte_utc.tzinfo is None:
+                            original_gte_utc = original_gte_utc.replace(tzinfo=timezone.utc)
+                        if original_lte_utc.tzinfo is None:
+                            original_lte_utc = original_lte_utc.replace(tzinfo=timezone.utc)
+                        
+                        # Convert to local timezone
+                        local_gte = original_gte_utc.astimezone()
+                        local_lte = original_lte_utc.astimezone()
+                        
+                        # Re-serialize to ISO strings (preserving the converted local time)
+                        local_gte_str = local_gte.isoformat()
+                        local_lte_str = local_lte.isoformat()
+                        
+                        # Build fallback filter with converted local timestamps
+                        local_ts = {"$gte": local_gte_str, "$lte": local_lte_str}
                         fallback_filter = {k: v for k, v in mongo_filter.items() if k != "timestamp"}
                         fallback_filter["timestamp"] = local_ts
+                        
+                        print(f"[UnifiedRetrieval] Local-time fallback: Converting UTC [{original_gte_str}, {original_lte_str}] to local [{local_gte_str}, {local_lte_str}]")
+                        logger.info("Local-time fallback: Converting UTC timestamps to local timezone")
+                        
                         fallback_cursor = detections_col.find(
                             fallback_filter,
                             {"_id": 0}

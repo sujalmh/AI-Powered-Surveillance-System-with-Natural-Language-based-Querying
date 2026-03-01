@@ -1,11 +1,5 @@
 import { useMemo } from "react"
-
-type ProcessingStep = {
-  name: string
-  status: "complete" | "in-progress" | "pending" | "error"
-  details: string
-  timestamp?: string
-}
+import type { ProcessingStep } from "@/lib/api"
 
 type AIStepsProps = {
   steps?: ProcessingStep[]
