@@ -17,12 +17,35 @@ export function ConversationSidebar() {
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [current, setCurrent] = useState<string | null>(null);
+  const PENDING_SESSIONS_KEY = "ai_surveillance_pending_sessions";
 
   const load = async () => {
     setLoading(true);
     try {
       const data = await api.chatSessions();
-      setSessions(Array.isArray(data) ? data : []);
+      const backendSessions = Array.isArray(data) ? data : [];
+      
+      // Load pending sessions from localStorage
+      const pendingSessionsJson = typeof window !== "undefined" ? window.localStorage.getItem(PENDING_SESSIONS_KEY) : null;
+      const pendingSessions: SessionItem[] = pendingSessionsJson ? JSON.parse(pendingSessionsJson) : [];
+      
+      // Get IDs of sessions from backend
+      const backendSessionIds = new Set(backendSessions.map(s => s.session_id));
+      
+      // Filter out pending sessions that are now in the backend
+      const activePendingSessions = pendingSessions.filter(
+        s => !backendSessionIds.has(s.session_id)
+      );
+      
+      // Update localStorage with remaining pending sessions
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(PENDING_SESSIONS_KEY, JSON.stringify(activePendingSessions));
+      }
+      
+      // Merge backend sessions with remaining pending sessions (pending ones first)
+      const mergedSessions = [...activePendingSessions, ...backendSessions];
+      setSessions(mergedSessions);
+      
       const sid = typeof window !== "undefined" ? window.localStorage.getItem("ai_surveillance_chat_session") : null;
       setCurrent(sid);
     } catch {}
@@ -30,6 +53,17 @@ export function ConversationSidebar() {
   };
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    // Listen for new messages sent and refresh sessions list
+    const handler = () => {
+      load()
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("chat:message:sent", handler)
+      return () => window.removeEventListener("chat:message:sent", handler)
+    }
+  }, []);
 
   const switchSession = (sid: string) => {
     if (typeof window !== "undefined") {
@@ -42,10 +76,27 @@ export function ConversationSidebar() {
   const newConversation = () => {
     const sid = crypto.randomUUID();
     switchSession(sid);
-    setSessions((prev) => [
-      { session_id: sid, last_message: "New conversation", last_message_time: new Date().toISOString(), message_count: 0 },
-      ...prev,
-    ]);
+    
+    // Save pending session to localStorage
+    const PENDING_SESSIONS_KEY = "ai_surveillance_pending_sessions";
+    const pendingSessionsJson = typeof window !== "undefined" ? window.localStorage.getItem(PENDING_SESSIONS_KEY) : null;
+    const pendingSessions: SessionItem[] = pendingSessionsJson ? JSON.parse(pendingSessionsJson) : [];
+    
+    const newSession: SessionItem = {
+      session_id: sid,
+      last_message: "New conversation",
+      last_message_time: new Date().toISOString(),
+      message_count: 0,
+    };
+    
+    // Add to pending sessions and update localStorage
+    const updatedPending = [newSession, ...pendingSessions];
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(PENDING_SESSIONS_KEY, JSON.stringify(updatedPending));
+    }
+    
+    // Update UI immediately
+    setSessions((prev) => [newSession, ...prev]);
   };
 
   return (

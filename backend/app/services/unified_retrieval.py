@@ -93,7 +93,20 @@ class UnifiedRetrieval:
             - results: Unified ranked list of video clips with metadata
             - answer: Natural language answer
             - metadata: Info about filters applied
+            - processing_steps: List of processing steps with status
         """
+        # Initialize step tracking
+        processing_steps = []
+        
+        def add_step(name: str, status: str, details: str):
+            """Helper to add a processing step"""
+            processing_steps.append({
+                "name": name,
+                "status": status,
+                "details": details,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
+        
         # Extract query type, subtype, and intent
         query_type = parsed_filter.get("query_type", "visual")
         intent = parsed_filter.get("__intent", "find")
@@ -121,9 +134,12 @@ class UnifiedRetrieval:
 
         # Alerts query: answer from alert_logs collection (no clips)
         if qs == "alerts":
+            add_step("Parse Query", "complete", f"Detected alerts query (intent: {intent})")
+            add_step("MongoDB Query", "complete", "Querying alert logs")
             print("[UnifiedRetrieval] Handling query as ALERTS informational query")
             logger.info("Handling query as ALERTS informational query")
             results = self._execute_alert_query(parsed_filter, limit)
+            add_step("Return Results", "complete", f"Found {len(results)} alerts")
             answer_gen = AnswerGenerator()
             answer = answer_gen.generate(
                 query=parsed_filter.get("__raw", ""),
@@ -153,13 +169,17 @@ class UnifiedRetrieval:
                     "final_count": 0,
                     "info_data": results, # Keep data in metadata for traceability
                 },
+                "processing_steps": processing_steps,
             }
 
         # Cameras/system query: answer from cameras collection (no clips)
         if qs == "cameras":
+            add_step("Parse Query", "complete", f"Detected cameras query (intent: {intent})")
+            add_step("MongoDB Query", "complete", "Querying camera metadata")
             print("[UnifiedRetrieval] Handling query as CAMERAS informational query")
             logger.info("Handling query as CAMERAS informational query")
             results = self._execute_camera_query(parsed_filter, limit)
+            add_step("Return Results", "complete", f"Found {len(results)} cameras")
             answer_gen = AnswerGenerator()
             answer = answer_gen.generate(
                 query=parsed_filter.get("__raw", ""),
@@ -189,18 +209,25 @@ class UnifiedRetrieval:
                     "final_count": 0,
                     "info_data": results, # Keep data in metadata for traceability
                 },
+                "processing_steps": processing_steps,
             }
 
         # 1. Execute structured MongoDB query for detections (SKIP for action queries)
         structured_results = []
         if has_action:
             # Action queries only use semantic search - structured search returns irrelevant results
+            add_step("Parse Query", "complete", f"Action query detected: {parsed_filter.get('action')}")
+            add_step("MongoDB Query", "complete", "Skipped (action query uses semantic only)")
             print(f"[UnifiedRetrieval] Step 1: Skipping structured query for action '{parsed_filter.get('action')}' (semantic-only)")
             logger.info(f"Skipping structured query for action '{parsed_filter.get('action')}' (semantic-only)")
         else:
+            add_step("Parse Query", "complete", f"Extracted filters (intent: {intent})")
+            add_step("MongoDB Query", "in-progress", "Searching detections...")
             print(f"[UnifiedRetrieval] Step 1: Executing structured query. Intent: {intent}")
             logger.info(f"Step 1: Executing structured query. Intent: {intent}")
             structured_results = self._execute_structured_query(parsed_filter, limit)
+            processing_steps[-1]["status"] = "complete"
+            processing_steps[-1]["details"] = f"{len(structured_results)} matches found"
             print(f"[UnifiedRetrieval] Structured query returned {len(structured_results)} results")
             logger.info(f"Structured query returned {len(structured_results)} results")
         
@@ -211,15 +238,19 @@ class UnifiedRetrieval:
         # returns nothing.
         should_run_semantic = bool(settings.ENABLE_SEMANTIC and semantic_query and (not is_zero_count or has_action))
         if should_run_semantic:
+            add_step("Vector Search", "in-progress", "Searching embeddings...")
             print(f"[UnifiedRetrieval] Step 2: Executing semantic search for: {semantic_query}")
             semantic_results = self._execute_semantic_query(
                 semantic_query,
                 parsed_filter,
                 limit
             )
+            processing_steps[-1]["status"] = "complete"
+            processing_steps[-1]["details"] = f"{len(semantic_results)} semantic matches"
             print(f"[UnifiedRetrieval] Semantic search returned {len(semantic_results)} results")
             logger.info(f"Semantic search returned {len(semantic_results)} results")
         else:
+            add_step("Vector Search", "complete", "Skipped (not needed for query)")
             print("[UnifiedRetrieval] Skipping semantic search (disabled or no query)")
             logger.info("Skipping semantic search (disabled or no query)")
         
@@ -227,6 +258,7 @@ class UnifiedRetrieval:
         has_action = parsed_filter.get("action") is not None
         if has_action and not semantic_results:
             # Action queries REQUIRE semantic results - return empty if none found
+            add_step("Return Results", "complete", "No matches found for action query")
             print(f"[UnifiedRetrieval] Action query '{parsed_filter.get('action')}' found no semantic matches. Returning empty results.")
             logger.warning(f"Action query '{parsed_filter.get('action')}' found no semantic matches.")
             
@@ -253,10 +285,12 @@ class UnifiedRetrieval:
                     "structured_count": len(structured_results),
                     "semantic_count": 0,
                     "final_count": 0,
-                }
+                },
+                "processing_steps": processing_steps,
             }
         
         # 3. Merge and rank results based on intent
+        add_step("Fusion & Ranking", "in-progress", "Combining results by relevance...")
         print(f"[UnifiedRetrieval] Step 3: Merging results. Intent: {intent}")
         merged_results = self._merge_results(
             structured_results,
@@ -264,6 +298,8 @@ class UnifiedRetrieval:
             parsed_filter,
             intent
         )
+        processing_steps[-1]["status"] = "complete"
+        processing_steps[-1]["details"] = f"{len(merged_results)} unified results"
         print(f"[UnifiedRetrieval] Step 3: Merged results count: {len(merged_results)}")
         logger.info(f"Step 3: Merged results count: {len(merged_results)}")
         
@@ -275,6 +311,8 @@ class UnifiedRetrieval:
         clips = []
         if is_zero_count:
             # Treat as informational — return structured segments as metadata without clips
+            add_step("Build Clips", "complete", "Skipped (informational query)")
+            add_step("Return Results", "complete", "Preparing answer")
             print("[UnifiedRetrieval] Step 4: Skipping clip generation for zero-count query (informational answer)")
             logger.info("Step 4: Zero-count query — returning informational answer, no clips")
             query_type = "informational"  # Override for answer generator
@@ -282,18 +320,26 @@ class UnifiedRetrieval:
         elif query_type == "visual":
             if merged_results:
                 # Visual query: build video clips for top results
+                add_step("Build Clips", "in-progress", "Creating video clips...")
                 print("[UnifiedRetrieval] Step 4: Building video clips for visual query")
                 logger.info("Step 4: Building video clips for visual query")
                 clips = self._build_clips(merged_results[:effective_limit], parsed_filter)
+                processing_steps[-1]["status"] = "complete"
+                processing_steps[-1]["details"] = f"Generated {len(clips)} clips"
+                add_step("Return Results", "complete", f"Prepared {len(clips)} video results")
                 print(f"[UnifiedRetrieval] Generated {len(clips)} clips")
                 logger.info(f"Generated {len(clips)} clips")
             else:
                 # No results to build clips from
+                add_step("Build Clips", "complete", "No results to generate clips from")
+                add_step("Return Results", "complete", "No matches found")
                 print("[UnifiedRetrieval] Step 4: Skipping clip generation - no results found")
                 logger.info("Step 4: Skipping clip generation - no results found")
                 clips = []
         else:
             # Informational query: NO clip generation, return merged results as-is
+            add_step("Build Clips", "complete", "Skipped (informational query)")
+            add_step("Return Results", "complete", f"Prepared {len(merged_results)} results")
             print("[UnifiedRetrieval] Step 4: Skipping clip generation for informational query")
             logger.info("Step 4: Skipping clip generation for informational query")
             clips = []
@@ -329,7 +375,8 @@ class UnifiedRetrieval:
                 "structured_count": len(structured_results),
                 "semantic_count": len(semantic_results),
                 "final_count": len(clips),
-            }
+            },
+            "processing_steps": processing_steps,
         }
     
     def _resolve_camera_from_location(self, location_hint: str) -> Optional[List[int]]:
@@ -650,6 +697,31 @@ class UnifiedRetrieval:
             
             print(f"[UnifiedRetrieval] Initial query returned {len(results)} detection(s)")
             logger.debug(f"Initial query returned {len(results)} detection(s)")
+
+            # Fallback: if 0 results and we have a timestamp range, retry with local-time window so we find
+            # detections stored with local timestamps (e.g. camera pipeline before UTC fix or different process).
+            if len(results) == 0 and "timestamp" in mongo_filter:
+                ts_f = mongo_filter["timestamp"]
+                if isinstance(ts_f, dict) and "$gte" in ts_f and "$lte" in ts_f:
+                    try:
+                        now_local = datetime.now()
+                        start_local = now_local - timedelta(hours=24)
+                        local_gte = start_local.isoformat()
+                        local_lte = now_local.isoformat()
+                        local_ts = {"$gte": local_gte, "$lte": local_lte}
+                        fallback_filter = {k: v for k, v in mongo_filter.items() if k != "timestamp"}
+                        fallback_filter["timestamp"] = local_ts
+                        fallback_cursor = detections_col.find(
+                            fallback_filter,
+                            {"_id": 0}
+                        ).sort("timestamp", -1).limit(query_limit)
+                        fallback_results = list(fallback_cursor)
+                        if fallback_results:
+                            results = fallback_results
+                            print(f"[UnifiedRetrieval] Local-time fallback returned {len(results)} detection(s)")
+                            logger.info("Local-time timestamp fallback returned %s detection(s)", len(results))
+                    except Exception as fallback_err:
+                        logger.debug("Local-time fallback failed: %s", fallback_err)
 
             # If query returned 0 results and DEBUG is on, run diagnostic fallback query (avoid extra DB hit in production)
             if settings.DEBUG and len(results) == 0:

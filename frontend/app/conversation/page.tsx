@@ -5,9 +5,12 @@ import { MainLayout } from "@/components/layout/main-layout"
 import { ConversationSidebar } from "@/components/conversation/conversation-sidebar"
 import { ChatInterface } from "@/components/conversation/chat-interface"
 import { AISteps } from "@/components/conversation/ai-steps"
+import type { ProcessingStep } from "@/lib/api"
 
 export default function ConversationPage() {
   const [showSteps, setShowSteps] = useState(false)
+  const [currentSteps, setCurrentSteps] = useState<ProcessingStep[] | undefined>(undefined)
+  const [responseTime, setResponseTime] = useState<number | undefined>(undefined)
 
   return (
     <MainLayout noPadding noScroll>
@@ -35,11 +38,17 @@ export default function ConversationPage() {
           flexDirection: "column",
           minWidth: 0,
         }}>
-          <ChatInterface onShowSteps={() => setShowSteps(!showSteps)} />
+          <ChatInterface 
+            onShowSteps={() => setShowSteps(!showSteps)} 
+            onStepsUpdate={(steps, time) => {
+              setCurrentSteps(steps)
+              setResponseTime(time)
+            }}
+          />
         </div>
 
         {/* Right: AI steps island (conditionally shown) */}
-        {showSteps && <AISteps />}
+        {showSteps && <AISteps steps={currentSteps} responseTime={responseTime} />}
       </div>
     </MainLayout>
   )
