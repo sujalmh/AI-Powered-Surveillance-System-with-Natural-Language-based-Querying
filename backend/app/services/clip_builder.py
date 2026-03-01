@@ -55,22 +55,6 @@ def _parse_ts_from_filename(name: str) -> Optional[datetime]:
     return None
 
 
-def _parse_whitelist(stamps: List[str]) -> Set[datetime]:
-    out = set()
-    for s in stamps:
-        try:
-            # Replace Z with +00:00 to handle UTC explicitly
-            safe = s.replace("Z", "+00:00")
-            dt = datetime.fromisoformat(safe)
-            if dt.tzinfo is not None:
-                # Convert to UTC and strip timezone info
-                dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
-            out.add(dt)
-        except Exception:
-            pass
-    return out
-
-
 def _collect_snapshots(
     camera_id: int,
     start_dt: datetime,
@@ -361,8 +345,12 @@ def build_clip_from_snapshots(
     Note: kept the name `build_clip_from_snapshots` for backwards compatibility with callers.
     """
     try:
-        start_dt = datetime.fromisoformat(start_iso.replace("Z", "+00:00")).astimezone(timezone.utc).replace(tzinfo=None)
-        end_dt = datetime.fromisoformat(end_iso.replace("Z", "+00:00")).astimezone(timezone.utc).replace(tzinfo=None)
+        start_dt = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
+        end_dt = datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
+        if start_dt.tzinfo is not None:
+            start_dt = start_dt.astimezone(timezone.utc).replace(tzinfo=None)
+        if end_dt.tzinfo is not None:
+            end_dt = end_dt.astimezone(timezone.utc).replace(tzinfo=None)
     except Exception as e:
         raise ValueError(f"Invalid start/end ISO timestamps: {e}")
 

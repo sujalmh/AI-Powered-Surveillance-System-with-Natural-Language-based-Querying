@@ -1603,9 +1603,7 @@ class UnifiedRetrieval:
         
         normalized: List[float] = []
         for s in scores:
-            norm = (s / max_score) * scale
-            if min_val is not None:
-                norm = max(min_val, norm)
+            norm = max(min_val, (s / max_score) * scale)
             normalized.append(norm)
         return normalized
 

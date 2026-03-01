@@ -558,7 +558,8 @@ def _ffmpeg_convert_worker(q: queue.Queue):
         finally:
             q.task_done()
 
-_conversion_queue = queue.Queue()
+MAX_FFMPEG_QUEUE_SIZE = 32
+_conversion_queue = queue.Queue(maxsize=MAX_FFMPEG_QUEUE_SIZE)
 _conversion_thread = threading.Thread(target=_ffmpeg_convert_worker, args=(_conversion_queue,), daemon=True)
 _conversion_thread.start()
 
@@ -613,7 +614,10 @@ class ContinuousRecorder:
             self.writer.release()
             self.writer = None
             if self.current_filepath and self.current_filepath.exists():
-                _conversion_queue.put(str(self.current_filepath))
+                try:
+                    _conversion_queue.put(str(self.current_filepath), timeout=5.0)
+                except queue.Full:
+                    logger.warning("FFmpeg conversion queue full; dropping file %s", self.current_filepath)
 
     def release(self):
         self._close_writer()
@@ -1317,7 +1321,12 @@ def process_video_file(
                 frame_idx += 1
                 continue
 
-            doc: Dict[str, Any] = {"camera_id": camera_id, "timestamp": timestamp, "objects": []}
+            doc: Dict[str, Any] = {
+                "camera_id": camera_id,
+                "timestamp": timestamp,
+                "location": location,
+                "objects": [],
+            }
             person_rois: List[np.ndarray] = []
             person_attr_texts: List[str] = []
             person_meta: List[Dict[str, object]] = []

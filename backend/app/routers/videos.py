@@ -218,8 +218,12 @@ async def upload_clip(
             with_captions=bool(with_captions and settings.ENABLE_CAPTIONS),
         )
 
+        det_ok = det_summary.get("ok", True) if isinstance(det_summary, dict) else True
+        idx_ok = idx_res.get("ok", True) if isinstance(idx_res, dict) else True
+        overall_ok = bool(det_ok and idx_ok)
+
         return {
-            "ok": True,
+            "ok": overall_ok,
             "camera_id": int(camera_id),
             "clip_path": str(dest_path.resolve()),
             "clip_url": clip_url,
@@ -271,37 +275,36 @@ async def list_clip_frames(
                     _encoder = get_attribute_encoder()
                 except Exception:
                     _encoder = None
-                for d in docs:
-                    if d.get("object_captions"):
-                        continue
-                    ts = d.get("frame_ts")
-                    cam = d.get("camera_id")
-                    if not ts or cam is None:
-                        continue
-                    try:
-                        dt = datetime.fromisoformat(str(ts))
-                        window = timedelta(seconds=3)
-                        q = {
-                            "camera_id": int(cam),
-                            "timestamp": {"$gte": (dt - window).isoformat(), "$lte": (dt + window).isoformat()},
-                        }
-                        dd = list(_detections.find(q, {"_id": 0, "objects": 1}).limit(10))
-                        if _encoder is None:
+                if _encoder is not None:
+                    for d in docs:
+                        if d.get("object_captions"):
                             continue
-                        out: List[str] = []
-                        for di in dd:
-                            for o in (di.get("objects") or []):
-                                caption = _encoder.object_to_caption(o)
-                                if caption:
-                                    out.append(caption)
+                        ts = d.get("frame_ts")
+                        cam = d.get("camera_id")
+                        if not ts or cam is None:
+                            continue
+                        try:
+                            dt = datetime.fromisoformat(str(ts))
+                            window = timedelta(seconds=3)
+                            q = {
+                                "camera_id": int(cam),
+                                "timestamp": {"$gte": (dt - window).isoformat(), "$lte": (dt + window).isoformat()},
+                            }
+                            dd = list(_detections.find(q, {"_id": 0, "objects": 1}).limit(10))
+                            out: List[str] = []
+                            for di in dd:
+                                for o in (di.get("objects") or []):
+                                    caption = _encoder.object_to_caption(o)
+                                    if caption:
+                                        out.append(caption)
+                                    if len(out) >= 20:
+                                        break
                                 if len(out) >= 20:
                                     break
-                            if len(out) >= 20:
-                                break
-                        if out:
-                            d["object_captions"] = out
-                    except Exception:
-                        continue
+                            if out:
+                                d["object_captions"] = out
+                        except Exception:
+                            continue
 
             # Optional YOLO enrichment if requested and object_captions still missing
             if enrich == "yolo" and cv2 is not None and _API_YOLO is not None:

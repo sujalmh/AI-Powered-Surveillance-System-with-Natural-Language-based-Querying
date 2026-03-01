@@ -16,9 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Lazy import transformers so backend can start even if captions are disabled
 try:
-    from transformers import Qwen2VLForConditionalGeneration, AutoProcessor, pipeline  # type: ignore
+    from transformers import Qwen2VLForConditionalGeneration  # type: ignore
 except Exception:  # pragma: no cover
     Qwen2VLForConditionalGeneration = None  # type: ignore
+
+try:
+    from transformers import AutoProcessor, pipeline  # type: ignore
+except Exception:  # pragma: no cover
     AutoProcessor = None  # type: ignore
     pipeline = None  # type: ignore
 
@@ -42,8 +46,8 @@ class _Captioner:
         if not settings.ENABLE_SEMANTIC or not settings.ENABLE_CAPTIONS:
             raise RuntimeError("Captions are disabled by config.")
 
-        if Qwen2VLForConditionalGeneration is None or AutoProcessor is None:
-            raise RuntimeError("transformers not installed. Please install transformers/accelerate/sentencepiece.")
+        if Qwen2VLForConditionalGeneration is None and AutoProcessor is None and pipeline is None:
+            raise RuntimeError("No caption backend available. Please install transformers/accelerate/sentencepiece.")
 
         self.device = torch.device(
             "cuda" if (settings.EMBED_DEVICE == "cuda" and torch.cuda.is_available()) else "cpu"
@@ -80,29 +84,32 @@ class _Captioner:
 
         # Try Qwen2-VL first
         try:
-            self.model = Qwen2VLForConditionalGeneration.from_pretrained(
-                model_id,
-                torch_dtype=torch_dtype,
-                device_map="auto" if self.device.type == "cuda" else None,
-                token=hf_token,
-                cache_dir=cache_dir,
-            )
-            # Send to device if device_map wasn't used natively
-            device_map = getattr(self.model.config, "device_map", None)
-            if (
-                device_map is None
-                and not getattr(self.model.config, "quantization_config", None)
-                and getattr(self.model, "device", self.device) != self.device
-            ):
-                self.model.to(self.device)
-            self.model.eval()
+            if Qwen2VLForConditionalGeneration is not None and AutoProcessor is not None:
+                self.model = Qwen2VLForConditionalGeneration.from_pretrained(
+                    model_id,
+                    torch_dtype=torch_dtype,
+                    device_map="auto" if self.device.type == "cuda" else None,
+                    token=hf_token,
+                    cache_dir=cache_dir,
+                )
+                # Send to device if device_map wasn't used natively
+                device_map = getattr(self.model.config, "device_map", None)
+                if (
+                    device_map is None
+                    and not getattr(self.model.config, "quantization_config", None)
+                    and getattr(self.model, "device", self.device) != self.device
+                ):
+                    self.model.to(self.device)
+                self.model.eval()
 
-            self.processor = AutoProcessor.from_pretrained(
-                model_id,
-                token=hf_token,
-                cache_dir=cache_dir,
-            )
-            self.backend = "qwen2vl"
+                self.processor = AutoProcessor.from_pretrained(
+                    model_id,
+                    token=hf_token,
+                    cache_dir=cache_dir,
+                )
+                self.backend = "qwen2vl"
+            else:
+                raise RuntimeError("Qwen2-VL components unavailable")
         except Exception:
             # Fallback to a public captioner with image-to-text pipeline to avoid blocking on Qwen
             # Choices: "Salesforce/blip-image-captioning-base" (BLIP) or "nlpconnect/vit-gpt2-image-captioning"
