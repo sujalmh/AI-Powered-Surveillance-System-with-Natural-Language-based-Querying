@@ -2,6 +2,8 @@ import cv2
 import logging
 import numpy as np
 import datetime
+import time
+from pathlib import Path
 from ultralytics import YOLO
 Core = None  # lazy import in ensure_openvino_loaded
 import math
@@ -124,39 +126,54 @@ logger.info("Loading YOLOv11m-seg model...")
 model = YOLO(MODEL_PATH)
 logger.info("YOLO model loaded successfully.")
 
-# Defer OpenVINO model loading until needed to avoid import-time crashes
-compiled_model = None
-input_layer = None
-output_layer = None
+# Defer attributes model loading until needed to avoid import-time crashes
+compiled_model = None  # OpenVINO
+input_layer = None     # OpenVINO
+output_layer = None    # OpenVINO
+onnx_session = None    # ONNX Runtime
 
-def ensure_openvino_loaded() -> bool:
+def ensure_attributes_model_loaded() -> bool:
     """
-    Lazily loads the OpenVINO attributes model the first time it's needed.
+    Lazily loads the attributes model (OpenVINO or ONNX) the first time it's needed.
     Returns True if the model is available, False otherwise.
     """
-    global compiled_model, input_layer, output_layer
-    if compiled_model is not None and input_layer is not None and output_layer is not None:
-        return True
+    global compiled_model, input_layer, output_layer, onnx_session
+    
+    # Check if already loaded
+    if str(OPENVINO_MODEL_XML).lower().endswith(".onnx"):
+        if onnx_session is not None:
+            return True
+    else:
+        if compiled_model is not None and input_layer is not None and output_layer is not None:
+            return True
+
     try:
-        # Import here to avoid failing at module import time if OpenVINO is misconfigured
-        from openvino.runtime import Core as OVCore  # type: ignore
         from backend.app.services.model_loader import ensure_model_downloaded
-        
         # Ensure model files exist before loading
         ensure_model_downloaded(OPENVINO_MODEL_XML)
         
-        ie = OVCore()
-        cm = ie.compile_model(model=OPENVINO_MODEL_XML, device_name="CPU")
-        compiled_model = cm
-        input_layer = compiled_model.input(0)
-        output_layer = compiled_model.output(0)
-        logger.info("OpenVINO attributes model loaded successfully (lazy).")
-        return True
+        if str(OPENVINO_MODEL_XML).lower().endswith(".onnx"):
+            import onnxruntime as ort
+            providers = ['CUDAExecutionProvider'] if ort.get_device() == 'GPU' else ['CPUExecutionProvider']
+            try:
+                # Try with CUDA first, fall back to CPU if it fails
+                onnx_session = ort.InferenceSession(OPENVINO_MODEL_XML, providers=providers)
+            except Exception:
+                onnx_session = ort.InferenceSession(OPENVINO_MODEL_XML, providers=['CPUExecutionProvider'])
+            logger.info("ONNX attributes model loaded successfully (lazy).")
+            return True
+        else:
+            # Import here to avoid failing at module import time if OpenVINO is misconfigured
+            from openvino.runtime import Core as OVCore  # type: ignore
+            ie = OVCore()
+            cm = ie.compile_model(model=OPENVINO_MODEL_XML, device_name="CPU")
+            compiled_model = cm
+            input_layer = compiled_model.input(0)
+            output_layer = compiled_model.output(0)
+            logger.info("OpenVINO attributes model loaded successfully (lazy).")
+            return True
     except Exception as e:
-        compiled_model = None
-        input_layer = None
-        output_layer = None
-        logger.warning("OpenVINO attributes model disabled (lazy): %s", e)
+        logger.warning("Attributes model disabled (lazy loading failed): %s", e)
         return False
 
 
@@ -329,12 +346,12 @@ def preprocess_for_attributes(roi, target_size=(80, 160)):
 def get_person_attributes(person_roi, person_mask):
     """
     IMPROVED: Infers attributes from a masked, aspect-ratio-preserved ROI.
+    Supports both OpenVINO and ONNX backends.
     Returns confidence scores instead of booleans for more nuanced data.
     """
     if person_roi is None or person_roi.size == 0:
         return {}
-    # Ensure attributes model is available; otherwise skip gracefully
-    if not ensure_openvino_loaded() or compiled_model is None or output_layer is None:
+    if not ensure_attributes_model_loaded():
         return {}
     
     try:
@@ -344,28 +361,49 @@ def get_person_attributes(person_roi, person_mask):
         masked_roi = cv2.bitwise_and(person_roi, mask_3ch)
 
         # 2. Preprocess with letterboxing to preserve aspect ratio
-        preprocessed_img = preprocess_for_attributes(masked_roi, target_size=(80, 160))
+        # For modern PAR models (like PA100k ONNX), standard size is typically 256x128.
+        # But we'll keep 160x80 to remain compatible with Intel model unless changed.
+        target_size = (80, 160) if not onnx_session else (128, 256) # (w, h)
+        preprocessed_img = preprocess_for_attributes(masked_roi, target_size=target_size)
 
-        # 3. Standard OpenVINO inference steps
+        # 3. Inference
         img = preprocessed_img.transpose((2, 0, 1))
         img = np.expand_dims(img, axis=0).astype(np.float32)
-        
-        preds = compiled_model([img])[output_layer]
+
+        if onnx_session is not None:
+            # ONNX Inference (usually normalizes by 255 and maybe mean/std, but keep generic here)
+            img = img / 255.0
+            input_name = onnx_session.get_inputs()[0].name
+            preds = onnx_session.run(None, {input_name: img})[0]
+        else:
+            # OpenVINO Inference (Intel model takes raw 0-255 inputs)
+            preds = compiled_model([img])[output_layer]
+
         attrs = preds.flatten()
 
         # 4. Convert model logits to probabilities using sigmoid
         def sigmoid(x):
             return 1 / (1 + np.exp(-x))
 
+        # Detect if outputs need sigmoid (some ONNX models already output 0-1)
+        needs_sigmoid = True
+        try:
+            if attrs.size > 0 and np.all((attrs >= 0.0) & (attrs <= 1.0)):
+                needs_sigmoid = False
+        except Exception:
+            needs_sigmoid = True
+
         # 5. Return confidence scores for richer data
+        # Note: Index mapping assumes Intel model format for both for now. 
+        # A true ONNX PAR replacement would need an index mapping dict.
         return {
-            "male_confidence": round(float(sigmoid(attrs[0])), 2),
-            "bag_confidence": round(float(sigmoid(attrs[1])), 2),
-            "hat_confidence": round(float(sigmoid(attrs[2])), 2),
-            "longhair_confidence": round(float(sigmoid(attrs[3])), 2),
-            "longpants_confidence": round(float(sigmoid(attrs[4])), 2),
-            "longsleeves_confidence": round(float(sigmoid(attrs[5])), 2),
-            "coat_jacket_confidence": round(float(sigmoid(attrs[6])), 2),
+            "male_confidence": round(float(sigmoid(attrs[0]) if needs_sigmoid else attrs[0]), 2),
+            "bag_confidence": round(float(sigmoid(attrs[1]) if needs_sigmoid else attrs[1]), 2),
+            "hat_confidence": round(float(sigmoid(attrs[2]) if needs_sigmoid else attrs[2]), 2),
+            "longhair_confidence": round(float(sigmoid(attrs[3]) if needs_sigmoid else attrs[3]), 2),
+            "longpants_confidence": round(float(sigmoid(attrs[4]) if needs_sigmoid else attrs[4]), 2),
+            "longsleeves_confidence": round(float(sigmoid(attrs[5]) if needs_sigmoid else attrs[5]), 2),
+            "coat_jacket_confidence": round(float(sigmoid(attrs[6]) if needs_sigmoid else attrs[6]), 2),
         }
     except Exception as e:
         logger.warning("Failed to get person attributes: %s", e)
@@ -376,39 +414,59 @@ def get_person_attributes_batch(
     person_rois: List[np.ndarray], person_masks: List[np.ndarray]
 ) -> List[Dict[str, Any]]:
     """
-    Batch infer person attributes for multiple ROIs in one OpenVINO call.
-    Returns a list of attribute dicts (same format as get_person_attributes), one per ROI.
+    Batch infer person attributes for multiple ROIs.
+    Supports OpenVINO and ONNX backends.
     """
     if not person_rois or not person_masks:
         return []
-    if not ensure_openvino_loaded() or compiled_model is None or output_layer is None:
+    if not ensure_attributes_model_loaded():
         return [{} for _ in person_rois]
     try:
         batch_arr: List[np.ndarray] = []
+        target_size = (80, 160) if not onnx_session else (128, 256)
+        
         for roi, mask in zip(person_rois, person_masks):
             if roi is None or roi.size == 0:
-                batch_arr.append(np.zeros((3, 160, 80), dtype=np.float32))
+                batch_arr.append(np.zeros((3, target_size[1], target_size[0]), dtype=np.float32))
                 continue
             mask_u8 = (mask * 255).astype(np.uint8) if mask.dtype != np.uint8 else mask
             mask_3ch = cv2.cvtColor(mask_u8, cv2.COLOR_GRAY2BGR)
             masked_roi = cv2.bitwise_and(roi, mask_3ch)
-            preprocessed = preprocess_for_attributes(masked_roi, target_size=(80, 160))
+            preprocessed = preprocess_for_attributes(masked_roi, target_size=target_size)
             img = preprocessed.transpose((2, 0, 1)).astype(np.float32)
+            if onnx_session is not None:
+                img = img / 255.0
             batch_arr.append(img)
+            
         batch = np.stack(batch_arr, axis=0).astype(np.float32)
-        preds = compiled_model([batch])[output_layer]
+        
+        if onnx_session is not None:
+            input_name = onnx_session.get_inputs()[0].name
+            preds = onnx_session.run(None, {input_name: batch})[0]
+        else:
+            preds = compiled_model([batch])[output_layer]
+            
         out: List[Dict[str, Any]] = []
+
+        def sigmoid(x):
+            return 1 / (1 + np.exp(-x))
+
+        needs_sigmoid = True
+        try:
+            if preds.size > 0 and np.all((preds >= 0.0) & (preds <= 1.0)):
+                needs_sigmoid = False
+        except Exception:
+            needs_sigmoid = True
         for i in range(preds.shape[0]):
             attrs = preds[i].flatten()
-            sigmoid = lambda x: 1 / (1 + np.exp(-x))
             out.append({
-                "male_confidence": round(float(sigmoid(attrs[0])), 2),
-                "bag_confidence": round(float(sigmoid(attrs[1])), 2),
-                "hat_confidence": round(float(sigmoid(attrs[2])), 2),
-                "longhair_confidence": round(float(sigmoid(attrs[3])), 2),
-                "longpants_confidence": round(float(sigmoid(attrs[4])), 2),
-                "longsleeves_confidence": round(float(sigmoid(attrs[5])), 2),
-                "coat_jacket_confidence": round(float(sigmoid(attrs[6])), 2),
+                "male_confidence": round(float(sigmoid(attrs[0]) if needs_sigmoid else attrs[0]), 2),
+                "bag_confidence": round(float(sigmoid(attrs[1]) if needs_sigmoid else attrs[1]), 2),
+                "hat_confidence": round(float(sigmoid(attrs[2]) if needs_sigmoid else attrs[2]), 2),
+                "longhair_confidence": round(float(sigmoid(attrs[3]) if needs_sigmoid else attrs[3]), 2),
+                "longpants_confidence": round(float(sigmoid(attrs[4]) if needs_sigmoid else attrs[4]), 2),
+                "longsleeves_confidence": round(float(sigmoid(attrs[5]) if needs_sigmoid else attrs[5]), 2),
+                "coat_jacket_confidence": round(float(sigmoid(attrs[6]) if needs_sigmoid else attrs[6]), 2),
             })
         return out
     except Exception as e:
@@ -477,12 +535,116 @@ def _auto_build_and_index(camera_id: int, start_iso: str, end_iso: str, every_se
         logger.warning("Auto VLM indexing failed for cam %s [%s..%s]: %s", camera_id, start_iso, end_iso, e)
 
 
+import queue
+
+def _ffmpeg_convert_worker(q: queue.Queue):
+    import subprocess
+    try:
+        from imageio_ffmpeg import get_ffmpeg_exe
+        ffmpeg_exe = get_ffmpeg_exe()
+    except Exception:
+        ffmpeg_exe = "ffmpeg"
+        
+    while True:
+        try:
+            filepath = q.get()
+            if filepath is None:
+                break
+            filepath = Path(filepath)
+            h264_path = filepath.with_suffix('.mp4') if filepath.suffix != '.mp4' else filepath.parent / f"{filepath.stem}_h264.mp4"
+            cmd = [
+                ffmpeg_exe, "-y", "-i", str(filepath),
+                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                "-loglevel", "error", str(h264_path)
+            ]
+            success = False
+            try:
+                cp = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300)
+                success = cp.returncode == 0
+                if not success:
+                    err = cp.stderr.decode(errors="ignore") if cp.stderr else ""
+                    logger.warning("FFmpeg background conversion failed for %s: %s", filepath, err[:500])
+            except subprocess.TimeoutExpired:
+                logger.warning("FFmpeg background conversion timed out for %s", filepath)
+            if success and h264_path.exists() and h264_path != filepath:
+                filepath.unlink(missing_ok=True)
+                h264_path.rename(filepath)
+        except Exception as e:
+            logger.warning("FFmpeg background conversion failed: %s", e)
+        finally:
+            q.task_done()
+
+MAX_FFMPEG_QUEUE_SIZE = 32
+_conversion_queue = queue.Queue(maxsize=MAX_FFMPEG_QUEUE_SIZE)
+_conversion_thread = threading.Thread(target=_ffmpeg_convert_worker, args=(_conversion_queue,), daemon=True)
+_conversion_thread.start()
+
+class ContinuousRecorder:
+    def __init__(self, camera_id: int, fps: float, chunk_duration_sec: int = 300):
+        self.camera_id = camera_id
+        self.fps = fps if fps > 0 else 30.0
+        self.chunk_duration_sec = chunk_duration_sec
+        self.writer = None
+        self.current_chunk_start_time = 0.0
+        self.current_filepath = None
+        self.frame_size = None
+        
+        self.out_dir = settings.RECORDINGS_DIR / f"camera_{camera_id}"
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+        
+    def _open_writer(self, frame):
+        h, w = frame.shape[:2]
+        # Ensure even dimensions for mp4v
+        w = w - (w % 2)
+        h = h - (h % 2)
+        self.frame_size = (w, h)
+        target_size = (w, h)
+        
+        now = datetime.datetime.now(datetime.timezone.utc)
+        safe_ts = now.isoformat().replace(":", "-").replace(".", "-").replace("+00:00", "Z")
+        filename = f"{safe_ts}.mp4"
+        self.current_filepath = self.out_dir / filename
+        
+        _fourcc_fn = getattr(cv2, "VideoWriter_fourcc", None)
+        fourcc = _fourcc_fn(*"mp4v")
+        self.writer = cv2.VideoWriter(str(self.current_filepath), fourcc, max(1.0, float(self.fps)), target_size)
+        self.current_chunk_start_time = time.time()
+        
+    def write(self, frame):
+        now = time.time()
+        if self.writer is None:
+            self._open_writer(frame)
+        elif now - self.current_chunk_start_time >= self.chunk_duration_sec:
+            self._close_writer()
+            self._open_writer(frame)
+            
+        if self.writer is not None and self.writer.isOpened():
+            h, w = frame.shape[:2]
+            target_w, target_h = self.frame_size
+            if w != target_w or h != target_h:
+                frame = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_AREA)
+            self.writer.write(frame)
+            
+    def _close_writer(self):
+        if self.writer is not None:
+            self.writer.release()
+            self.writer = None
+            if self.current_filepath and self.current_filepath.exists():
+                try:
+                    _conversion_queue.put(str(self.current_filepath), timeout=5.0)
+                except queue.Full:
+                    logger.warning("FFmpeg conversion queue full; dropping file %s", self.current_filepath)
+
+    def release(self):
+        self._close_writer()
+
 # =========================================
 # Threaded frame reader — keeps capture flowing
 # even while YOLO detection blocks the main loop.
 # =========================================
 class ThreadedFrameReader:
-    """Continuously reads frames on a background thread and feeds the MJPEG store."""
+    """Continuously reads frames on a background thread, feeds MJPEG, and records."""
 
     def __init__(self, cap: "cv2.VideoCapture", camera_id: int):
         self._cap = cap
@@ -491,6 +653,11 @@ class ThreadedFrameReader:
         self._ret = False
         self._lock = threading.Lock()
         self._stopped = False
+        
+        # Initialize continuous recorder
+        fps = self._cap.get(cv2.CAP_PROP_FPS) or 30.0
+        self._recorder = ContinuousRecorder(camera_id, fps, chunk_duration_sec=300)
+        
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
@@ -505,7 +672,11 @@ class ThreadedFrameReader:
             with self._lock:
                 self._ret = ret
                 self._frame = frame
-            if ret:
+                
+            if ret and frame is not None:
+                # Record to disk
+                self._recorder.write(frame)
+                
                 try:
                     encode_ok, jpg = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
                     if encode_ok:
@@ -529,6 +700,8 @@ class ThreadedFrameReader:
         except Exception:
             pass
         self._thread.join(timeout=2)
+        if hasattr(self, '_recorder'):
+            self._recorder.release()
 
     def release(self) -> None:
         self.stop()
@@ -541,6 +714,11 @@ class ThreadedFrameReader:
         else:
             self._cap = cv2.VideoCapture(source)
         self._cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        
+        # update recorder fps just in case
+        fps = self._cap.get(cv2.CAP_PROP_FPS) or 30.0
+        self._recorder.fps = fps if fps > 0 else 30.0
+        
         self._stopped = False
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -607,23 +785,40 @@ def process_live_stream(
     tracker = None
 
     # Initialize multimodal encoders and person index
-    visual_encoder = get_visual_embedder()
     attr_encoder = get_attribute_encoder()
-    fusion = MultimodalFusion(
-        visual_weight=getattr(settings, "FUSION_VISUAL_WEIGHT", 0.6),
-        text_weight=getattr(settings, "FUSION_TEXT_WEIGHT", 0.4),
-    )
     person_index = get_person_store(dim=1152)
     if BoTSORT is not None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
+        reid_weights = os.getenv("REID_WEIGHTS", "osnet_x1_0_msmt17.pt")
+        # Detect actual camera FPS so track_buffer scales correctly
+        _cam_fps = int(cap.get(cv2.CAP_PROP_FPS) or 30) if hasattr(cap, 'get') else 30
         try:
             tracker = BoTSORT(
-                reid_weights=os.getenv("REID_WEIGHTS", "osnet_x0_25_msmt17.pt"),
+                reid_weights=reid_weights,
                 device=device,
                 half=(device == "cuda"),
+                # --- Surveillance-tuned params ---
+                # Keep a lost person alive for 60 frames (2 s at 30 fps)
+                # so they can be re-identified after walking behind an object.
+                track_buffer=int(os.getenv("BOTSORT_TRACK_BUFFER", "60")),
+                # Stricter ReID: only match if appearance distance < 0.4
+                # (default 0.25 is too loose and causes ID swaps).
+                appearance_thresh=float(os.getenv("BOTSORT_APPEARANCE_THRESH", "0.4")),
+                # Scale buffer relative to actual FPS
+                frame_rate=_cam_fps,
+            )
+            logger.info(
+                "BoTSORT tracker active — ReID: %s | device: %s | buffer: %s frames | appearance_thresh: %s",
+                reid_weights, device,
+                os.getenv("BOTSORT_TRACK_BUFFER", "60"),
+                os.getenv("BOTSORT_APPEARANCE_THRESH", "0.4"),
             )
         except Exception as e:
-            logger.warning("BoTSORT disabled: %s", e)
+            logger.error(
+                "BoTSORT init FAILED (falling back to YOLO built-in tracker). "
+                "Ensure boxmot is installed. Error: %s",
+                e,
+            )
             tracker = None
 
     # In-memory track history across frames: track_id -> {first_seen, last_seen, frame_count}
@@ -1047,6 +1242,329 @@ def process_live_stream(
     reader.release()
     logger.info("Camera %s processing completed.", camera_id)
 
+
+# =========================================
+# VIDEO FILE DETECTION (mirrors live stream pipeline for uploaded videos)
+# =========================================
+def process_video_file(
+    camera_id: int,
+    video_path: str,
+    location: str = "Uploaded Video",
+    target_fps: float = 2.0,
+    start_iso: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Process an uploaded video file through the full detection pipeline:
+      YOLO seg -> color extraction -> OpenVINO batch person attributes ->
+      attribute text encoding -> MongoDB detection insert -> snapshot save ->
+      SigLIP+FAISS person embedding (via async task queue).
+
+    This mirrors process_live_stream() so that uploaded videos are as
+    queryable as live cameras.  Call index_clip() AFTER this function so
+    the semantic captioner can pull rich detections from MongoDB.
+
+    Args:
+        camera_id:  Camera / source ID to tag detections with.
+        video_path: Absolute path to the MP4 file.
+        location:   Human-readable location label.
+        target_fps: How many frames per second to sample (default 2).
+        start_iso:  Optional ISO timestamp for the video start time.
+                    If None, inferred from the file's mtime.
+
+    Returns:
+        dict with keys: ok, frames_processed, detections_inserted.
+    """
+    import time as _time
+
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        logger.error("process_video_file: Cannot open video %s", video_path)
+        return {"ok": False, "error": f"Cannot open video: {video_path}"}
+
+    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    frame_interval = max(1, int(round(fps / max(target_fps, 0.1))))
+
+    # Determine start datetime for timestamp assignment
+    if start_iso:
+        try:
+            start_dt = datetime.datetime.fromisoformat(start_iso)
+        except Exception:
+            start_dt = datetime.datetime.now()
+    else:
+        try:
+            mtime = os.path.getmtime(video_path)
+            duration = total_frames / fps if fps > 0 and total_frames > 0 else 0
+            start_dt = datetime.datetime.fromtimestamp(max(0, mtime - duration))
+        except Exception:
+            start_dt = datetime.datetime.now()
+
+    logger.info(
+        "process_video_file: camera_id=%s path=%s fps=%.1f target_fps=%.1f interval=%d start=%s",
+        camera_id, video_path, fps, target_fps, frame_interval, start_dt.isoformat(),
+    )
+
+    attr_encoder = None  # type: ignore
+    person_index = None  # type: ignore
+    frames_processed = 0
+    detections_inserted = 0
+    frame_idx = 0
+    last_person_save_ts = _time.time()
+
+    try:
+        attr_encoder = get_attribute_encoder()
+        person_index = get_person_store(dim=1152)
+        while True:
+            ret, frame = cap.read()
+            if not ret or frame is None:
+                break
+
+            if frame_idx % frame_interval != 0:
+                frame_idx += 1
+                continue
+
+            frames_processed += 1
+
+            # Timestamp from video position
+            pos_sec = frame_idx / max(fps, 1e-6)
+            timestamp = (start_dt + datetime.timedelta(seconds=pos_sec)).isoformat()
+
+            use_half = torch.cuda.is_available()
+            try:
+                # persist=True gives consistent YOLO track IDs across frames in the file
+                results = model.track(frame, persist=True, conf=CONF_THRESHOLD, verbose=False, half=use_half)
+            except Exception as e:
+                logger.warning("process_video_file: YOLO track failed frame %d: %s", frame_idx, e)
+                frame_idx += 1
+                continue
+
+            doc: Dict[str, Any] = {
+                "camera_id": camera_id,
+                "timestamp": timestamp,
+                "location": location,
+                "objects": [],
+            }
+            person_rois: List[np.ndarray] = []
+            person_attr_texts: List[str] = []
+            person_meta: List[Dict[str, object]] = []
+            track_bulk_ops: List[Any] = []
+            person_attr_defer: List[Tuple[np.ndarray, np.ndarray, str, int, int]] = []
+
+            for r in results:
+                if r.masks is None or r.boxes is None:
+                    continue
+                masks_data = r.masks.data if r.masks is not None else None
+                if masks_data is None:
+                    continue
+                masks = to_numpy(masks_data)
+                b = r.boxes
+                if b is None:
+                    continue
+                xyxy = to_numpy(b.xyxy)
+                cls_arr = to_numpy(b.cls)
+                conf_arr = to_numpy(b.conf)
+                ids_arr = to_numpy(getattr(b, "id", None)) if getattr(b, "id", None) is not None else None
+
+                if xyxy is None or cls_arr is None or conf_arr is None:
+                    continue
+                if not isinstance(xyxy, np.ndarray) or xyxy.size == 0:
+                    continue
+
+                for i in range(xyxy.shape[0]):
+                    x1, y1, x2, y2 = map(int, xyxy[i])
+                    x1, y1 = max(0, x1), max(0, y1)
+                    x2, y2 = min(frame.shape[1], x2), min(frame.shape[0], y2)
+                    if x1 >= x2 or y1 >= y2:
+                        continue
+
+                    cls_idx = int(cls_arr[i]) if np.ndim(cls_arr) == 1 else int(cls_arr[i][0])
+                    obj_name = model.names[cls_idx]
+                    roi = frame[y1:y2, x1:x2]
+
+                    if isinstance(masks, np.ndarray) and masks.ndim >= 1 and i < masks.shape[0]:
+                        mask_src = masks[i]
+                    else:
+                        mask_src = np.zeros((frame.shape[0], frame.shape[1]), dtype=np.uint8)
+                    mask_full = cv2.resize(mask_src, (frame.shape[1], frame.shape[0]), interpolation=cv2.INTER_NEAREST)
+                    mask_roi = mask_full[y1:y2, x1:x2]
+
+                    rgb_color = get_dominant_color(roi, mask_roi)
+                    color_name = closest_color(rgb_color)
+
+                    track_id = int(ids_arr[i]) if ids_arr is not None else -1
+                    conf_val = float(conf_arr[i]) if np.ndim(conf_arr) == 1 else float(conf_arr[i][0])
+
+                    obj: Dict[str, Any] = {
+                        "object_name": obj_name,
+                        "track_id": track_id,
+                        "confidence": round(conf_val, 2),
+                        "color": color_name,
+                        "bbox": [int(x1), int(y1), int(x2), int(y2)],
+                    }
+
+                    # Track history (batch bulk write below)
+                    if track_id >= 0:
+                        track_bulk_ops.append(
+                            UpdateOne(
+                                {"camera_id": int(camera_id), "track_id": track_id},
+                                {
+                                    "$setOnInsert": {"first_seen": timestamp, "camera_id": int(camera_id)},
+                                    "$set": {"last_seen": timestamp},
+                                    "$inc": {"frame_count": 1},
+                                },
+                                upsert=True,
+                            )
+                        )
+
+                    # Person attributes — quality filter + batch OpenVINO
+                    if obj_name == "person":
+                        obj_index = len(doc["objects"])
+                        if (x2 - x1) >= MIN_PERSON_WIDTH_PIXELS:
+                            person_attr_defer.append((roi, mask_roi, color_name, int(track_id), obj_index))
+                            obj["person_attributes"] = {}   # filled after batch
+                            obj["attribute_text"] = ""      # filled after batch
+                        else:
+                            obj["person_attributes"] = {"status": "skipped_too_small"}
+                            attr_text = attr_encoder.attributes_to_text({}, color_name)
+                            obj["attribute_text"] = attr_text
+                            person_rois.append(roi)
+                            person_attr_texts.append(attr_text)
+                            person_meta.append({
+                                "object_index": obj_index,
+                                "camera_id": int(camera_id),
+                                "track_id": int(track_id),
+                                "timestamp": timestamp,
+                                "color": color_name,
+                                "attribute_text": attr_text,
+                            })
+
+                    doc["objects"].append(obj)
+
+            # Batch OpenVINO attribute inference for deferred persons
+            if person_attr_defer:
+                rois_attr = [t[0] for t in person_attr_defer]
+                masks_attr = [t[1] for t in person_attr_defer]
+                batch_attrs = get_person_attributes_batch(rois_attr, masks_attr)
+                for j, (roi, _mask, color_name, track_id, obj_idx) in enumerate(person_attr_defer):
+                    if j < len(batch_attrs):
+                        doc["objects"][obj_idx]["person_attributes"] = batch_attrs[j]
+                    attr_text = attr_encoder.attributes_to_text(
+                        doc["objects"][obj_idx].get("person_attributes") or {}, color_name
+                    )
+                    doc["objects"][obj_idx]["attribute_text"] = attr_text
+                    person_rois.append(roi)
+                    person_attr_texts.append(attr_text)
+                    person_meta.append({
+                        "object_index": obj_idx,
+                        "camera_id": int(camera_id),
+                        "track_id": track_id,
+                        "timestamp": timestamp,
+                        "color": color_name,
+                        "attribute_text": attr_text,
+                    })
+
+            # Batch persist track updates
+            if track_bulk_ops:
+                try:
+                    tracks.bulk_write(track_bulk_ops)
+                except Exception:
+                    pass
+
+            # Compute object count summaries
+            try:
+                pcount = 0
+                ocounts: Dict[str, int] = {}
+                for o in doc["objects"]:
+                    if isinstance(o, dict):
+                        n = str(o.get("object_name", "")).lower()
+                        if n:
+                            ocounts[n] = ocounts.get(n, 0) + 1
+                            if n == "person":
+                                pcount += 1
+                doc["person_count"] = pcount
+                doc["object_counts"] = ocounts
+            except Exception:
+                pass
+
+            # Zone-level counts — mirrors live stream pipeline for full parity
+            try:
+                zones_list = _get_zones_for_camera(zones_col, int(camera_id))
+                if zones_list and doc.get("objects"):
+                    h, w = frame.shape[0], frame.shape[1]
+                    doc["zone_counts"] = _compute_zone_counts(
+                        doc["objects"], zones_list, w, h
+                    )
+            except Exception:
+                pass
+
+            if doc["objects"]:
+                # Save snapshot
+                try:
+                    safe_ts = timestamp.replace(":", "-").replace(".", "-")
+                    cam_dir = settings.SNAPSHOTS_DIR / f"camera_{camera_id}"
+                    cam_dir.mkdir(parents=True, exist_ok=True)
+                    snap_path = cam_dir / f"{safe_ts}.jpg"
+                    cv2.imwrite(str(snap_path), frame)
+                    doc["snapshot"] = f"/media/snapshots/camera_{camera_id}/{snap_path.name}"
+                except Exception as e:
+                    logger.warning("process_video_file: snapshot failed: %s", e)
+
+                # Insert detection document
+                det_id: Optional[Any] = None
+                try:
+                    ins = detections_col.insert_one(doc)
+                    det_id = ins.inserted_id if ins is not None else None
+                    detections_inserted += 1
+                except Exception as e:
+                    logger.warning("process_video_file: detection insert failed: %s", e)
+
+                # Async SigLIP + attribute fusion → person FAISS
+                if person_rois:
+                    try:
+                        task_submit(
+                            _run_person_embeddings_async,
+                            int(camera_id),
+                            timestamp,
+                            str(det_id) if det_id is not None else None,
+                            [roi.copy() for roi in person_rois],
+                            list(person_attr_texts),
+                            [dict(m) for m in person_meta],
+                        )
+                    except Exception:
+                        pass
+
+                # Periodically persist person index
+                now_ps = _time.time()
+                if now_ps - last_person_save_ts >= 30.0:
+                    try:
+                        person_index.save()
+                    except Exception:
+                        pass
+                    last_person_save_ts = now_ps
+
+            frame_idx += 1
+
+    finally:
+        cap.release()
+        # Final person index flush
+        try:
+            if person_index is not None:
+                person_index.save()
+        except Exception:
+            pass
+
+    logger.info(
+        "process_video_file: finished camera_id=%s frames_processed=%d detections_inserted=%d",
+        camera_id, frames_processed, detections_inserted,
+    )
+    return {
+        "ok": True,
+        "frames_processed": frames_processed,
+        "detections_inserted": detections_inserted,
+    }
+
+
 # =========================================
 if __name__ == "__main__":
     process_live_stream(camera_id=1, source="sample.mp4", location="Main Entrance")
+

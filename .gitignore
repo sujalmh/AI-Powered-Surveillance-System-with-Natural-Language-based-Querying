@@ -6,3 +6,5 @@ backend/venv/*
 intel/
 temp_alert*.json
 osnet_x0_25_msmt17.pt
+yolo11l-seg.pt
+osnet_ain_x1_0_msmt17.pt

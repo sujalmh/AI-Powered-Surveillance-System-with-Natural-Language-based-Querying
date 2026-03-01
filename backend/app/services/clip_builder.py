@@ -6,10 +6,13 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional, Set, Tuple
+import logging
 
 import cv2
 
 from backend.app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -52,22 +55,6 @@ def _parse_ts_from_filename(name: str) -> Optional[datetime]:
     return None
 
 
-def _parse_whitelist(stamps: List[str]) -> Set[datetime]:
-    out = set()
-    for s in stamps:
-        try:
-            # Replace Z with +00:00 to handle UTC explicitly
-            safe = s.replace("Z", "+00:00")
-            dt = datetime.fromisoformat(safe)
-            if dt.tzinfo is not None:
-                # Convert to UTC and strip timezone info
-                dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
-            out.add(dt)
-        except Exception:
-            pass
-    return out
-
-
 def _collect_snapshots(
     camera_id: int,
     start_dt: datetime,
@@ -81,10 +68,9 @@ def _collect_snapshots(
         return []
     files: List[Tuple[datetime, Path]] = []
     
-    # Parse allowed timestamps into a set of datetime objects for efficient lookup
-    whitelist_dts: Optional[Set[datetime]] = None
-    if allowed_timestamps:
-        whitelist_dts = _parse_whitelist(allowed_timestamps)
+    parsed_whitelist = whitelist_dts
+    if parsed_whitelist is None and allowed_timestamps:
+        parsed_whitelist = _parse_whitelist(allowed_timestamps)
 
     for p in cam_dir.glob("*.jpg"):
         ts = _parse_ts_from_filename(p.name)
@@ -96,8 +82,8 @@ def _collect_snapshots(
                 continue
         if start_dt <= ts <= end_dt:
             # If whitelist is provided, only include snapshots near a whitelisted timestamp
-            if whitelist_dts is not None:
-                if not any(abs((ts - wt).total_seconds()) <= whitelist_tolerance_sec for wt in whitelist_dts):
+            if parsed_whitelist is not None:
+                if not any(abs((ts - wt).total_seconds()) <= whitelist_tolerance_sec for wt in parsed_whitelist):
                     continue
             files.append((ts, p))
     files.sort(key=lambda x: x[0])
@@ -121,7 +107,50 @@ def _parse_whitelist(stamps: List[str]) -> Set[datetime]:
     return out
 
 
-def build_clip_from_snapshots(
+def _collect_recordings(
+    camera_id: int,
+    start_dt: datetime,
+    end_dt: datetime,
+) -> List[Tuple[datetime, datetime, Path]]:
+    cam_dir = settings.RECORDINGS_DIR / f"camera_{camera_id}"
+    if not cam_dir.exists():
+        return []
+    
+    files: List[Tuple[datetime, Path]] = []
+    
+    for p in cam_dir.glob("*.mp4"):
+        ts = _parse_ts_from_filename(p.name)
+        if ts is None:
+            try:
+                ts = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc).replace(tzinfo=None)
+            except Exception:
+                continue
+        files.append((ts, p))
+        
+    files.sort(key=lambda x: x[0])
+    
+    overlapping = []
+    for i in range(len(files)):
+        chunk_start, p = files[i]
+        
+        if i + 1 < len(files):
+            chunk_end = files[i+1][0]
+        else:
+            try:
+                chunk_end = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc).replace(tzinfo=None)
+            except Exception:
+                chunk_end = datetime.now(timezone.utc).replace(tzinfo=None)
+                
+        if chunk_end < chunk_start:
+            chunk_end = chunk_start + timedelta(seconds=300)
+
+        if start_dt <= chunk_end and end_dt >= chunk_start:
+            overlapping.append((chunk_start, chunk_end, p))
+            
+    return overlapping
+
+
+def _build_clip_from_snapshots_fallback(
     camera_id: int,
     start_iso: str,
     end_iso: str,
@@ -135,6 +164,10 @@ def build_clip_from_snapshots(
     try:
         start_dt = datetime.fromisoformat(start_iso)
         end_dt = datetime.fromisoformat(end_iso)
+        if start_dt.tzinfo is not None:
+            start_dt = start_dt.astimezone(timezone.utc).replace(tzinfo=None)
+        if end_dt.tzinfo is not None:
+            end_dt = end_dt.astimezone(timezone.utc).replace(tzinfo=None)
     except Exception as e:
         raise ValueError(f"Invalid start/end ISO timestamps: {e}")
 
@@ -252,14 +285,22 @@ def build_clip_from_snapshots(
         ]
         
         # Run FFmpeg conversion
-        result = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=60
-        )
-        
-        if result.returncode == 0 and h264_path.exists():
+        try:
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=60
+            )
+            success = result.returncode == 0 and h264_path.exists()
+            err_msg = result.stderr.decode()[:200] if result.stderr else "Unknown error"
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+            logger.error("FFmpeg conversion failed: %s", e)
+            result = None
+            success = False
+            err_msg = str(e)
+            
+        if success:
             # Success! Replace original with H.264 version
             if h264_path != out_path:
                 try:
@@ -274,7 +315,6 @@ def build_clip_from_snapshots(
                 final_path = h264_path
             print(f"✅ Converted to H.264 using FFmpeg: {final_path.name}")
         else:
-            err_msg = result.stderr.decode()[:200] if result.stderr else "Unknown error"
             print(f"⚠️ FFmpeg conversion failed: {err_msg}")
             final_path = out_path
             
@@ -296,4 +336,143 @@ def build_clip_from_snapshots(
         fps=fps,
         width=width,
         height=height,
+    )
+
+
+def build_clip_from_snapshots(
+    camera_id: int,
+    start_iso: str,
+    end_iso: str,
+    fps: float = 5.0,
+    allowed_timestamps: Optional[List[str]] = None,
+) -> BuiltClip:
+    """
+    Build an MP4 clip by extracting from continuous recordings between [start_iso, end_iso].
+    Returns BuiltClip with filesystem path and public URL.
+    Note: kept the name `build_clip_from_snapshots` for backwards compatibility with callers.
+    """
+    try:
+        start_dt = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
+        end_dt = datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
+        if start_dt.tzinfo is not None:
+            start_dt = start_dt.astimezone(timezone.utc).replace(tzinfo=None)
+        if end_dt.tzinfo is not None:
+            end_dt = end_dt.astimezone(timezone.utc).replace(tzinfo=None)
+    except Exception as e:
+        raise ValueError(f"Invalid start/end ISO timestamps: {e}")
+
+    if end_dt < start_dt:
+        raise ValueError("end must be >= start")
+
+    items = _collect_recordings(camera_id, start_dt, end_dt)
+    if not items:
+        # Fallback to old behavior if no recordings exist
+        return _build_clip_from_snapshots_fallback(camera_id, start_iso, end_iso, fps, allowed_timestamps)
+        
+    out_dir: Path = settings.CLIPS_DIR / f"camera_{camera_id}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    safe_start = start_iso.replace(":", "-").replace(".", "-")
+    safe_end = end_iso.replace(":", "-").replace(".", "-")
+    base_name = f"{safe_start}__to__{safe_end}"
+    out_path = out_dir / f"{base_name}.mp4"
+    
+    try:
+        from imageio_ffmpeg import get_ffmpeg_exe
+        ffmpeg_exe = get_ffmpeg_exe()
+    except Exception:
+        ffmpeg_exe = "ffmpeg"
+        
+    import subprocess
+    
+    if len(items) == 1:
+        # Single file
+        chunk_start, chunk_end, p = items[0]
+        offset_sec = max(0.0, (start_dt - chunk_start).total_seconds())
+        duration_sec = (end_dt - start_dt).total_seconds()
+        
+        cmd = [
+            ffmpeg_exe, "-y",
+            "-ss", str(offset_sec),
+            "-i", str(p),
+            "-t", str(duration_sec),
+            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+            "-loglevel", "error", str(out_path)
+        ]
+        try:
+            cp = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
+            logger.error("build_clip_from_snapshots: ffmpeg trim failed (cmd=%s): %s", cmd, exc)
+            out_path.unlink(missing_ok=True)
+            return _build_clip_from_snapshots_fallback(camera_id, start_iso, end_iso, fps, allowed_timestamps)
+        if cp.returncode != 0:
+            err = cp.stderr.decode(errors="ignore") if cp.stderr else ""
+            logger.error("build_clip_from_snapshots: ffmpeg trim failed (cmd=%s): %s", cmd, err[:500])
+            out_path.unlink(missing_ok=True)
+            return _build_clip_from_snapshots_fallback(camera_id, start_iso, end_iso, fps, allowed_timestamps)
+    else:
+        # Merge via concat demuxer
+        concat_file = out_dir / f"{base_name}_concat.txt"
+        with concat_file.open("w") as f:
+            for _, _, p in items:
+                # ffmpeg requires full paths properly formatted for concat
+                f.write(f"file '{p.resolve().as_posix()}'\n")
+                
+        overall_start = items[0][0]
+        offset_sec = max(0.0, (start_dt - overall_start).total_seconds())
+        duration_sec = (end_dt - start_dt).total_seconds()
+        
+        cmd = [
+            ffmpeg_exe, "-y",
+            "-f", "concat", "-safe", "0",
+            "-i", str(concat_file),
+            "-ss", str(offset_sec),
+            "-t", str(duration_sec),
+            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+            "-loglevel", "error", str(out_path)
+        ]
+        try:
+            try:
+                cp = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300)
+            except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
+                logger.error("build_clip_from_snapshots: ffmpeg concat failed (cmd=%s): %s", cmd, exc)
+                out_path.unlink(missing_ok=True)
+                return _build_clip_from_snapshots_fallback(camera_id, start_iso, end_iso, fps, allowed_timestamps)
+            if cp.returncode != 0:
+                err = cp.stderr.decode(errors="ignore") if cp.stderr else ""
+                logger.error("build_clip_from_snapshots: ffmpeg concat failed (cmd=%s): %s", cmd, err[:500])
+                out_path.unlink(missing_ok=True)
+                return _build_clip_from_snapshots_fallback(camera_id, start_iso, end_iso, fps, allowed_timestamps)
+        finally:
+            try:
+                concat_file.unlink(missing_ok=True)
+            except Exception:
+                pass
+            
+    if not out_path.exists():
+        # Fallback to snaps if ffmpeg fails
+        return _build_clip_from_snapshots_fallback(camera_id, start_iso, end_iso, fps, allowed_timestamps)
+        
+    rel = out_path.relative_to(settings.CLIPS_DIR).as_posix()
+    url = f"/media/clips/{rel}"
+    
+    # Try to grab frame count/width/height (approx)
+    try:
+        cap = cv2.VideoCapture(str(out_path))
+        fc = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 640)
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 480)
+        cap.release()
+    except Exception:
+        fc, w, h = 0, 640, 480
+    
+    return BuiltClip(
+        camera_id=camera_id,
+        path=str(out_path),
+        url=url,
+        frame_count=fc,
+        fps=fps,
+        width=w,
+        height=h,
     )

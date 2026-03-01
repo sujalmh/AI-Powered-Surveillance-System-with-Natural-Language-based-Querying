@@ -23,6 +23,15 @@ import re
 
 logger = logging.getLogger(__name__)
 
+SEM_RAW_THRESH_LOW = 0.22
+SEM_RAW_THRESH_MED = 0.30
+SEM_RAW_THRESH_HIGH = 0.40
+SEM_NO_STRUCTURED_THRESH = 0.35
+SEM_PENALTY_STRONG = 0.3
+SEM_PENALTY_MED = 0.6
+SEM_PENALTY_LIGHT = 0.8
+SEM_PENALTY_NO_STRUCTURED = 0.7
+
 
 class UnifiedRetrieval:
     """
@@ -130,8 +139,10 @@ class UnifiedRetrieval:
                 },
             )
             print(f"[UnifiedRetrieval] Final ALERTS result count: {len(results)}")
+            # For informational queries, we return an empty results list so the frontend 
+            # doesn't render the 'Detections'/clips UI, but the LLM answer uses the data.
             return {
-                "results": results,
+                "results": [],  # Clear results for UI
                 "answer": answer,
                 "metadata": {
                     "query_type": "informational",
@@ -139,7 +150,8 @@ class UnifiedRetrieval:
                     "query_subtype": "alerts",
                     "structured_count": len(results),
                     "semantic_count": 0,
-                    "final_count": len(results),
+                    "final_count": 0,
+                    "info_data": results, # Keep data in metadata for traceability
                 },
             }
 
@@ -163,8 +175,10 @@ class UnifiedRetrieval:
                 },
             )
             print(f"[UnifiedRetrieval] Final CAMERAS result count: {len(results)}")
+            # For informational queries, we return an empty results list so the frontend 
+            # doesn't render the 'Detections'/clips UI, but the LLM answer uses the data.
             return {
-                "results": results,
+                "results": [],  # Clear results for UI
                 "answer": answer,
                 "metadata": {
                     "query_type": "informational",
@@ -172,7 +186,8 @@ class UnifiedRetrieval:
                     "query_subtype": "cameras",
                     "structured_count": len(results),
                     "semantic_count": 0,
-                    "final_count": len(results),
+                    "final_count": 0,
+                    "info_data": results, # Keep data in metadata for traceability
                 },
             }
 
@@ -904,6 +919,7 @@ class UnifiedRetrieval:
                         "clip_path": sem.get("clip_path"),
                         "score_struct": 0.0,
                         "score_semantic": sem.get("score_norm", 0.0),
+                        "score_raw_semantic": sem.get("score_raw", 0.0),
                         "source": "semantic",
                         "frames": sem.get("frames", [])
                     }
@@ -913,11 +929,26 @@ class UnifiedRetrieval:
         now = datetime.now()
         halflife_hours = getattr(settings, "RECENCY_HALFLIFE_HOURS", 24.0) or 24.0
         enable_recency = getattr(settings, "ENABLE_RECENCY_BOOST", True)
+        
         for result in results_map.values():
             final_score = (
                 alpha * result["score_struct"] +
                 (1 - alpha) * result["score_semantic"]
             )
+            # Final penalty for weak semantic-only results to prevent false positives filling the list
+            if result.get("source") == "semantic":
+                # Penalties for weak semantic-only matches; tune via constants above. Penalties can compound (e.g., low raw score + no structured results).
+                raw_sem = result.get("score_raw_semantic", 0.0)
+                if raw_sem < SEM_RAW_THRESH_LOW:
+                    final_score *= SEM_PENALTY_STRONG
+                elif raw_sem < SEM_RAW_THRESH_MED:
+                    final_score *= SEM_PENALTY_MED
+                elif raw_sem < SEM_RAW_THRESH_HIGH:
+                    final_score *= SEM_PENALTY_LIGHT
+                
+                if len(combined_tracks) == 0 and raw_sem < SEM_NO_STRUCTURED_THRESH:
+                    final_score *= SEM_PENALTY_NO_STRUCTURED
+
             if enable_recency and halflife_hours > 0:
                 try:
                     ts_str = result.get("start") or result.get("end") or result.get("timestamp")
@@ -1543,16 +1574,38 @@ class UnifiedRetrieval:
             except Exception:
                 return datetime.now(timezone.utc)
     
-    def _normalize_scores(self, scores: List[float]) -> List[float]:
-        """Normalize scores to 0-1 range."""
+    def _normalize_scores(self, scores: List[float], min_val: float = 0.0) -> List[float]:
+        """
+        Normalize scores to 0-1 range.
+        If max score is low, we don't boost it all the way to 1.0 to reflect low confidence.
+        """
         if not scores:
             return []
         if len(scores) == 1:
-            return [1.0]  # Single result gets full score
+            # For weak single results, don't boost to 1.0
+            s = scores[0]
+            if s < 0.25:
+                return [max(min_val, 0.5)]
+            if s < 0.4:
+                return [max(min_val, 0.8)]
+            return [max(min_val, 1.0)]
+        
         max_score = max(scores)
         if max_score == 0:
-            return [1.0] * len(scores)  # All equal = all get full score
-        return [s / max_score for s in scores]
+            return [max(min_val, 0.0)] * len(scores)
+            
+        # If max score is weak, don't normalize to 1.0
+        scale = 1.0
+        if max_score < 0.25:
+            scale = 0.5
+        elif max_score < 0.4:
+            scale = 0.8
+        
+        normalized: List[float] = []
+        for s in scores:
+            norm = max(min_val, (s / max_score) * scale)
+            normalized.append(norm)
+        return normalized
 
     def _compute_adaptive_alpha(
         self,
@@ -1699,16 +1752,19 @@ class UnifiedRetrieval:
         
         aggregated = []
         for obj_name, obj_instances in by_name.items():
-            # Calculate average confidence
-            confidences = [o.get("confidence", 0) for o in obj_instances if o.get("confidence")]
-            avg_confidence = sum(confidences) / len(confidences) if confidences else 0
+            # Calculate average confidence safely
+            confidences = [o.get("confidence") for o in obj_instances if "confidence" in o and o.get("confidence") is not None]
             
             # Collect unique colors
             colors = list(set(o.get("color") for o in obj_instances if o.get("color")))
             
             # Use first instance as template
             representative = obj_instances[0].copy()
-            representative["confidence"] = avg_confidence
+            
+            if confidences:
+                representative["confidence"] = sum(confidences) / len(confidences)
+            elif "confidence" in representative:
+                del representative["confidence"]
             
             # Add color information
             if colors:

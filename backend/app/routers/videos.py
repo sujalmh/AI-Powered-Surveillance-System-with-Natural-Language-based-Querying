@@ -137,8 +137,9 @@ async def upload_clip(
     with_captions: bool = Form(False),
 ) -> Dict[str, Any]:
     """
-    Upload an MP4 file, save it under CLIPS_DIR/camera_{camera_id}/, and index it semantically.
-    Returns the clip_url and indexing summary.
+    Upload an MP4 file, save it under CLIPS_DIR/camera_{camera_id}/, run the full
+    detection pipeline (YOLO seg + OpenVINO attributes + person FAISS), then index
+    semantically with CLIP.  Returns the clip_url and indexing summary.
     """
     try:
         if not file.filename:
@@ -168,36 +169,47 @@ async def upload_clip(
         # Create/update camera metadata in cameras collection
         try:
             now = datetime.now(timezone.utc).isoformat()
-            camera_doc = cameras_col.find_one({"camera_id": int(camera_id)})
-            
-            if camera_doc:
-                # Update existing camera
-                cameras_col.update_one(
-                    {"camera_id": int(camera_id)},
-                    {
-                        "$set": {
-                            "last_seen": now,
-                            "status": "active",
-                            "source": str(dest_path.resolve()),
-                            "last_error": None,
-                        }
-                    }
-                )
-            else:
-                # Create new camera entry
-                cameras_col.insert_one({
-                    "camera_id": int(camera_id),
-                    "location": f"Test Camera {camera_id}",
-                    "source": str(dest_path.resolve()),
-                    "status": "active",
-                    "last_seen": now,
-                    "last_error": None,
-                })
+            cameras_col.update_one(
+                {"camera_id": int(camera_id)},
+                {
+                    "$set": {
+                        "last_seen": now,
+                        "status": "active",
+                        "source": str(dest_path.resolve()),
+                        "last_error": None,
+                    },
+                    "$setOnInsert": {
+                        "camera_id": int(camera_id),
+                        "location": f"Test Camera {camera_id}",
+                    },
+                },
+                upsert=True,
+            )
         except Exception as cam_err:
-            # Log but don't fail the upload
             print(f"Warning: Failed to update camera metadata: {cam_err}")
 
-        # Index the clip (semantic VLM pipeline)
+        # --- Step 1: Full detection pipeline (YOLO + OpenVINO attrs + MongoDB + person FAISS) ---
+        # This makes the uploaded video queryable by NL: "person in red shirt", etc.
+        det_summary: Dict[str, Any] = {}
+        try:
+            from backend.object_detection import process_video_file  # lazy import (heavy deps)
+
+            def _run_detection():
+                return process_video_file(
+                    camera_id=int(camera_id),
+                    video_path=str(dest_path.resolve()),
+                    location=f"Uploaded ({name})",
+                    target_fps=2.0,
+                )
+
+            det_summary = await run_sync(_run_detection)
+        except Exception as det_err:
+            # Non-fatal: log but continue to CLIP indexing
+            print(f"Warning: Full detection pipeline failed for upload: {det_err}")
+            det_summary = {"ok": False, "error": str(det_err)}
+
+        # --- Step 2: CLIP semantic frame indexing ---
+        # Reads detections from MongoDB (now populated by step 1) to build rich captions.
         idx_res = index_clip(
             camera_id=int(camera_id),
             clip_path=str(dest_path.resolve()),
@@ -206,11 +218,16 @@ async def upload_clip(
             with_captions=bool(with_captions and settings.ENABLE_CAPTIONS),
         )
 
+        det_ok = det_summary.get("ok", True) if isinstance(det_summary, dict) else True
+        idx_ok = idx_res.get("ok", True) if isinstance(idx_res, dict) else True
+        overall_ok = bool(det_ok and idx_ok)
+
         return {
-            "ok": True,
+            "ok": overall_ok,
             "camera_id": int(camera_id),
             "clip_path": str(dest_path.resolve()),
             "clip_url": clip_url,
+            "detection": det_summary,
             "indexing": idx_res,
         }
     except HTTPException:
@@ -253,54 +270,83 @@ async def list_clip_frames(
                 _detections = None  # type: ignore
 
             if _detections is not None:
-                for d in docs:
-                    if d.get("object_captions"):
-                        continue
-                    ts = d.get("frame_ts")
-                    cam = d.get("camera_id")
-                    if not ts or cam is None:
-                        continue
-                    try:
-                        dt = datetime.fromisoformat(str(ts))
+                try:
+                    from backend.app.services.attribute_encoder import get_attribute_encoder
+                    _encoder = get_attribute_encoder()
+                except Exception:
+                    _encoder = None
+                if _encoder is not None:
+                    # Collect frames needing enrichment
+                    pending = []
+                    for d in docs:
+                        if d.get("object_captions"):
+                            continue
+                        ts = d.get("frame_ts")
+                        cam = d.get("camera_id")
+                        if ts and cam is not None:
+                            try:
+                                dt = datetime.fromisoformat(str(ts))
+                                pending.append((d, int(cam), dt))
+                            except Exception:
+                                continue
+
+                    # Build batched query per frame window
+                    if pending:
                         window = timedelta(seconds=3)
-                        q = {
-                            "camera_id": int(cam),
-                            "timestamp": {"$gte": (dt - window).isoformat(), "$lte": (dt + window).isoformat()},
-                        }
-                        dd = list(_detections.find(q, {"_id": 0, "objects": 1}).limit(10))
-                        out: List[str] = []
-                        for di in dd:
-                            for o in (di.get("objects") or []):
-                                name = str(o.get("object_name") or "").strip().lower()
-                                if not name:
+                        or_clauses = []
+                        for _, cam, dt in pending:
+                            or_clauses.append(
+                                {
+                                    "camera_id": cam,
+                                    "timestamp": {
+                                        "$gte": (dt - window).isoformat(),
+                                        "$lte": (dt + window).isoformat(),
+                                    },
+                                }
+                            )
+
+                        det_docs: List[Dict[str, Any]] = []
+                        try:
+                            det_docs = list(
+                                _detections.find({"$or": or_clauses}, {"_id": 0, "objects": 1, "camera_id": 1, "timestamp": 1})
+                                .limit(10 * len(pending))
+                            )
+                        except Exception:
+                            det_docs = []
+
+                        # Index detections by camera for quick filtering
+                        det_by_cam: Dict[int, List[Dict[str, Any]]] = {}
+                        for di in det_docs:
+                            try:
+                                cam = int(di.get("camera_id"))
+                            except Exception:
+                                continue
+                            det_by_cam.setdefault(cam, []).append(di)
+
+                        for doc_ref, cam, frame_dt in pending:
+                            candidates = []
+                            for di in det_by_cam.get(cam, []):
+                                try:
+                                    ts = datetime.fromisoformat(str(di.get("timestamp")))
+                                except Exception:
                                     continue
-                                if name == "person":
-                                    color = str(o.get("color") or "").strip()
-                                    acc = o.get("person_attributes") or {}
-                                    parts: List[str] = ["person"]
-                                    if color and color.lower() != "unknown":
-                                        parts.append(f"wearing {color.lower()} clothing")
-                                    if acc.get("hat_confidence", 0.0) > 0.5:
-                                        parts.append("hat")
-                                    if acc.get("bag_confidence", 0.0) > 0.5:
-                                        parts.append("carrying bag")
-                                    if acc.get("longsleeves_confidence", 0.0) > 0.5:
-                                        parts.append("long sleeves")
-                                    if acc.get("longpants_confidence", 0.0) > 0.5:
-                                        parts.append("long pants")
-                                    if acc.get("coat_jacket_confidence", 0.0) > 0.5:
-                                        parts.append("coat/jacket")
-                                    out.append(", ".join(parts))
-                                else:
-                                    out.append(name)
+                                if abs((ts - frame_dt).total_seconds()) <= 3:
+                                    candidates.append(di)
+                            if not candidates:
+                                continue
+
+                            out: List[str] = []
+                            for di in candidates:
+                                for o in (di.get("objects") or []):
+                                    caption = _encoder.object_to_caption(o)
+                                    if caption:
+                                        out.append(caption)
+                                    if len(out) >= 20:
+                                        break
                                 if len(out) >= 20:
                                     break
-                            if len(out) >= 20:
-                                break
-                        if out:
-                            d["object_captions"] = out
-                    except Exception:
-                        continue
+                            if out:
+                                doc_ref["object_captions"] = out
 
             # Optional YOLO enrichment if requested and object_captions still missing
             if enrich == "yolo" and cv2 is not None and _API_YOLO is not None:
