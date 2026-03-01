@@ -1,3 +1,10 @@
+export type ProcessingStep = {
+    name: string;
+    status: "complete" | "in-progress" | "pending" | "error";
+    details: string;
+    timestamp?: string;
+};
+
 export type ChatSendResponse = {
     session_id: string;
     parsed_filter: Record<string, any>;
@@ -20,6 +27,7 @@ export type ChatSendResponse = {
     answer: string;
     metadata?: Record<string, any>;
     alert_created?: Record<string, any>;
+    processing_steps?: ProcessingStep[];
     // Additional fields for hybrid/semantic search
     semantic_results?: Array<{
         camera_id: number;
@@ -55,7 +63,7 @@ export const API_BASE =
 async function http<T>(path: string, init?: RequestInit, timeoutMs: number = 30000): Promise<T> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-    
+
     try {
         const res = await fetch(`${API_BASE}${path}`, {
             ...init,
@@ -96,7 +104,7 @@ export const api = {
         }),
 
     chatHistory: (sessionId: string) =>
-        http<{ session_id: string; messages: Array<{ role: string; content: string; created_at: string }> }>(
+        http<{ session_id: string; messages: Array<{ role: string; content: string; created_at: string; payload?: any }> }>(
             `/api/chat/history?session_id=${encodeURIComponent(sessionId)}`
         ),
     chatSessions: () =>

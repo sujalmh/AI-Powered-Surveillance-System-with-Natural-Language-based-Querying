@@ -1,12 +1,22 @@
-export function AISteps() {
-  const steps = [
-    { name: "Parse Query", status: "complete", details: "location=Gate 3, time=6 PM" },
-    { name: "Extract Objects", status: "complete", details: "person (confidence: 0.98)" },
-    { name: "MongoDB Query", status: "complete", details: "12 matching events found" },
-    { name: "Vector Search", status: "complete", details: "Searched embeddings" },
-    { name: "Fusion & Ranking", status: "in-progress", details: "Combining by relevance..." },
-    { name: "Return Results", status: "pending", details: "Preparing output" },
-  ]
+import { useMemo } from "react"
+import type { ProcessingStep } from "@/lib/api"
+
+type AIStepsProps = {
+  steps?: ProcessingStep[]
+  responseTime?: number
+}
+
+export function AISteps({ steps, responseTime }: AIStepsProps) {
+  const defaultSteps: ProcessingStep[] = useMemo(() => [
+    { name: "Parse Query", status: "pending", details: "Waiting for query..." },
+    { name: "MongoDB Query", status: "pending", details: "Not started" },
+    { name: "Vector Search", status: "pending", details: "Not started" },
+    { name: "Fusion & Ranking", status: "pending", details: "Not started" },
+    { name: "Build Clips", status: "pending", details: "Not started" },
+    { name: "Return Results", status: "pending", details: "Not started" },
+  ], [])
+
+  const displaySteps = steps && steps.length > 0 ? steps : defaultSteps
 
   const getStyle = (status: string) => {
     if (status === "complete") return {
@@ -18,6 +28,11 @@ export function AISteps() {
       dot: { background: "var(--color-primary)", animation: "pulse-dot 1.5s ease-in-out infinite" },
       card: { borderColor: "rgba(74,222,128,0.3)", background: "rgba(22,163,74,0.06)" },
       name: { color: "var(--color-primary)" },
+    }
+    if (status === "error") return {
+      dot: { background: "var(--color-danger)" },
+      card: { borderColor: "rgba(220,38,38,0.2)", background: "rgba(220,38,38,0.04)" },
+      name: { color: "var(--color-danger)" },
     }
     return {
       dot: { background: "var(--color-border-strong)" },
@@ -54,7 +69,7 @@ export function AISteps() {
 
       {/* Steps */}
       <div style={{ flex: 1, overflowY: "auto", padding: "12px", display: "flex", flexDirection: "column", gap: "6px" }}>
-        {steps.map((step, idx) => {
+        {displaySteps.map((step, idx) => {
           const s = getStyle(step.status)
           return (
             <div key={idx} style={{
@@ -83,14 +98,16 @@ export function AISteps() {
       </div>
 
       {/* Footer */}
-      <div style={{
-        borderTop: "1px solid var(--color-border)",
-        padding: "12px 14px",
-        flexShrink: 0,
-      }}>
-        <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", marginBottom: "4px" }}>Response Time</p>
-        <p style={{ fontSize: "1.375rem", fontWeight: 700, color: "var(--color-primary)", fontFamily: "var(--font-mono)" }}>2.3s</p>
-      </div>
+      {responseTime !== undefined && (
+        <div style={{
+          borderTop: "1px solid var(--color-border)",
+          padding: "12px 14px",
+          flexShrink: 0,
+        }}>
+          <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", marginBottom: "4px" }}>Response Time</p>
+          <p style={{ fontSize: "1.375rem", fontWeight: 700, color: "var(--color-primary)", fontFamily: "var(--font-mono)" }}>{responseTime.toFixed(1)}s</p>
+        </div>
+      )}
 
       <style>{`
         @keyframes pulse-dot { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
