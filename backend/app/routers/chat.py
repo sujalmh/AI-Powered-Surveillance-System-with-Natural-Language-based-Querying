@@ -87,7 +87,7 @@ class ChatSendRequest(BaseModel):
     message: str = Field(..., description="Natural language query or command")
     # Optional: allow a direct structured filter override (bypass NL parsing)
     filter_override: Optional[Dict[str, Any]] = None
-    limit: int = 50
+    limit: int = 10
 
 
 class ProcessingStep(BaseModel):

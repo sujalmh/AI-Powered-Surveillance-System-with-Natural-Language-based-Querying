@@ -19,15 +19,15 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Semantic score thresholds & penalty factors
 # ---------------------------------------------------------------------------
-SEM_RAW_THRESH_LOW = 0.22
-SEM_RAW_THRESH_MED = 0.30
-SEM_RAW_THRESH_HIGH = 0.40
-SEM_NO_STRUCTURED_THRESH = 0.35
+SEM_RAW_THRESH_LOW = 0.30
+SEM_RAW_THRESH_MED = 0.40
+SEM_RAW_THRESH_HIGH = 0.50
+SEM_NO_STRUCTURED_THRESH = 0.42
 
-SEM_PENALTY_STRONG = 0.3
-SEM_PENALTY_MED = 0.6
-SEM_PENALTY_LIGHT = 0.8
-SEM_PENALTY_NO_STRUCTURED = 0.7
+SEM_PENALTY_STRONG = 0.2
+SEM_PENALTY_MED = 0.4
+SEM_PENALTY_LIGHT = 0.7
+SEM_PENALTY_NO_STRUCTURED = 0.5
 
 
 # ---------------------------------------------------------------------------

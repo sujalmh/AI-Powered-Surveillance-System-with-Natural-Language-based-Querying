@@ -123,7 +123,7 @@ def search_unstructured(
         return True
 
     # Over-fetch to compensate for post-filtering losses (camera/time filters)
-    fetch_multiplier = 4 if (camera_id is not None or from_iso or to_iso) else 1
+    fetch_multiplier = 2 if (camera_id is not None or from_iso or to_iso) else 1
     hits = store.vector_search(query_emb, top_k=top_k * fetch_multiplier, filter_pred=_filter_pred)
 
     # Group by clip to form clip-level results
@@ -164,10 +164,10 @@ def search_unstructured(
     # Adaptive threshold from distribution (or use fixed min_confidence)
     if getattr(settings, "ENABLE_ADAPTIVE_CONFIDENCE", True) and clip_scores:
         threshold = _adaptive_min_confidence(clip_scores, has_action=has_action, base=min_confidence)
-        # Increase the hard floor to 0.18 for better precision
-        threshold = max(threshold, 0.18)
+        # Hard floor raised to 0.25 to filter out low-quality / irrelevant clips
+        threshold = max(threshold, 0.25)
     else:
-        threshold = 0.12 if has_action else max(min_confidence, 0.18)
+        threshold = 0.18 if has_action else max(min_confidence, 0.25)
     results = [entry for entry in by_clip.values() if entry["score"] >= threshold]
 
     # Normalize scores for consistent merging later

@@ -29,6 +29,8 @@ from backend.app.services.retrieval_utils import (
     normalize_scores,
     object_matches,
     parse_ts,
+    vlm_matches_object_filter,
+    flatten_object_captions,
 )
 
 logger = logging.getLogger(__name__)
@@ -516,6 +518,43 @@ def merge_results(
                     "frames": sem.get("frames", []),
                 }
 
+    # --- Validate semantic-only results against requested object types ---
+    # When the query asks for a specific object (e.g. "person"), reject
+    # semantic-only clips whose captions don't mention that object.
+    requested_obj = parsed_filter.get("objects.object_name")
+    requested_color = parsed_filter.get("objects.color")
+    if requested_obj or requested_color:
+        keys_to_drop: List[str] = []
+        for _key, result in results_map.items():
+            if result.get("source") != "semantic":
+                continue  # structured / hybrid results already validated
+            # Attempt caption-based validation from frame metadata
+            frames = result.get("frames") or []
+            captions = [str(f.get("caption", "")).lower() for f in frames if f.get("caption")]
+            if captions:
+                if not vlm_matches_object_filter(captions, parsed_filter):
+                    keys_to_drop.append(_key)
+                    logger.debug(
+                        "Filtered semantic result (object mismatch): %s – captions: %s",
+                        result.get("clip_path", _key), captions[:2],
+                    )
+            elif requested_obj:
+                # No captions available and user asked for a specific object –
+                # semantic similarity alone is unreliable, demote heavily
+                raw_sem = result.get("score_raw_semantic", 0.0)
+                if raw_sem < SEM_RAW_THRESH_MED:
+                    keys_to_drop.append(_key)
+                    logger.debug(
+                        "Filtered semantic result (no caption, low score %.3f): %s",
+                        raw_sem, result.get("clip_path", _key),
+                    )
+        for k in keys_to_drop:
+            del results_map[k]
+        if keys_to_drop:
+            logger.info(
+                "Object-validation filter removed %d semantic-only results", len(keys_to_drop),
+            )
+
     # --- Final scoring with recency boost & semantic penalties ----------
     now = datetime.now()
     halflife_hours = getattr(settings, "RECENCY_HALFLIFE_HOURS", 24.0) or 24.0
@@ -552,6 +591,14 @@ def merge_results(
         results.append(result)
 
     results.sort(key=lambda x: x["score"], reverse=True)
+
+    # --- Post-merge quality gate: drop results below hard score floor ---
+    MIN_FINAL_SCORE = 0.15
+    pre_filter_count = len(results)
+    results = [r for r in results if r["score"] >= MIN_FINAL_SCORE]
+    dropped = pre_filter_count - len(results)
+    if dropped:
+        logger.info("Post-merge score filter removed %d low-quality results (threshold %.2f)", dropped, MIN_FINAL_SCORE)
 
     # MMR diversity
     if getattr(settings, "ENABLE_RESULT_DIVERSITY", True):

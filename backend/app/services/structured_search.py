@@ -372,8 +372,8 @@ def _vlm_frames_fallback(
                 "duration_seconds": vlm_doc.get("frame_count", 0),
                 "object_name": ", ".join(sorted(objects_set)) if objects_set else "unknown",
                 "objects": [{"object_name": obj} for obj in sorted(objects_set)],
-                "source": "vlm_frames",
-                "score_struct": 1.0,
+                "source": "vlm_fallback",
+                "score_struct": 0.5,
                 "score_semantic": 0.0,
             })
         logger.info("VLM-frames fallback added %d clips", len(extras))
@@ -401,12 +401,12 @@ def execute_structured_query(
 
     logger.debug("MongoDB filter: %s", mongo_filter)
 
-    # Compute effective limit
+    # Compute effective limit (capped to avoid excessive results)
     query_limit = limit
     if parsed_filter.get("__ask_color"):
-        query_limit = max(limit, 200)
+        query_limit = max(limit, min(3 * limit, 100))
     if count_constraint:
-        query_limit = max(query_limit, 500)
+        query_limit = max(query_limit, min(3 * limit, 100))
 
     try:
         results = list(
