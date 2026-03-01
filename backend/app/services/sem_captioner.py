@@ -93,7 +93,7 @@ class _Captioner:
                     cache_dir=cache_dir,
                 )
                 # Send to device if device_map wasn't used natively
-                device_map = getattr(self.model.config, "device_map", None)
+                device_map = getattr(self.model, "hf_device_map", None) or getattr(self.model.config, "device_map", None)
                 if (
                     device_map is None
                     and not getattr(self.model.config, "quantization_config", None)

@@ -276,23 +276,67 @@ async def list_clip_frames(
                 except Exception:
                     _encoder = None
                 if _encoder is not None:
+                    # Collect frames needing enrichment
+                    pending = []
                     for d in docs:
                         if d.get("object_captions"):
                             continue
                         ts = d.get("frame_ts")
                         cam = d.get("camera_id")
-                        if not ts or cam is None:
-                            continue
+                        if ts and cam is not None:
+                            try:
+                                dt = datetime.fromisoformat(str(ts))
+                                pending.append((d, int(cam), dt))
+                            except Exception:
+                                continue
+
+                    # Build batched query per frame window
+                    if pending:
+                        window = timedelta(seconds=3)
+                        or_clauses = []
+                        for _, cam, dt in pending:
+                            or_clauses.append(
+                                {
+                                    "camera_id": cam,
+                                    "timestamp": {
+                                        "$gte": (dt - window).isoformat(),
+                                        "$lte": (dt + window).isoformat(),
+                                    },
+                                }
+                            )
+
+                        det_docs: List[Dict[str, Any]] = []
                         try:
-                            dt = datetime.fromisoformat(str(ts))
-                            window = timedelta(seconds=3)
-                            q = {
-                                "camera_id": int(cam),
-                                "timestamp": {"$gte": (dt - window).isoformat(), "$lte": (dt + window).isoformat()},
-                            }
-                            dd = list(_detections.find(q, {"_id": 0, "objects": 1}).limit(10))
+                            det_docs = list(
+                                _detections.find({"$or": or_clauses}, {"_id": 0, "objects": 1, "camera_id": 1, "timestamp": 1})
+                                .limit(10 * len(pending))
+                            )
+                        except Exception:
+                            det_docs = []
+
+                        # Index detections by camera for quick filtering
+                        det_by_cam: Dict[int, List[Dict[str, Any]]] = {}
+                        for di in det_docs:
+                            try:
+                                cam = int(di.get("camera_id"))
+                            except Exception:
+                                continue
+                            det_by_cam.setdefault(cam, []).append(di)
+
+                        for doc_ref, cam, frame_dt in pending:
+                            candidates = []
+                            for di in det_by_cam.get(cam, []):
+                                try:
+                                    ts = datetime.fromisoformat(str(di.get("timestamp")))
+                                except Exception:
+                                    continue
+                                if abs((ts - frame_dt).total_seconds()) <= 3:
+                                    candidates.append(di)
+                            if not candidates:
+                                continue
+
                             out: List[str] = []
-                            for di in dd:
+                            for di in candidates:
                                 for o in (di.get("objects") or []):
                                     caption = _encoder.object_to_caption(o)
                                     if caption:
@@ -302,9 +346,7 @@ async def list_clip_frames(
                                 if len(out) >= 20:
                                     break
                             if out:
-                                d["object_captions"] = out
-                        except Exception:
-                            continue
+                                doc_ref["object_captions"] = out
 
             # Optional YOLO enrichment if requested and object_captions still missing
             if enrich == "yolo" and cv2 is not None and _API_YOLO is not None:

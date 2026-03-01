@@ -394,8 +394,8 @@ def build_clip_from_snapshots(
         ]
         try:
             cp = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
-        except subprocess.TimeoutExpired:
-            logger.error("build_clip_from_snapshots: ffmpeg trim timed out (cmd=%s)", cmd)
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
+            logger.error("build_clip_from_snapshots: ffmpeg trim failed (cmd=%s): %s", cmd, exc)
             out_path.unlink(missing_ok=True)
             return _build_clip_from_snapshots_fallback(camera_id, start_iso, end_iso, fps, allowed_timestamps)
         if cp.returncode != 0:
@@ -428,8 +428,8 @@ def build_clip_from_snapshots(
         try:
             try:
                 cp = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300)
-            except subprocess.TimeoutExpired:
-                logger.error("build_clip_from_snapshots: ffmpeg concat timed out (cmd=%s)", cmd)
+            except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
+                logger.error("build_clip_from_snapshots: ffmpeg concat failed (cmd=%s): %s", cmd, exc)
                 out_path.unlink(missing_ok=True)
                 return _build_clip_from_snapshots_fallback(camera_id, start_iso, end_iso, fps, allowed_timestamps)
             if cp.returncode != 0:

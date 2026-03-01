@@ -521,9 +521,9 @@ def _auto_build_and_index(camera_id: int, start_iso: str, end_iso: str, every_se
 import queue
 
 def _ffmpeg_convert_worker(q: queue.Queue):
-    from imageio_ffmpeg import get_ffmpeg_exe
     import subprocess
     try:
+        from imageio_ffmpeg import get_ffmpeg_exe
         ffmpeg_exe = get_ffmpeg_exe()
     except Exception:
         ffmpeg_exe = "ffmpeg"
@@ -1287,16 +1287,16 @@ def process_video_file(
         camera_id, video_path, fps, target_fps, frame_interval, start_dt.isoformat(),
     )
 
-    # Initialize encoders (singletons — no overhead if already loaded)
-    attr_encoder = get_attribute_encoder()
-    person_index = get_person_store(dim=1152)
-
+    attr_encoder = None  # type: ignore
+    person_index = None  # type: ignore
     frames_processed = 0
     detections_inserted = 0
     frame_idx = 0
     last_person_save_ts = _time.time()
 
     try:
+        attr_encoder = get_attribute_encoder()
+        person_index = get_person_store(dim=1152)
         while True:
             ret, frame = cap.read()
             if not ret or frame is None:
@@ -1531,7 +1531,8 @@ def process_video_file(
         cap.release()
         # Final person index flush
         try:
-            person_index.save()
+            if person_index is not None:
+                person_index.save()
         except Exception:
             pass
 
