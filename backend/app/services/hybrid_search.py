@@ -133,12 +133,12 @@ class HybridSearchEngine:
                     ob = doc["objects"][obj_idx]
                     # Gather all color names: top-3 array + upper/lower body + legacy single
                     all_colors = set()
-                    for c in (ob.get("colors") or []):
-                        all_colors.add(str(c).strip().lower())
-                    for c in (ob.get("upper_body_colors") or []):
-                        all_colors.add(str(c).strip().lower())
-                    for c in (ob.get("lower_body_colors") or []):
-                        all_colors.add(str(c).strip().lower())
+                    for col in (ob.get("colors") or []):
+                        all_colors.add(str(col).strip().lower())
+                    for col in (ob.get("upper_body_colors") or []):
+                        all_colors.add(str(col).strip().lower())
+                    for col in (ob.get("lower_body_colors") or []):
+                        all_colors.add(str(col).strip().lower())
                     legacy = (ob.get("color") or "").strip().lower()
                     if legacy:
                         all_colors.add(legacy)
@@ -147,8 +147,10 @@ class HybridSearchEngine:
                     if not all_colors or not all_colors.intersection(parsed_colors_lower):
                         # No color metadata at all, or no intersection — reject
                         continue
-                except Exception:
+                except Exception as e:
                     # On unexpected errors, be conservative and reject
+                    from loguru import logger
+                    logger.debug("Failed color metadata parsing for doc _id={}: {}", doc.get("_id"), e, exc_info=True)
                     continue
 
             doc2 = dict(doc)

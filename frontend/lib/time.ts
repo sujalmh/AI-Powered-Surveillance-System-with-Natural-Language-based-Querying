@@ -4,6 +4,8 @@
 
 import { format, toZonedTime } from "date-fns-tz";
 
+const TIMEZONE_IST = "Asia/Kolkata";
+
 /** Human-readable relative time (e.g. "3m ago", "2h ago"). */
 export function timeAgo(ts: string): string {
     const d = new Date(parsePossiblyUtc(ts));
@@ -55,11 +57,11 @@ export function formatToIST(ts: string | null | undefined): string {
         // Check if date is valid
         if (isNaN(date.getTime())) return "Invalid date";
 
-        // Convert to IST (Asia/Kolkata) - IST is UTC+5:30
-        const istDate = toZonedTime(date, "Asia/Kolkata");
+        // Convert to IST - IST is UTC+5:30
+        const istDate = toZonedTime(date, TIMEZONE_IST);
 
         // Format: "Mar 2, 2026 14:30 IST" (abbreviated month, no seconds)
-        return format(istDate, "MMM d, yyyy HH:mm", { timeZone: "Asia/Kolkata" }) + " IST";
+        return format(istDate, "MMM d, yyyy HH:mm", { timeZone: TIMEZONE_IST }) + " IST";
     } catch (error) {
         console.error("Error formatting timestamp to IST:", error);
         return "—";
@@ -78,8 +80,8 @@ export function formatTimeIST(ts: string | null | undefined): string {
         const date = new Date(parsePossiblyUtc(ts));
         if (isNaN(date.getTime())) return "Invalid time";
 
-        const istDate = toZonedTime(date, "Asia/Kolkata");
-        return format(istDate, "HH:mm", { timeZone: "Asia/Kolkata" }) + " IST";
+        const istDate = toZonedTime(date, TIMEZONE_IST);
+        return format(istDate, "HH:mm", { timeZone: TIMEZONE_IST }) + " IST";
     } catch (error) {
         console.error("Error formatting time to IST:", error);
         return "—";

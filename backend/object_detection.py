@@ -829,6 +829,107 @@ class ThreadedFrameReader:
 
 
 # =========================================
+# HELPER: ENRICH DETECTED OBJECT (COLOR + TRACK + META)
+# =========================================
+def enrich_detected_object(
+    obj_name: str,
+    masked_roi: np.ndarray,
+    mask_roi: np.ndarray,
+    x1: int, x2: int, y1: int, y2: int,
+    track_id: Any,
+    conf_val: Any,
+    timestamp: str,
+    camera_id: Any,
+    obj_index: int,
+    track_state: Dict[int, Any],
+    track_bulk_ops: List[Any],
+    person_attr_defer: List[Tuple[np.ndarray, np.ndarray, Dict[str, Any], int, int]],
+    person_rois: List[np.ndarray],
+    person_attr_texts: List[str],
+    person_meta: List[Dict[str, Any]],
+    attr_encoder: Any
+) -> Dict[str, Any]:
+    """Helper to unify bounding-box extraction logic in both live and file stream."""
+    from pymongo import UpdateOne
+    # Color extraction: persons get upper/lower body split; others get top-3
+    if obj_name == "person":
+        color_info = get_person_body_colors(masked_roi, mask_roi)
+        color_name = color_info["color"]
+    else:
+        top_colors = get_top_colors(masked_roi, mask_roi, k=3)
+        color_name = top_colors[0] if top_colors else "Unknown"
+        color_info = {"color": color_name, "colors": top_colors}
+
+    tid = int(track_id) if track_id is not None else -1
+    cval = float(conf_val)
+
+    obj: Dict[str, Any] = {
+        "object_name": obj_name,
+        "track_id": tid,
+        "confidence": round(cval, 2),
+        "color": color_name,
+        "colors": color_info.get("colors", [color_name]),
+        "bbox": [int(x1), int(y1), int(x2), int(y2)],
+    }
+    if obj_name == "person":
+        obj["upper_body_colors"] = color_info.get("upper_body_colors", [])
+        obj["lower_body_colors"] = color_info.get("lower_body_colors", [])
+
+    # Update track history (persistent across frames)
+    if tid >= 0:
+        if track_state is not None:
+            st = track_state.get(tid)
+            if st is None:
+                st = {"first_seen": timestamp, "last_seen": timestamp, "frame_count": 1}
+            else:
+                st["last_seen"] = timestamp
+                try:
+                    prev_fc = st.get("frame_count", 0)
+                    prev_fc = int(prev_fc) if isinstance(prev_fc, (int, float, str)) else 0
+                    st["frame_count"] = prev_fc + 1
+                except Exception:
+                    st["frame_count"] = 1
+            track_state[tid] = st
+            obj["track_history"] = st
+
+        track_bulk_ops.append(
+            UpdateOne(
+                {"camera_id": int(camera_id), "track_id": tid},
+                {
+                    "$setOnInsert": {"first_seen": timestamp if not track_state else st["first_seen"], "camera_id": int(camera_id)},
+                    "$set": {"last_seen": timestamp},
+                    "$inc": {"frame_count": 1},
+                },
+                upsert=True,
+            )
+        )
+
+    # Person attributes — quality filter + batch defer
+    if obj_name == "person":
+        if (x2 - x1) >= MIN_PERSON_WIDTH_PIXELS:
+            person_attr_defer.append((masked_roi, mask_roi, color_info, tid, obj_index))
+            obj["person_attributes"] = {}
+            obj["attribute_text"] = ""
+        else:
+            obj["person_attributes"] = {"status": "skipped_too_small"}
+            attr_text = attr_encoder.attributes_to_text({}, color_name, color_info) if attr_encoder else "person"
+            obj["attribute_text"] = attr_text
+            person_rois.append(masked_roi)
+            person_attr_texts.append(attr_text)
+            person_meta.append({
+                "object_index": obj_index,
+                "camera_id": int(camera_id),
+                "track_id": tid,
+                "timestamp": timestamp,
+                "color": color_name,
+                "colors": color_info.get("colors", [color_name]),
+                "upper_body_colors": color_info.get("upper_body_colors", []),
+                "lower_body_colors": color_info.get("lower_body_colors", []),
+                "attribute_text": attr_text,
+            })
+    return obj
+
+# =========================================
 # MAIN DETECTION & TRACKING LOOP
 # =========================================
 def process_live_stream(
@@ -1123,90 +1224,24 @@ def process_live_stream(
                     # Apply mask to ROI so only segmented pixels are visible (background zeroed)
                     masked_roi = cv2.bitwise_and(roi, roi, mask=mask_roi if mask_roi.dtype == np.uint8 else (mask_roi > 0).astype(np.uint8))
                     
-                    # Color extraction: persons get upper/lower body split; others get top-3
-                    if obj_name == "person":
-                        color_info = get_person_body_colors(masked_roi, mask_roi)
-                        color_name = color_info["color"]
-                    else:
-                        top_colors = get_top_colors(masked_roi, mask_roi, k=3)
-                        color_name = top_colors[0] if top_colors else "Unknown"
-                        color_info = {"color": color_name, "colors": top_colors}
-
-                    track_id = int(ids_arr[i]) if ids_arr is not None else -1
-                    conf_val = float(conf_arr[i]) if np.ndim(conf_arr) == 1 else float(conf_arr[i][0])
-                    
-                    obj = {
-                        "object_name": obj_name,
-                        "track_id": track_id,
-                        "confidence": round(conf_val, 2),
-                        "color": color_name,
-                        "colors": color_info.get("colors", [color_name]),
-                        "bbox": [int(x1), int(y1), int(x2), int(y2)],
-                    }
-                    # Add upper/lower body colors for persons
-                    if obj_name == "person":
-                        obj["upper_body_colors"] = color_info.get("upper_body_colors", [])
-                        obj["lower_body_colors"] = color_info.get("lower_body_colors", [])
-
-                    # Update track history (persistent across frames)
-                    if track_id is not None and int(track_id) >= 0:
-                        tid = int(track_id)
-                        st = track_state.get(tid)
-                        if st is None:
-                            st = {"first_seen": timestamp, "last_seen": timestamp, "frame_count": 1}
-                        else:
-                            st["last_seen"] = timestamp
-                            try:
-                                prev_fc = st.get("frame_count", 0)
-                                prev_fc = int(prev_fc) if isinstance(prev_fc, (int, float, str)) else 0
-                                st["frame_count"] = prev_fc + 1
-                            except Exception:
-                                st["frame_count"] = 1
-                        track_state[tid] = st
-                        obj["track_history"] = st
-                        # Queue per-track update for batch bulk_write
-                        track_bulk_ops.append(
-                            UpdateOne(
-                                {"camera_id": int(camera_id), "track_id": tid},
-                                {
-                                    "$setOnInsert": {"first_seen": st["first_seen"], "camera_id": int(camera_id)},
-                                    "$set": {"last_seen": st["last_seen"]},
-                                    "$inc": {"frame_count": 1},
-                                },
-                                upsert=True,
-                            )
-                        )
-
-                    # --- IMPROVEMENT: Quality filter + batch OpenVINO ---
-                    # Only run attribute inference if the person is wide enough; batch inference after loop
-                    if obj_name == "person":
-                        person_width = x2 - x1
-                        obj_index = len(doc["objects"])
-                        if person_width >= MIN_PERSON_WIDTH_PIXELS:
-                            person_attr_defer.append((masked_roi, mask_roi, color_info, int(track_id), obj_index))
-                            obj["person_attributes"] = {}  # Filled after batch inference
-                            obj["attribute_text"] = ""  # Filled after batch
-                            # person_rois / person_attr_texts / person_meta added after batch below
-                        else:
-                            obj["person_attributes"] = {"status": "skipped_too_small"}
-                            attr_text = attr_encoder.attributes_to_text({}, color_name, color_info)
-                            obj["attribute_text"] = attr_text
-                            person_rois.append(masked_roi)
-                            person_attr_texts.append(attr_text)
-                            person_meta.append(
-                                {
-                                    "object_index": obj_index,
-                                    "camera_id": int(camera_id),
-                                    "track_id": int(track_id),
-                                    "timestamp": timestamp,
-                                    "color": color_name,
-                                    "colors": color_info.get("colors", [color_name]),
-                                    "upper_body_colors": color_info.get("upper_body_colors", []),
-                                    "lower_body_colors": color_info.get("lower_body_colors", []),
-                                    "attribute_text": attr_text,
-                                }
-                            )
-
+                    obj = enrich_detected_object(
+                        obj_name=obj_name,
+                        masked_roi=masked_roi,
+                        mask_roi=mask_roi,
+                        x1=x1, x2=x2, y1=y1, y2=y2,
+                        track_id=ids_arr[i] if ids_arr is not None else -1,
+                        conf_val=conf_arr[i] if np.ndim(conf_arr) == 1 else conf_arr[i][0],
+                        timestamp=timestamp,
+                        camera_id=camera_id,
+                        obj_index=len(doc["objects"]),
+                        track_state=track_state,
+                        track_bulk_ops=track_bulk_ops,
+                        person_attr_defer=person_attr_defer,
+                        person_rois=person_rois,
+                        person_attr_texts=person_attr_texts,
+                        person_meta=person_meta,
+                        attr_encoder=attr_encoder
+                    )
                     doc["objects"].append(obj)
 
             # Batch OpenVINO attribute inference for deferred persons; then add them to person_rois/person_attr_texts/person_meta
@@ -1415,7 +1450,11 @@ def process_video_file(
     # Determine start datetime for timestamp assignment
     if start_iso:
         try:
-            start_dt = datetime.datetime.fromisoformat(start_iso)
+            from dateutil import parser
+            dt = parser.isoparse(start_iso)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=datetime.timezone.utc)
+            start_dt = dt.astimezone(datetime.timezone.utc)
         except Exception:
             start_dt = datetime.datetime.now(datetime.timezone.utc)
     else:
@@ -1425,10 +1464,18 @@ def process_video_file(
             start_dt = datetime.datetime.fromtimestamp(max(0, mtime - duration), tz=datetime.timezone.utc)
         except Exception:
             start_dt = datetime.datetime.now(datetime.timezone.utc)
+    
+    # Ensure start_dt explicitly drops the explicit '+00:00' for a canonical 'Z' if aware
+    def to_canonical_iso(dt: datetime.datetime) -> str:
+        s = dt.isoformat()
+        if s.endswith("+00:00"):
+            return s.replace("+00:00", "Z")
+        return s
+    canonical_start_iso = to_canonical_iso(start_dt)
 
     logger.info(
         "process_video_file: camera_id=%s path=%s fps=%.1f target_fps=%.1f interval=%d start=%s",
-        camera_id, video_path, fps, target_fps, frame_interval, start_dt.isoformat(),
+        camera_id, video_path, fps, target_fps, frame_interval, canonical_start_iso,
     )
 
     attr_encoder = None  # type: ignore
@@ -1520,70 +1567,24 @@ def process_video_file(
                     # Apply mask to ROI so only segmented pixels are visible (background zeroed)
                     masked_roi = cv2.bitwise_and(roi, roi, mask=mask_roi if mask_roi.dtype == np.uint8 else (mask_roi > 0).astype(np.uint8))
 
-                    # Color extraction: persons get upper/lower body split; others get top-3
-                    if obj_name == "person":
-                        color_info = get_person_body_colors(masked_roi, mask_roi)
-                        color_name = color_info["color"]
-                    else:
-                        top_colors = get_top_colors(masked_roi, mask_roi, k=3)
-                        color_name = top_colors[0] if top_colors else "Unknown"
-                        color_info = {"color": color_name, "colors": top_colors}
-
-                    track_id = int(ids_arr[i]) if ids_arr is not None else -1
-                    conf_val = float(conf_arr[i]) if np.ndim(conf_arr) == 1 else float(conf_arr[i][0])
-
-                    obj: Dict[str, Any] = {
-                        "object_name": obj_name,
-                        "track_id": track_id,
-                        "confidence": round(conf_val, 2),
-                        "color": color_name,
-                        "colors": color_info.get("colors", [color_name]),
-                        "bbox": [int(x1), int(y1), int(x2), int(y2)],
-                    }
-                    # Add upper/lower body colors for persons
-                    if obj_name == "person":
-                        obj["upper_body_colors"] = color_info.get("upper_body_colors", [])
-                        obj["lower_body_colors"] = color_info.get("lower_body_colors", [])
-
-                    # Track history (batch bulk write below)
-                    if track_id >= 0:
-                        track_bulk_ops.append(
-                            UpdateOne(
-                                {"camera_id": int(camera_id), "track_id": track_id},
-                                {
-                                    "$setOnInsert": {"first_seen": timestamp, "camera_id": int(camera_id)},
-                                    "$set": {"last_seen": timestamp},
-                                    "$inc": {"frame_count": 1},
-                                },
-                                upsert=True,
-                            )
-                        )
-
-                    # Person attributes — quality filter + batch OpenVINO
-                    if obj_name == "person":
-                        obj_index = len(doc["objects"])
-                        if (x2 - x1) >= MIN_PERSON_WIDTH_PIXELS:
-                            person_attr_defer.append((masked_roi, mask_roi, color_info, int(track_id), obj_index))
-                            obj["person_attributes"] = {}   # filled after batch
-                            obj["attribute_text"] = ""      # filled after batch
-                        else:
-                            obj["person_attributes"] = {"status": "skipped_too_small"}
-                            attr_text = attr_encoder.attributes_to_text({}, color_name, color_info)
-                            obj["attribute_text"] = attr_text
-                            person_rois.append(masked_roi)
-                            person_attr_texts.append(attr_text)
-                            person_meta.append({
-                                "object_index": obj_index,
-                                "camera_id": int(camera_id),
-                                "track_id": int(track_id),
-                                "timestamp": timestamp,
-                                "color": color_name,
-                                "colors": color_info.get("colors", [color_name]),
-                                "upper_body_colors": color_info.get("upper_body_colors", []),
-                                "lower_body_colors": color_info.get("lower_body_colors", []),
-                                "attribute_text": attr_text,
-                            })
-
+                    obj = enrich_detected_object(
+                        obj_name=obj_name,
+                        masked_roi=masked_roi,
+                        mask_roi=mask_roi,
+                        x1=x1, x2=x2, y1=y1, y2=y2,
+                        track_id=ids_arr[i] if ids_arr is not None else -1,
+                        conf_val=conf_arr[i] if np.ndim(conf_arr) == 1 else conf_arr[i][0],
+                        timestamp=timestamp,
+                        camera_id=camera_id,
+                        obj_index=len(doc["objects"]),
+                        track_state={},  # file mode does not carry track_state across frames in the identical way (bulk op uses atomic upsert)
+                        track_bulk_ops=track_bulk_ops,
+                        person_attr_defer=person_attr_defer,
+                        person_rois=person_rois,
+                        person_attr_texts=person_attr_texts,
+                        person_meta=person_meta,
+                        attr_encoder=attr_encoder
+                    )
                     doc["objects"].append(obj)
 
             # Batch OpenVINO attribute inference for deferred persons

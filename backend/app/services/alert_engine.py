@@ -224,6 +224,10 @@ def evaluate_rule(rule_doc: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                 continue
             if want_color:
                 obj_colors = [str(c).lower() for c in (obj.get("colors") or [obj.get("color", "")])]
+                for c in (obj.get("upper_body_colors") or []):
+                    obj_colors.append(str(c).lower())
+                for c in (obj.get("lower_body_colors") or []):
+                    obj_colors.append(str(c).lower())
                 if want_color.lower() not in obj_colors:
                     continue
             matched_count += 1
