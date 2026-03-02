@@ -148,8 +148,22 @@ def object_matches(obj: Dict[str, Any], parsed_filter: Dict[str, Any]) -> bool:
     color = parsed_filter.get("objects.color")
     if name and str(obj.get("object_name", "")).lower() != str(name).lower():
         return False
-    if color and str(obj.get("color", "")).lower() != str(color).lower():
-        return False
+    if color:
+        # Match against top-3 colors array + upper/lower body colors + legacy single color
+        all_obj_colors = set()
+        for c in (obj.get("colors") or []):
+            all_obj_colors.add(str(c).strip().lower())
+        for c in (obj.get("upper_body_colors") or []):
+            all_obj_colors.add(str(c).strip().lower())
+        for c in (obj.get("lower_body_colors") or []):
+            all_obj_colors.add(str(c).strip().lower())
+        legacy = str(obj.get("color", "")).strip().lower()
+        if legacy:
+            all_obj_colors.add(legacy)
+        all_obj_colors.discard("")
+        all_obj_colors.discard("unknown")
+        if str(color).lower() not in all_obj_colors:
+            return False
     return True
 
 

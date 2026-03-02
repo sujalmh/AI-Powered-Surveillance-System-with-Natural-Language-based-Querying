@@ -11,6 +11,7 @@ import {
 import { MoreVertical, Trash2, Play, Edit2, Plus } from "lucide-react";
 
 import { api } from "@/lib/api";
+import { formatToIST } from "@/lib/time";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -140,7 +141,7 @@ export function AlertsTable() {
       header: "Updated",
       cell: ({ row }) => (
         <span className="text-muted-foreground text-xs">
-          {row.getValue("updated_at") ? new Date(row.getValue("updated_at") as string).toLocaleString() : "-"}
+          {row.getValue("updated_at") ? formatToIST(row.getValue("updated_at") as string) : "-"}
         </span>
       ),
     },

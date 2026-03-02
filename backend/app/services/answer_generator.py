@@ -1,14 +1,43 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional
 from loguru import logger
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
 from backend.app.config import settings
 
 # Load env vars to ensure API keys are available
 load_dotenv()
+
+
+def _format_timestamp_ist(dt: datetime) -> str:
+    """
+    Convert datetime to IST (Asia/Kolkata) and format as readable string.
+    Format: "Mar 2, 2026 14:30 IST"
+    """
+    try:
+        # Ensure datetime is timezone-aware (assume UTC if naive)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        # Convert to IST
+        ist_dt = dt.astimezone(ZoneInfo("Asia/Kolkata"))
+        # Format: "Mar 2, 2026 14:30 IST"
+        return ist_dt.strftime("%b %-d, %Y %H:%M IST")
+    except Exception:
+        # Fallback for Windows (no %-d support)
+        try:
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            ist_dt = dt.astimezone(ZoneInfo("Asia/Kolkata"))
+            # Use %d and strip leading zero manually
+            day = ist_dt.day
+            return ist_dt.strftime(f"%b {day}, %Y %H:%M IST")
+        except Exception as e:
+            logger.warning(f"Failed to format timestamp to IST: {e}")
+            return str(dt)
 
 
 class AnswerGenerator:
@@ -194,7 +223,7 @@ class AnswerGenerator:
         for ts_str in (timestamps_list[:10] if timestamps_list else []):
             try:
                 dt = datetime.fromisoformat(str(ts_str).replace('Z', '+00:00'))
-                timestamps_formatted.append(dt.strftime("%Y-%m-%d %I:%M:%S %p"))
+                timestamps_formatted.append(_format_timestamp_ist(dt))
             except Exception:
                 timestamps_formatted.append(str(ts_str))
         
@@ -229,7 +258,7 @@ Alert Logs (up to first 10):
                     try:
                         if trigger_ts:
                             dt = datetime.fromisoformat(str(trigger_ts).replace('Z', '+00:00'))
-                            trigger_ts = dt.strftime("%Y-%m-%d %I:%M:%S %p")
+                            trigger_ts = _format_timestamp_ist(dt)
                     except Exception as e:
                         logger.opt(exception=True).debug("Failed to parse trigger_ts {} for alert {}: {}", trigger_ts, a.get('alert_name') or idx, e)
                     prompt += f"- {idx}. [{a.get('severity', 'info')}] {a.get('alert_name') or 'Unnamed alert'} at {trigger_ts or 'unknown time'} on {cam_str}: {a.get('message')}\n"
@@ -390,8 +419,8 @@ Generate Natural Language Answer:"""
             try:
                 start = datetime.fromisoformat(str(ts["$gte"]).replace('Z', '+00:00'))
                 end = datetime.fromisoformat(str(ts["$lte"]).replace('Z', '+00:00'))
-                start_fmt = start.strftime("%Y-%m-%d %I:%M:%S %p")
-                end_fmt = end.strftime("%Y-%m-%d %I:%M:%S %p")
+                start_fmt = _format_timestamp_ist(start)
+                end_fmt = _format_timestamp_ist(end)
                 duration_min = int((end - start).total_seconds() / 60)
                 parts.append(f"  Time Range: {start_fmt} to {end_fmt} ({duration_min} min)")
             except Exception:
@@ -401,7 +430,7 @@ Generate Natural Language Answer:"""
             try:
                 if isinstance(ts, str):
                     dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
-                    parts.append(f"  Time: {dt.strftime('%Y-%m-%d %I:%M:%S %p')}")
+                    parts.append(f"  Time: {_format_timestamp_ist(dt)}")
                 else:
                     parts.append(f"  Time: {ts}")
             except Exception:
@@ -413,6 +442,59 @@ Generate Natural Language Answer:"""
         return "\n".join(parts) if parts else "  No specific filters"
     
     
+    def generate_conversational(self, message: str) -> str:
+        """
+        Generate a natural, context-aware response for conversational / off-topic messages
+        (greetings, general questions about capabilities, thanks, etc.).
+        """
+        self._ensure_llm()
+        if not self.llm:
+            return self._conversational_fallback(message)
+
+        prompt = f"""You are a helpful AI assistant embedded in a surveillance monitoring system.
+The user sent a conversational message (not a surveillance query).
+Respond naturally and helpfully. If they're asking what you can do, give a concise overview of your capabilities.
+Keep your answer brief (2-4 sentences max). Do not mention video clips, JSON, or technical internals.
+
+Capabilities you have:
+- Search for people, vehicles, or objects in recorded footage by description, color, action, or location
+- Filter results by camera, time range, or zone
+- Count detections or check for specific behaviors (running, carrying, fighting, etc.)
+- Show triggered alerts and their history
+- Check camera status (active/offline)
+- Create alert rules that notify when certain conditions are detected in future footage
+
+User message: "{message}"
+
+Respond conversationally:"""
+
+        try:
+            from langchain_core.messages import HumanMessage
+            response = self.llm.invoke([HumanMessage(content=prompt)])
+            return response.content.strip()
+        except Exception:
+            logger.opt(exception=True).warning("LLM conversational response failed — using fallback")
+            return self._conversational_fallback(message)
+
+    def _conversational_fallback(self, message: str) -> str:
+        """Simple rule-based fallback for when LLM is unavailable."""
+        low = message.strip().lower().rstrip("!?.")
+        if low in {"hi", "hello", "hey", "howdy", "yo", "sup"}:
+            return "Hello! How can I help you with your surveillance system today?"
+        if "thank" in low or low in {"thanks", "ty"}:
+            return "You're welcome! Let me know if you need anything else."
+        if re.search(r'\b(bye|goodbye)\b', low):
+            return "Goodbye! Feel free to ask if you need anything."
+        if "who are you" in low or "what are you" in low:
+            return (
+                "I'm your surveillance assistant. I can search footage for people, vehicles, and events; "
+                "manage alert rules; and report on camera status."
+            )
+        return (
+            "I'm your surveillance assistant. You can ask me to find footage, search by description, "
+            "check alerts, or query camera status."
+        )
+
     def _fallback_answer(
         self,
         query_type: str,

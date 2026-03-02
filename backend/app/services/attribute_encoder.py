@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import os
@@ -17,9 +17,21 @@ except Exception:
     SentenceTransformer = None  # type: ignore
 
 
+def _join_color_names(colors: List[str], limit: int = 2) -> str:
+    """Join up to `limit` unique color names with 'and', lowercased."""
+    seen: List[str] = []
+    for c in colors:
+        cl = str(c).strip().lower()
+        if cl and cl != "unknown" and cl not in seen:
+            seen.append(cl)
+        if len(seen) >= limit:
+            break
+    return " and ".join(seen) if seen else ""
+
+
 class AttributeEncoder:
     """
-    Convert structured attributes (OpenVINO + CIEDE2000 colors) into natural language and encode to text embeddings.
+    Convert structured attributes (OpenVINO + multi-color data) into natural language and encode to text embeddings.
     Default model: all-MiniLM-L12-v2 (384-dim). Returns L2-normalized float32 vectors.
     """
 
@@ -32,15 +44,40 @@ class AttributeEncoder:
             SentenceTransformer = _ST
         self.model = SentenceTransformer(model_name)  # type: ignore
 
-    def attributes_to_text(self, openvino_attrs: Dict[str, float], color_name: Optional[str]) -> str:
+    def attributes_to_text(
+        self,
+        openvino_attrs: Dict[str, float],
+        color_name: Optional[str],
+        color_info: Optional[Dict[str, Any]] = None,
+    ) -> str:
         """
         Build concise textual description for a person based on attributes and color.
-        Example: "person wearing navy blue top, black pants, carrying bag"
+
+        When ``color_info`` is provided (dict with upper_body_colors / lower_body_colors),
+        produces richer text like:
+            "person wearing red and white top, blue and black pants, carrying bag"
+        Falls back to the single ``color_name`` for backward compatibility.
         """
         parts: List[str] = ["person"]
 
-        # Color (single color field available in current pipeline)
-        if color_name and str(color_name).lower() not in ("", "unknown"):
+        # --- Rich upper/lower body color description ---
+        upper_desc = ""
+        lower_desc = ""
+        if color_info and isinstance(color_info, dict):
+            upper_colors = color_info.get("upper_body_colors") or []
+            lower_colors = color_info.get("lower_body_colors") or []
+            upper_desc = _join_color_names(upper_colors)
+            lower_desc = _join_color_names(lower_colors)
+
+        if upper_desc and lower_desc:
+            parts.append(f"wearing {upper_desc} top")
+            parts.append(f"{lower_desc} pants")
+        elif upper_desc:
+            parts.append(f"wearing {upper_desc} top")
+        elif lower_desc:
+            parts.append(f"wearing {lower_desc} pants")
+        elif color_name and str(color_name).lower() not in ("", "unknown"):
+            # Fallback to single overall color (backward compat with old data)
             parts.append(f"wearing {color_name.lower()} clothing")
 
         # Accessories and clothing (threshold at 0.5)
@@ -71,18 +108,37 @@ class AttributeEncoder:
         Single source of truth — replaces inline attribute-to-text logic scattered
         across sem_indexer.py and videos.py.
 
-        For non-person objects returns the object name.
-        For persons, builds a rich description using color + OpenVINO attributes.
+        For non-person objects returns the object name (with colors if available).
+        For persons, builds a rich description using upper/lower body colors + OpenVINO attributes.
 
-        Example output: "person wearing red clothing, carrying bag, long sleeves"
+        Example output: "person wearing red and white top, blue pants, carrying bag, long sleeves"
         """
         name = str(obj.get("object_name", "")).strip().lower()
         if name != "person":
+            # Include primary color for non-person objects; fall back from scalar "color" to "colors" list
+            color = str(obj.get("color") or "").strip().lower()
+            if not color or color == "unknown":
+                colors_list = obj.get("colors") or []
+                for c in colors_list:
+                    c_str = str(c).strip().lower()
+                    if c_str and c_str != "unknown":
+                        color = c_str
+                        break
+            if color and color != "unknown":
+                return f"{color} {name}" if name else "unknown"
             return name or "unknown"
         color = str(obj.get("color") or "").strip()
         color = color if color.lower() not in ("", "unknown") else None
         attrs = obj.get("person_attributes") or {}
-        return self.attributes_to_text(attrs, color)
+        # Build color_info from stored object fields for rich description
+        color_info: Dict[str, Any] = {}
+        if obj.get("upper_body_colors"):
+            color_info["upper_body_colors"] = obj["upper_body_colors"]
+        if obj.get("lower_body_colors"):
+            color_info["lower_body_colors"] = obj["lower_body_colors"]
+        if obj.get("colors"):
+            color_info["colors"] = obj["colors"]
+        return self.attributes_to_text(attrs, color, color_info if color_info else None)
 
     def encode_text(self, text: str) -> np.ndarray:
         emb = self.model.encode([text])

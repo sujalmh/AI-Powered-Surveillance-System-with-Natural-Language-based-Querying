@@ -168,7 +168,13 @@ def build_detection_query_from_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
             q["objects.object_name"] = name
     color = rule.get("color")
     if color:
-        q["objects.color"] = color
+        # Match against legacy single color, top-3 colors array, and split-body color arrays
+        q["$or"] = [
+            {"objects.color": color},
+            {"objects.colors": color},
+            {"objects.upper_body_colors": color},
+            {"objects.lower_body_colors": color},
+        ]
     return q
 
 
@@ -210,14 +216,20 @@ def evaluate_rule(rule_doc: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
     docs = list(detections_col.find(query).sort("timestamp", -1).limit(500))
     want_name = query.get("objects.object_name")
-    want_color = query.get("objects.color")
+    want_color = rule.get("color")  # Extract color from rule directly (query uses $or for multi-color matching)
     matched_count = 0
     for d in docs:
         for obj in d.get("objects", []):
             if want_name and obj.get("object_name") != want_name:
                 continue
-            if want_color and obj.get("color") != want_color:
-                continue
+            if want_color:
+                obj_colors = [str(c).lower() for c in (obj.get("colors") or [obj.get("color", "")])]
+                for c in (obj.get("upper_body_colors") or []):
+                    obj_colors.append(str(c).lower())
+                for c in (obj.get("lower_body_colors") or []):
+                    obj_colors.append(str(c).lower())
+                if want_color.lower() not in obj_colors:
+                    continue
             matched_count += 1
 
     if matches_count_condition(matched_count, rule.get("count")):

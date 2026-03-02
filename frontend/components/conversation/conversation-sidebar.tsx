@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { MessageSquare, Plus, Search } from "lucide-react";
 import { api } from "@/lib/api";
+import { formatTimeIST } from "@/lib/time";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 type SessionItem = {
@@ -246,7 +247,7 @@ export function ConversationSidebar() {
                       {(() => { const t = conv.last_message || "New conversation"; return t.length > 32 ? t.slice(0, 32) + "…" : t; })()}
                     </span>
                     <span style={{ fontSize: "0.625rem", color: "var(--color-text-faint)", flexShrink: 0, whiteSpace: "nowrap" }}>
-                      {conv.last_message_time ? new Date(conv.last_message_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Now"}
+                      {conv.last_message_time ? formatTimeIST(conv.last_message_time) : "Now"}
                     </span>
                   </div>
                 </div>

@@ -6,6 +6,7 @@ import { Play, X, Download } from "lucide-react"
 import { API_BASE, type ChatSendResponse } from "@/lib/api"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { formatToIST, formatTimeIST } from "@/lib/time"
 
 interface QueryResultsProps {
   onShowSteps: () => void
@@ -147,6 +148,7 @@ export const QueryResults = React.memo(({ onShowSteps, response }: QueryResultsP
               <button
                 onClick={closeModal}
                 className="absolute top-4 right-4 z-20 p-2 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors"
+                title="Close video modal"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -202,11 +204,11 @@ export const QueryResults = React.memo(({ onShowSteps, response }: QueryResultsP
                       <p className="text-xs font-bold uppercase tracking-wide text-primary">Timestamp</p>
                       <p className="text-sm text-foreground font-medium">
                         {selectedItem.frames?.[0]?.frame_ts
-                          ? new Date(selectedItem.frames[0].frame_ts).toLocaleString()
+                          ? formatToIST(selectedItem.frames[0].frame_ts)
                           : selectedItem.start && selectedItem.end
-                            ? `${new Date(selectedItem.start).toLocaleString()} - ${new Date(selectedItem.end).toLocaleTimeString()}`
+                            ? `${formatToIST(selectedItem.start)} - ${formatTimeIST(selectedItem.end)}`
                             : selectedItem.timestamp
-                              ? new Date(selectedItem.timestamp).toLocaleString()
+                              ? formatToIST(selectedItem.timestamp)
                               : ""}
                       </p>
                     </div>

@@ -20,6 +20,14 @@ _ALERT_RETRIEVAL_RE = re.compile(
     r'|\balerts?\b.*\b(?:show|list|get|find|display|view)\b',
     re.IGNORECASE,
 )
+_CONVERSATIONAL_RE = re.compile(
+    r'^(?:hi+|hello+|hey+|howdy|yo+|sup|what\'?s\s+up|good\s+(?:morning|afternoon|evening|day)|'
+    r'greetings|how\s+are\s+you|how\s+r\s+u|how\s+do\s+you\s+do|nice\s+to\s+meet\s+you|'
+    r'who\s+are\s+you|what\s+(?:are|can)\s+you\s+do|what\s+is\s+this|'
+    r'can\s+you\s+help|help\s+me|thanks?(?:\s+you)?|thank\s+you|bye+|goodbye|see\s+you|'
+    r'lol+|haha+|testing|test|ping|okay|ok)[\s!?.]*$',
+    re.IGNORECASE,
+)
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -131,6 +139,37 @@ def save_message(session_id: str, role: str, content: str, payload: Optional[Dic
             "created_at": iso_now(),
             "payload": payload,
         }
+    )
+
+
+_answer_generator = None  # lazy singleton - avoids re-initializing heavy resources on every call
+
+
+def _get_answer_generator():
+    global _answer_generator
+    if _answer_generator is None:
+        from backend.app.services.answer_generator import AnswerGenerator
+        _answer_generator = AnswerGenerator()
+    return _answer_generator
+
+
+def handle_conversational_response(session_id: str, message: str, parsed_filter: Optional[Dict[str, Any]] = None) -> "ChatSendResponse":
+    """Generate, persist, and return a conversational reply without touching the retrieval pipeline."""
+    answer = _get_answer_generator().generate_conversational(message)
+    payload = {
+        "session_id": session_id,
+        "parsed_filter": parsed_filter or {},
+        "results": [],
+        "answer": answer,
+        "metadata": {"query_type": "conversational"},
+    }
+    save_message(session_id, "assistant", answer, payload)
+    return ChatSendResponse(
+        session_id=session_id,
+        parsed_filter=parsed_filter if parsed_filter is not None else {},
+        results=[],
+        answer=answer,
+        metadata={"query_type": "conversational"},
     )
 
 
@@ -723,6 +762,10 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
             # Save user message
             save_message(req.session_id, "user", req.message, None)
 
+            # Fast path: conversational / greeting messages — skip the retrieval pipeline entirely
+            if _CONVERSATIONAL_RE.match(req.message.strip()):
+                return handle_conversational_response(req.session_id, req.message)
+
             # Parse NL with LLM (structured) if no override provided; fallback to regex parser
             if req.filter_override is not None:
                 parsed = req.filter_override
@@ -734,6 +777,10 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
                     logger.warning("LLM parsing failed: {}. Falling back to regex parser.", e)
                     parsed = parse_simple_nl_to_filter(req.message)
                     logger.opt(exception=True).info("Regex parsed query: {}", parsed)
+
+            # If LLM (or regex fallback) classified this as a conversational query, handle it here
+            if parsed.get("query_type") == "conversational":
+                return handle_conversational_response(req.session_id, req.message, parsed)
 
             # If LLM suggested a relative window and absolute timestamp not provided, expand to [now-last_minutes, now]
             # Use UTC to keep timestamps consistent across services

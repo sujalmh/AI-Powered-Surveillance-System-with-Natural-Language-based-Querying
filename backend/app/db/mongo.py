@@ -43,6 +43,13 @@ def init_indexes() -> None:
     detections.create_index(
         [("objects.object_name", ASCENDING), ("objects.color", ASCENDING), ("timestamp", DESCENDING)]
     )
+    # Multi-color array index: supports $in queries matching any of the top-3 colors
+    try:
+        detections.create_index(
+            [("objects.colors", ASCENDING), ("timestamp", DESCENDING)]
+        )
+    except Exception as e:
+        logger.opt(exception=True).warning("Failed to create index on detections (objects.colors / timestamp): {}", e)
     try:
         detections.create_index([("person_count", ASCENDING), ("timestamp", DESCENDING)])
     except Exception:
