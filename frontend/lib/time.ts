@@ -7,6 +7,7 @@ import { format, toZonedTime } from "date-fns-tz";
 /** Human-readable relative time (e.g. "3m ago", "2h ago"). */
 export function timeAgo(ts: string): string {
     const d = new Date(parsePossiblyUtc(ts));
+    if (!isFinite(d.getTime())) return "";
     const diffMs = Date.now() - d.getTime();
     const mins = Math.floor(diffMs / 60_000);
     if (mins < 1) return "just now";
@@ -29,6 +30,11 @@ export function timeAgo(ts: string): string {
 export function parsePossiblyUtc(ts: string): string {
     // Already has a timezone marker — return unchanged.
     if (ts.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(ts)) {
+        return ts;
+    }
+    // Only append "Z" for datetime strings (contain "T"); leave date-only strings
+    // (e.g. "2026-03-02") unchanged so they stay ECMAScript-compliant.
+    if (!ts.includes("T")) {
         return ts;
     }
     return ts + "Z";
