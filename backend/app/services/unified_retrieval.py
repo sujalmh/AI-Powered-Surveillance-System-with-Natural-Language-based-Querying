@@ -317,6 +317,59 @@ class UnifiedRetrieval:
         return variants if len(variants) > 1 else None
 
     # ------------------------------------------------------------------
+    # Dense-window timestamp trimming
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _trim_to_dense_window(
+        timestamps: List[str],
+        min_gap_abs: float = 5.0,
+        gap_factor: float = 4.0,
+    ) -> Tuple[str, str]:
+        """
+        Given a list of ISO timestamp strings, find the densest contiguous
+        cluster and return ``(start, end)`` covering only that cluster.
+
+        Filler at the beginning or end of a clip is caused by outlier
+        timestamps stretching the window far beyond the core detection
+        activity.  This helper identifies the largest internal gap that
+        exceeds both *min_gap_abs* and *gap_factor* × median-gap, then
+        keeps the cluster that contains more timestamps.
+        """
+        if not timestamps:
+            raise ValueError("Empty timestamp list")
+
+        dts = sorted(parse_ts(t) for t in timestamps)
+        if len(dts) <= 2:
+            return dts[0].isoformat(), dts[-1].isoformat()
+
+        gaps = [(dts[i + 1] - dts[i]).total_seconds() for i in range(len(dts) - 1)]
+        nonzero = [g for g in gaps if g > 0]
+        if not nonzero:
+            return dts[0].isoformat(), dts[-1].isoformat()
+
+        median_g = float(sorted(nonzero)[len(nonzero) // 2])
+        threshold = max(min_gap_abs, median_g * gap_factor)
+
+        # Iteratively trim: find the largest gap that exceeds threshold,
+        # keep the larger cluster, repeat until no more outlier gaps.
+        while len(dts) > 2:
+            gaps = [(dts[i + 1] - dts[i]).total_seconds() for i in range(len(dts) - 1)]
+            split_idx = -1
+            max_gap_val = 0.0
+            for i, g in enumerate(gaps):
+                if g > threshold and g > max_gap_val:
+                    max_gap_val = g
+                    split_idx = i
+            if split_idx < 0:
+                break
+            left = dts[: split_idx + 1]
+            right = dts[split_idx + 1:]
+            dts = left if len(left) >= len(right) else right
+
+        return dts[0].isoformat(), dts[-1].isoformat()
+
+    # ------------------------------------------------------------------
     # Clip building + enrichment
     # ------------------------------------------------------------------
 
@@ -362,17 +415,65 @@ class UnifiedRetrieval:
         enriched: List[Dict[str, Any]] = []
         for result in results:
             rc = dict(result)
+
+            # --- Re-trim semantic-only clips that have frame timestamps ---
+            # Pre-indexed clips (with clip_url) may be full-length recording
+            # chunks.  If we have frame-level timestamps, compute the dense
+            # window and re-build a tighter clip when it saves >40% duration.
+            if rc.get("clip_url") and rc.get("frames"):
+                try:
+                    frame_ts = [
+                        f["frame_ts"]
+                        for f in rc["frames"]
+                        if f.get("frame_ts")
+                    ]
+                    if len(frame_ts) >= 2:
+                        dense_start, dense_end = self._trim_to_dense_window(frame_ts)
+                        ds = parse_ts(dense_start)
+                        de = parse_ts(dense_end)
+                        dense_dur = (de - ds).total_seconds()
+                        full_dur = float(rc.get("duration_seconds", 0) or 60)
+                        if full_dur > 0 and dense_dur < full_dur * 0.6:
+                            # Worthwhile to re-build a trimmer clip
+                            cam = rc.get("camera_id")
+                            if cam is not None:
+                                s_dt = ds - timedelta(seconds=buffer_sec)
+                                e_dt = de + timedelta(seconds=buffer_sec)
+                                clip = build_clip_from_snapshots(
+                                    int(cam),
+                                    s_dt.isoformat(),
+                                    e_dt.isoformat(),
+                                    fps=5.0,
+                                )
+                                rc["clip_url"] = clip.url
+                                rc["clip_frames"] = clip.frame_count
+                                rc["clip_path"] = clip.path
+                                rc["start"] = dense_start
+                                rc["end"] = dense_end
+                                logger.debug(
+                                    "Re-trimmed semantic clip cam=%s: %.1fs → %.1fs",
+                                    cam, full_dur, dense_dur + 2 * buffer_sec,
+                                )
+                except Exception as e:
+                    logger.debug("Semantic clip re-trim skipped: %s", e)
+
             if rc.get("clip_url"):
                 enriched.append(rc)
                 continue
             try:
                 cam = rc.get("camera_id")
 
-                # Derive tightest possible window from matched_timestamps so
-                # the clip starts at the first real detection and ends at the
-                # last – then pad with ±buffer_sec to avoid cutting the event.
+                # Derive tightest possible window from matched_timestamps.
+                # Use _trim_to_dense_window to discard outlier timestamps
+                # that would stretch the clip with irrelevant filler content.
                 matched_ts = rc.get("matched_timestamps")
-                if matched_ts and len(matched_ts) > 0:
+                if matched_ts and len(matched_ts) >= 3:
+                    try:
+                        start, end = self._trim_to_dense_window(matched_ts)
+                    except Exception:
+                        sorted_ts = sorted(matched_ts)
+                        start, end = sorted_ts[0], sorted_ts[-1]
+                elif matched_ts and len(matched_ts) > 0:
                     sorted_ts = sorted(matched_ts)
                     start = sorted_ts[0]
                     end = sorted_ts[-1]

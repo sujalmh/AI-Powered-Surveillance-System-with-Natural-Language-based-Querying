@@ -2,13 +2,19 @@
 
 import { MainLayout } from "@/components/layout/main-layout"
 import { SettingsTabs } from "@/components/settings/settings-tabs"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useTheme } from "next-themes"
 import { Moon, Sun, Monitor } from "lucide-react"
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("user")
+  const [mounted, setMounted] = useState(false)
   const { theme, setTheme } = useTheme()
+
+  // Prevent hydration mismatch by only rendering theme-dependent UI after mount
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   return (
     <MainLayout>
@@ -47,31 +53,34 @@ export default function SettingsPage() {
               { value: "light", label: "Light", icon: Sun },
               { value: "system", label: "System", icon: Monitor },
               { value: "dark", label: "Dark", icon: Moon },
-            ].map(({ value, label, icon: Icon }) => (
-              <button
-                key={value}
-                onClick={() => setTheme(value)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "5px",
-                  padding: "6px 12px",
-                  borderRadius: "var(--radius-sm)",
-                  border: "none",
-                  fontSize: "0.8125rem",
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  transition: "all 150ms ease",
-                  background: theme === value ? "var(--color-surface)" : "transparent",
-                  color: theme === value ? "var(--color-text)" : "var(--color-text-muted)",
-                  boxShadow: theme === value ? "var(--shadow-xs)" : "none",
-                  fontFamily: "var(--font-ui)",
-                }}
-              >
-                <Icon style={{ width: "13px", height: "13px", color: theme === value ? "var(--color-primary)" : "inherit" }} />
-                {label}
-              </button>
-            ))}
+            ].map(({ value, label, icon: Icon }) => {
+              const isActive = mounted && theme === value
+              return (
+                <button
+                  key={value}
+                  onClick={() => setTheme(value)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    padding: "6px 12px",
+                    borderRadius: "var(--radius-sm)",
+                    border: "none",
+                    fontSize: "0.8125rem",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    transition: "all 150ms ease",
+                    background: isActive ? "var(--color-surface)" : "transparent",
+                    color: isActive ? "var(--color-text)" : "var(--color-text-muted)",
+                    boxShadow: isActive ? "var(--shadow-xs)" : "none",
+                    fontFamily: "var(--font-ui)",
+                  }}
+                >
+                  <Icon style={{ width: "13px", height: "13px", color: isActive ? "var(--color-primary)" : "inherit" }} />
+                  {label}
+                </button>
+              )
+            })}
           </div>
         </div>
 
