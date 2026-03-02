@@ -106,8 +106,24 @@ def _parse_whitelist(stamps: List[str]) -> Set[datetime]:
 
 
 def _is_mp4_readable(path: Path) -> bool:
-    """Quick check that an MP4 file has a valid moov atom and can be opened."""
+    """
+    Check that an MP4 file has a valid moov atom and can be opened.
+    
+    Filters out:
+    - Files smaller than 1KB (incomplete)
+    - Files modified in the last 2 seconds (still being written)
+    - Files that fail to open with cv2.VideoCapture
+    """
     try:
+        # Skip files that are too small or too recent
+        stat = path.stat()
+        if stat.st_size < 1024:  # Less than 1KB
+            return False
+        age_sec = (datetime.now().timestamp() - stat.st_mtime)
+        if age_sec < 2.0:  # Modified less than 2 seconds ago
+            logger.debug("Skipping very recent file (age=%.1fs): %s", age_sec, path.name)
+            return False
+            
         cap = cv2.VideoCapture(str(path))
         if not cap.isOpened():
             return False
@@ -292,6 +308,7 @@ def _build_clip_from_snapshots_fallback(
         cmd = [
             ffmpeg_exe,
             "-y",  # overwrite
+            "-nostdin",  # don't wait for user input on errors
             "-i", str(out_path),  # input
             "-c:v", "libx264",  # H.264 codec
             "-preset", "fast",  # encoding speed
@@ -408,6 +425,7 @@ def build_clip_from_snapshots(
         
         cmd = [
             ffmpeg_exe, "-y",
+            "-nostdin",  # Don't wait for user input on errors
             "-ss", str(offset_sec),
             "-i", str(p),
             "-t", str(duration_sec),
@@ -440,6 +458,7 @@ def build_clip_from_snapshots(
         
         cmd = [
             ffmpeg_exe, "-y",
+            "-nostdin",  # Don't wait for user input on errors
             "-f", "concat", "-safe", "0",
             "-i", str(concat_file),
             "-ss", str(offset_sec),
