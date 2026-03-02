@@ -153,8 +153,18 @@ def _compose_caption_from_detections(camera_id: int, frame_ts: Optional[str], to
                     continue
                 if name == "person":
                     persons += 1
-                    col = str(o.get("color") or "").strip()
-                    if col and col.lower() != "unknown":
+                    # Gather all color names from new multi-color fields + legacy
+                    all_cols: List[str] = []
+                    for key in ("upper_body_colors", "lower_body_colors", "colors"):
+                        for c in (o.get(key) or []):
+                            c_str = str(c).strip()
+                            if c_str and c_str.lower() != "unknown":
+                                all_cols.append(c_str)
+                    if not all_cols:
+                        col = str(o.get("color") or "").strip()
+                        if col and col.lower() != "unknown":
+                            all_cols.append(col)
+                    for col in all_cols:
                         person_colors[col] = person_colors.get(col, 0) + 1
                 else:
                     obj_counts[name] = obj_counts.get(name, 0) + 1

@@ -5,6 +5,7 @@ import datetime
 import time
 from pathlib import Path
 from ultralytics import YOLO
+from sklearn.cluster import MiniBatchKMeans
 Core = None  # lazy import in ensure_openvino_loaded
 import math
 import os
@@ -120,7 +121,7 @@ _ZONES_CACHE_TTL_SEC = 60.0
 # =========================================
 # LOAD MODELS
 # =========================================
-logger.info("Loading YOLOv11m-seg model...")
+logger.info("Loading YOLO26l-seg model...")
 model = YOLO(MODEL_PATH)
 logger.info("YOLO model loaded successfully.")
 
@@ -278,40 +279,138 @@ def closest_color(rgb_color):
     return min(CSS3_LAB_COLORS, key=lambda name: delta_e_ciede2000(lab_color, CSS3_LAB_COLORS[name]))
 
 
-def get_dominant_color(roi, mask, k=NUM_CLUSTERS):
-    """Extract dominant color from masked region using histogram on quantized LAB (fast, no K-Means)."""
-    if roi is None or roi.size == 0 or mask is None or mask.size == 0:
-        return (0, 0, 0)
+def _extract_masked_lab_pixels(roi_bgr: np.ndarray, mask: np.ndarray) -> Optional[np.ndarray]:
+    """
+    Extract LAB pixels from only the segmented (masked) region of an ROI.
+    Applies a hard binary threshold (>0.5) on the mask to exclude soft boundary pixels.
+    Returns Nx3 LAB array or None if insufficient pixels.
+    """
+    if roi_bgr is None or roi_bgr.size == 0 or mask is None or mask.size == 0:
+        return None
+    # Hard binary threshold — exclude soft boundary pixels that leak background
+    if mask.dtype in (np.float32, np.float64):
+        mask_bin = (mask > 0.5).astype(np.uint8)
+    else:
+        mask_bin = (mask > 127).astype(np.uint8) if mask.max() > 1 else mask.astype(np.uint8)
+    # Ensure mask dimensions match ROI
+    if mask_bin.shape[:2] != roi_bgr.shape[:2]:
+        mask_bin = cv2.resize(mask_bin, (roi_bgr.shape[1], roi_bgr.shape[0]), interpolation=cv2.INTER_NEAREST)
+    lab_roi = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2LAB)
+    pixels = lab_roi[mask_bin > 0]
+    if pixels.shape[0] < 10:
+        return None
+    return pixels
+
+
+def _kmeans_dominant_colors(lab_pixels: np.ndarray, k: int = 3) -> List[Tuple[str, Tuple[int, int, int]]]:
+    """
+    Run MiniBatchKMeans on LAB pixels and return top-k named colors sorted by cluster size.
+    Each entry is (color_name, (R, G, B)).
+    """
+    # Clamp k to available pixel count
+    n_pixels = lab_pixels.shape[0]
+    actual_k = min(k, max(1, n_pixels // 10))
+    actual_k = max(1, actual_k)
+
+    km = MiniBatchKMeans(n_clusters=actual_k, n_init=1, max_iter=20, batch_size=min(512, n_pixels), random_state=42)
+    km.fit(lab_pixels.astype(np.float32))
+
+    # Sort clusters by size (largest first)
+    counts = np.bincount(km.labels_, minlength=actual_k)
+    sorted_indices = np.argsort(-counts)
+
+    results: List[Tuple[str, Tuple[int, int, int]]] = []
+    for idx in sorted_indices[:k]:
+        center_lab = km.cluster_centers_[idx]
+        lab_arr = np.array([[[int(center_lab[0]), int(center_lab[1]), int(center_lab[2])]]], dtype=np.uint8)
+        rgb = cv2.cvtColor(lab_arr, cv2.COLOR_LAB2RGB)[0][0]
+        rgb_tuple = (int(rgb[0]), int(rgb[1]), int(rgb[2]))
+        name = closest_color(rgb_tuple)
+        results.append((name, rgb_tuple))
+    return results
+
+
+def get_top_colors(roi_bgr: np.ndarray, mask: np.ndarray, k: int = 3) -> List[str]:
+    """
+    Extract top-k dominant named colors from the segmented (masked) region only.
+    Background pixels within the bounding box are excluded via the segmentation mask.
+    Returns list of color names sorted by dominance, e.g. ["Red", "White", "Black"].
+    Falls back to single histogram color if k-means fails.
+    """
     try:
-        lab_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2LAB)
-        mask_bool = mask.astype(bool) if mask.dtype != bool else (mask > 0.5)
-        masked_pixels = lab_roi[mask_bool]
-        n_pixels = masked_pixels.shape[0]
-        if n_pixels == 0:
-            return (0, 0, 0)
-        if n_pixels < 10:
-            mean_lab = np.mean(masked_pixels, axis=0)
-            lab_arr = np.array([[mean_lab]], dtype=np.uint8)
-            rgb_color = cv2.cvtColor(lab_arr, cv2.COLOR_LAB2RGB)[0][0]
-            return tuple(map(int, rgb_color))
-        # Quantize LAB into 8x8x8 bins; L in [0,255], A/B in [0,255] with 128 neutral
-        L, A, B = masked_pixels[:, 0], masked_pixels[:, 1], masked_pixels[:, 2]
-        qL = np.minimum(L // 32, 7)
-        # OpenCV LAB stores A/B in [0,255] with 128 as neutral — no +128 offset needed
-        qA = np.minimum(A.astype(np.int32) // 32, 7)
-        qB = np.minimum(B.astype(np.int32) // 32, 7)
-        flat_idx = (qL.astype(np.int32) * 64 + qA * 8 + qB).astype(np.int32)
-        hist = np.bincount(flat_idx, minlength=512)
-        dominant_bin = int(np.argmax(hist))
-        # Bin center back to LAB (uint8 for OpenCV: L 0-255, A/B 0-255)
-        Lc = min(255, dominant_bin // 64 * 32 + 16)
-        Ac = (dominant_bin // 8 % 8) * 32 + 16
-        Bc = (dominant_bin % 8) * 32 + 16
-        lab_arr = np.array([[[Lc, Ac, Bc]]], dtype=np.uint8)
-        rgb_color = cv2.cvtColor(lab_arr, cv2.COLOR_LAB2RGB)[0][0]
-        return tuple(map(int, rgb_color))
+        pixels = _extract_masked_lab_pixels(roi_bgr, mask)
+        if pixels is None:
+            # Fallback: mean color from whatever pixels exist
+            if roi_bgr is not None and roi_bgr.size > 0:
+                mean_bgr = cv2.mean(roi_bgr)[:3]
+                rgb_fb = (int(mean_bgr[2]), int(mean_bgr[1]), int(mean_bgr[0]))
+                return [closest_color(rgb_fb)]
+            return ["Unknown"]
+        results = _kmeans_dominant_colors(pixels, k=k)
+        if not results:
+            return ["Unknown"]
+        # Deduplicate names while preserving order
+        seen = set()
+        names: List[str] = []
+        for name, _ in results:
+            if name not in seen:
+                seen.add(name)
+                names.append(name)
+        return names if names else ["Unknown"]
     except Exception as e:
-        logger.warning("Histogram color extraction failed: {}", e)
+        logger.warning("get_top_colors failed: {}", e)
+        return ["Unknown"]
+
+
+def get_person_body_colors(roi_bgr: np.ndarray, mask: np.ndarray) -> Dict[str, Any]:
+    """
+    Split a person ROI into upper body (~top 40%) and lower body (~bottom 60%)
+    and extract top-3 dominant colors from ONLY the segmented pixels in each region.
+    Background pixels are fully excluded via the segmentation mask.
+
+    Returns:
+        {
+            "color": "Red",                          # primary overall (backward compat)
+            "colors": ["Red", "White", "Blue"],      # top-3 overall
+            "upper_body_colors": ["Red", "White"],   # top-3 upper body
+            "lower_body_colors": ["Blue", "Black"],  # top-3 lower body
+        }
+    """
+    h = roi_bgr.shape[0]
+    split_y = int(h * 0.40)  # head+torso vs legs
+
+    # Overall colors from full segmented region
+    overall = get_top_colors(roi_bgr, mask, k=3)
+
+    # Upper body (top 40%)
+    upper_roi = roi_bgr[:split_y, :]
+    upper_mask = mask[:split_y, :] if mask.shape[0] >= split_y else mask
+    upper_colors = get_top_colors(upper_roi, upper_mask, k=3)
+
+    # Lower body (bottom 60%)
+    lower_roi = roi_bgr[split_y:, :]
+    lower_mask = mask[split_y:, :] if mask.shape[0] > split_y else mask
+    lower_colors = get_top_colors(lower_roi, lower_mask, k=3)
+
+    return {
+        "color": overall[0] if overall else "Unknown",
+        "colors": overall,
+        "upper_body_colors": upper_colors,
+        "lower_body_colors": lower_colors,
+    }
+
+
+def get_dominant_color(roi, mask, k=NUM_CLUSTERS):
+    """Legacy wrapper — returns primary (R,G,B) via new k-means pipeline for backward compatibility."""
+    try:
+        pixels = _extract_masked_lab_pixels(roi, mask)
+        if pixels is None:
+            return (0, 0, 0)
+        results = _kmeans_dominant_colors(pixels, k=1)
+        if results:
+            return results[0][1]  # (R, G, B)
+        return (0, 0, 0)
+    except Exception:
         return (0, 0, 0)
 
 # =========================================
@@ -924,8 +1023,8 @@ def process_live_stream(
             person_attr_texts: List[str] = []
             person_meta: List[Dict[str, object]] = []
             track_bulk_ops: List[Any] = []  # Batch track updates for bulk_write
-            # Defer batch OpenVINO: (roi, mask_roi, color_name, track_id, obj_index) for each person with width >= MIN
-            person_attr_defer: List[Tuple[np.ndarray, np.ndarray, str, int, int]] = []
+            # Defer batch OpenVINO: (masked_roi, mask_roi, color_info, track_id, obj_index) for each person with width >= MIN
+            person_attr_defer: List[Tuple[np.ndarray, np.ndarray, Dict[str, Any], int, int]] = []
 
             for r in results:
                 if r.masks is None or r.boxes is None:
@@ -1017,10 +1116,21 @@ def process_live_stream(
                     else:
                         mask_src = np.zeros((frame.shape[0], frame.shape[1]), dtype=np.uint8)
                     mask_full = cv2.resize(mask_src, (frame.shape[1], frame.shape[0]), interpolation=cv2.INTER_NEAREST)
+                    # Hard binary threshold — exclude soft boundary pixels that leak background
+                    if mask_full.dtype in (np.float32, np.float64):
+                        mask_full = (mask_full > 0.5).astype(np.uint8) * 255
                     mask_roi = mask_full[y1:y2, x1:x2]
+                    # Apply mask to ROI so only segmented pixels are visible (background zeroed)
+                    masked_roi = cv2.bitwise_and(roi, roi, mask=mask_roi if mask_roi.dtype == np.uint8 else (mask_roi > 0).astype(np.uint8))
                     
-                    rgb_color = get_dominant_color(roi, mask_roi)
-                    color_name = closest_color(rgb_color)
+                    # Color extraction: persons get upper/lower body split; others get top-3
+                    if obj_name == "person":
+                        color_info = get_person_body_colors(masked_roi, mask_roi)
+                        color_name = color_info["color"]
+                    else:
+                        top_colors = get_top_colors(masked_roi, mask_roi, k=3)
+                        color_name = top_colors[0] if top_colors else "Unknown"
+                        color_info = {"color": color_name, "colors": top_colors}
 
                     track_id = int(ids_arr[i]) if ids_arr is not None else -1
                     conf_val = float(conf_arr[i]) if np.ndim(conf_arr) == 1 else float(conf_arr[i][0])
@@ -1030,8 +1140,13 @@ def process_live_stream(
                         "track_id": track_id,
                         "confidence": round(conf_val, 2),
                         "color": color_name,
+                        "colors": color_info.get("colors", [color_name]),
                         "bbox": [int(x1), int(y1), int(x2), int(y2)],
                     }
+                    # Add upper/lower body colors for persons
+                    if obj_name == "person":
+                        obj["upper_body_colors"] = color_info.get("upper_body_colors", [])
+                        obj["lower_body_colors"] = color_info.get("lower_body_colors", [])
 
                     # Update track history (persistent across frames)
                     if track_id is not None and int(track_id) >= 0:
@@ -1068,15 +1183,15 @@ def process_live_stream(
                         person_width = x2 - x1
                         obj_index = len(doc["objects"])
                         if person_width >= MIN_PERSON_WIDTH_PIXELS:
-                            person_attr_defer.append((roi, mask_roi, color_name, int(track_id), obj_index))
+                            person_attr_defer.append((masked_roi, mask_roi, color_info, int(track_id), obj_index))
                             obj["person_attributes"] = {}  # Filled after batch inference
                             obj["attribute_text"] = ""  # Filled after batch
                             # person_rois / person_attr_texts / person_meta added after batch below
                         else:
                             obj["person_attributes"] = {"status": "skipped_too_small"}
-                            attr_text = attr_encoder.attributes_to_text({}, color_name)
+                            attr_text = attr_encoder.attributes_to_text({}, color_name, color_info)
                             obj["attribute_text"] = attr_text
-                            person_rois.append(roi)
+                            person_rois.append(masked_roi)
                             person_attr_texts.append(attr_text)
                             person_meta.append(
                                 {
@@ -1085,6 +1200,9 @@ def process_live_stream(
                                     "track_id": int(track_id),
                                     "timestamp": timestamp,
                                     "color": color_name,
+                                    "colors": color_info.get("colors", [color_name]),
+                                    "upper_body_colors": color_info.get("upper_body_colors", []),
+                                    "lower_body_colors": color_info.get("lower_body_colors", []),
                                     "attribute_text": attr_text,
                                 }
                             )
@@ -1096,14 +1214,15 @@ def process_live_stream(
                 rois_attr = [t[0] for t in person_attr_defer]
                 masks_attr = [t[1] for t in person_attr_defer]
                 batch_attrs = get_person_attributes_batch(rois_attr, masks_attr)
-                for j, (roi, _mask, color_name, track_id, obj_idx) in enumerate(person_attr_defer):
+                for j, (mroi, _mask, c_info, track_id, obj_idx) in enumerate(person_attr_defer):
                     if j < len(batch_attrs):
                         doc["objects"][obj_idx]["person_attributes"] = batch_attrs[j]
+                    c_name = c_info.get("color", "Unknown")
                     attr_text = attr_encoder.attributes_to_text(
-                        doc["objects"][obj_idx].get("person_attributes") or {}, color_name
+                        doc["objects"][obj_idx].get("person_attributes") or {}, c_name, c_info
                     )
                     doc["objects"][obj_idx]["attribute_text"] = attr_text
-                    person_rois.append(roi)
+                    person_rois.append(mroi)
                     person_attr_texts.append(attr_text)
                     person_meta.append(
                         {
@@ -1111,7 +1230,10 @@ def process_live_stream(
                             "camera_id": int(camera_id),
                             "track_id": track_id,
                             "timestamp": timestamp,
-                            "color": color_name,
+                            "color": c_name,
+                            "colors": c_info.get("colors", [c_name]),
+                            "upper_body_colors": c_info.get("upper_body_colors", []),
+                            "lower_body_colors": c_info.get("lower_body_colors", []),
                             "attribute_text": attr_text,
                         }
                     )
@@ -1353,7 +1475,7 @@ def process_video_file(
             person_attr_texts: List[str] = []
             person_meta: List[Dict[str, object]] = []
             track_bulk_ops: List[Any] = []
-            person_attr_defer: List[Tuple[np.ndarray, np.ndarray, str, int, int]] = []
+            person_attr_defer: List[Tuple[np.ndarray, np.ndarray, Dict[str, Any], int, int]] = []
 
             for r in results:
                 if r.masks is None or r.boxes is None:
@@ -1391,10 +1513,21 @@ def process_video_file(
                     else:
                         mask_src = np.zeros((frame.shape[0], frame.shape[1]), dtype=np.uint8)
                     mask_full = cv2.resize(mask_src, (frame.shape[1], frame.shape[0]), interpolation=cv2.INTER_NEAREST)
+                    # Hard binary threshold — exclude soft boundary pixels that leak background
+                    if mask_full.dtype in (np.float32, np.float64):
+                        mask_full = (mask_full > 0.5).astype(np.uint8) * 255
                     mask_roi = mask_full[y1:y2, x1:x2]
+                    # Apply mask to ROI so only segmented pixels are visible (background zeroed)
+                    masked_roi = cv2.bitwise_and(roi, roi, mask=mask_roi if mask_roi.dtype == np.uint8 else (mask_roi > 0).astype(np.uint8))
 
-                    rgb_color = get_dominant_color(roi, mask_roi)
-                    color_name = closest_color(rgb_color)
+                    # Color extraction: persons get upper/lower body split; others get top-3
+                    if obj_name == "person":
+                        color_info = get_person_body_colors(masked_roi, mask_roi)
+                        color_name = color_info["color"]
+                    else:
+                        top_colors = get_top_colors(masked_roi, mask_roi, k=3)
+                        color_name = top_colors[0] if top_colors else "Unknown"
+                        color_info = {"color": color_name, "colors": top_colors}
 
                     track_id = int(ids_arr[i]) if ids_arr is not None else -1
                     conf_val = float(conf_arr[i]) if np.ndim(conf_arr) == 1 else float(conf_arr[i][0])
@@ -1404,8 +1537,13 @@ def process_video_file(
                         "track_id": track_id,
                         "confidence": round(conf_val, 2),
                         "color": color_name,
+                        "colors": color_info.get("colors", [color_name]),
                         "bbox": [int(x1), int(y1), int(x2), int(y2)],
                     }
+                    # Add upper/lower body colors for persons
+                    if obj_name == "person":
+                        obj["upper_body_colors"] = color_info.get("upper_body_colors", [])
+                        obj["lower_body_colors"] = color_info.get("lower_body_colors", [])
 
                     # Track history (batch bulk write below)
                     if track_id >= 0:
@@ -1425,14 +1563,14 @@ def process_video_file(
                     if obj_name == "person":
                         obj_index = len(doc["objects"])
                         if (x2 - x1) >= MIN_PERSON_WIDTH_PIXELS:
-                            person_attr_defer.append((roi, mask_roi, color_name, int(track_id), obj_index))
+                            person_attr_defer.append((masked_roi, mask_roi, color_info, int(track_id), obj_index))
                             obj["person_attributes"] = {}   # filled after batch
                             obj["attribute_text"] = ""      # filled after batch
                         else:
                             obj["person_attributes"] = {"status": "skipped_too_small"}
-                            attr_text = attr_encoder.attributes_to_text({}, color_name)
+                            attr_text = attr_encoder.attributes_to_text({}, color_name, color_info)
                             obj["attribute_text"] = attr_text
-                            person_rois.append(roi)
+                            person_rois.append(masked_roi)
                             person_attr_texts.append(attr_text)
                             person_meta.append({
                                 "object_index": obj_index,
@@ -1440,6 +1578,9 @@ def process_video_file(
                                 "track_id": int(track_id),
                                 "timestamp": timestamp,
                                 "color": color_name,
+                                "colors": color_info.get("colors", [color_name]),
+                                "upper_body_colors": color_info.get("upper_body_colors", []),
+                                "lower_body_colors": color_info.get("lower_body_colors", []),
                                 "attribute_text": attr_text,
                             })
 
@@ -1450,21 +1591,25 @@ def process_video_file(
                 rois_attr = [t[0] for t in person_attr_defer]
                 masks_attr = [t[1] for t in person_attr_defer]
                 batch_attrs = get_person_attributes_batch(rois_attr, masks_attr)
-                for j, (roi, _mask, color_name, track_id, obj_idx) in enumerate(person_attr_defer):
+                for j, (mroi, _mask, c_info, track_id, obj_idx) in enumerate(person_attr_defer):
                     if j < len(batch_attrs):
                         doc["objects"][obj_idx]["person_attributes"] = batch_attrs[j]
+                    c_name = c_info.get("color", "Unknown")
                     attr_text = attr_encoder.attributes_to_text(
-                        doc["objects"][obj_idx].get("person_attributes") or {}, color_name
+                        doc["objects"][obj_idx].get("person_attributes") or {}, c_name, c_info
                     )
                     doc["objects"][obj_idx]["attribute_text"] = attr_text
-                    person_rois.append(roi)
+                    person_rois.append(mroi)
                     person_attr_texts.append(attr_text)
                     person_meta.append({
                         "object_index": obj_idx,
                         "camera_id": int(camera_id),
                         "track_id": track_id,
                         "timestamp": timestamp,
-                        "color": color_name,
+                        "color": c_name,
+                        "colors": c_info.get("colors", [c_name]),
+                        "upper_body_colors": c_info.get("upper_body_colors", []),
+                        "lower_body_colors": c_info.get("lower_body_colors", []),
                         "attribute_text": attr_text,
                     })
 

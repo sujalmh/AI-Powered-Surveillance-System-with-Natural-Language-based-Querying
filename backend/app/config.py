@@ -34,7 +34,7 @@ class Settings:
         self.LOGS_DIR: Path = self.STORAGE_ROOT / "logs"
 
         # Models (used by detection service; keep here for centralized config)
-        self.MODEL_PATH: str = os.getenv("MODEL_PATH", "yolo11m-seg.pt")
+        self.MODEL_PATH: str = os.getenv("MODEL_PATH", "yolo26l-seg.pt")
         self.OPENVINO_MODEL_XML: str = os.getenv(
             "OPENVINO_MODEL_XML",
             "intel/person-attributes-recognition-crossroad-0238/FP32/person-attributes-recognition-crossroad-0238.xml",

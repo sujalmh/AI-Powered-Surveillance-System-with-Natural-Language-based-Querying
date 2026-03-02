@@ -123,13 +123,26 @@ class HybridSearchEngine:
             meta = c.get("meta", {})
 
             # Color filter at object level (case-insensitive)
+            # Check against the top-3 colors array, with fallback to legacy single color
             if parsed_colors_lower:
                 try:
                     obj_idx = int(meta.get("object_index", -1))
                     if 0 <= obj_idx < len(doc.get("objects", [])):
                         ob = doc["objects"][obj_idx]
-                        col = (ob.get("color") or "").strip().lower()
-                        if col and col not in parsed_colors_lower:
+                        # Gather all color names: top-3 array + upper/lower body + legacy single
+                        all_colors = set()
+                        for c in (ob.get("colors") or []):
+                            all_colors.add(str(c).strip().lower())
+                        for c in (ob.get("upper_body_colors") or []):
+                            all_colors.add(str(c).strip().lower())
+                        for c in (ob.get("lower_body_colors") or []):
+                            all_colors.add(str(c).strip().lower())
+                        legacy = (ob.get("color") or "").strip().lower()
+                        if legacy:
+                            all_colors.add(legacy)
+                        all_colors.discard("")
+                        all_colors.discard("unknown")
+                        if all_colors and not all_colors.intersection(parsed_colors_lower):
                             continue
                 except Exception:
                     pass
