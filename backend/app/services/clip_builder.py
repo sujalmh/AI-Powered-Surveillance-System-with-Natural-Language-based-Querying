@@ -26,10 +26,51 @@ class BuiltClip:
 
 _TS_PATTERNS = [
     # Example: 2025-10-23T20-56-25-468181.jpg (from code that replaces : and . with -)
+    # Also handles legacy filenames with +00-00 or Z suffix after microseconds
     re.compile(r"(?P<y>\d{4})-(?P<m>\d{2})-(?P<d>\d{2})T(?P<H>\d{2})-(?P<M>\d{2})-(?P<S>\d{2})(?:-(?P<us>\d+))?"),
     # Fallback: plain ISO-like without changes: 2025-10-23T20:56:25(.468181)?
     re.compile(r"(?P<y>\d{4})-(?P<m>\d{2})-(?P<d>\d{2})T(?P<H>\d{2}):(?P<M>\d{2}):(?P<S>\d{2})(?:\.(?P<us>\d+))?"),
 ]
+
+
+def _probe_video_duration(path: Path) -> float:
+    """Return the video file's internal duration in seconds, or 0 on failure."""
+    try:
+        cap = cv2.VideoCapture(str(path))
+        if not cap.isOpened():
+            return 0.0
+        frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        cap.release()
+        if fps > 0 and frame_count > 0:
+            return frame_count / fps
+    except Exception:
+        pass
+    return 0.0
+
+
+def _wall_to_video_offset(
+    wall_offset_sec: float,
+    wall_duration_sec: float,
+    video_duration_sec: float,
+) -> float:
+    """
+    Convert a wall-clock offset (seconds from chunk start) to a video-file
+    offset, accounting for FPS mismatch between recording header and actual
+    frame delivery rate.
+
+    If the VideoWriter was opened at 25fps but frames arrived at ~20fps,
+    the video's internal timeline is shorter than wall-clock time.  Without
+    scaling, FFmpeg would seek ~22% past the correct position.
+    """
+    if wall_duration_sec > 1.0 and video_duration_sec > 1.0:
+        scaling = video_duration_sec / wall_duration_sec
+        # Sanity: only apply scaling if ratio is within reasonable bounds
+        # (0.3x – 3.0x).  Outside that range, one of the durations is
+        # probably wrong (e.g. corrupt file).
+        if 0.3 <= scaling <= 3.0:
+            return max(0.0, wall_offset_sec * scaling)
+    return max(0.0, wall_offset_sec)
 
 
 def _parse_ts_from_filename(name: str) -> Optional[datetime]:
@@ -149,6 +190,14 @@ def _collect_recordings(
     for p in cam_dir.glob("*.mp4"):
         # Skip temporary files from FFmpeg background conversion
         if p.stem.endswith("_h264") or p.stem.endswith("._converting"):
+            # Clean up stale converting files (<1KB = failed conversion)
+            if p.stem.endswith("._converting"):
+                try:
+                    if p.stat().st_size < 1024:
+                        p.unlink(missing_ok=True)
+                        logger.debug("Cleaned up failed conversion file: %s", p.name)
+                except Exception:
+                    pass
             continue
         ts = _parse_ts_from_filename(p.name)
         if ts is None:
@@ -418,16 +467,32 @@ def build_clip_from_snapshots(
     import subprocess
     
     if len(items) == 1:
-        # Single file
+        # Single file — apply FPS scaling to correct for mismatch between
+        # the VideoWriter's header FPS and actual frame delivery rate.
         chunk_start, chunk_end, p = items[0]
-        offset_sec = max(0.0, (start_dt - chunk_start).total_seconds())
-        duration_sec = (end_dt - start_dt).total_seconds()
-        
+        wall_offset = max(0.0, (start_dt - chunk_start).total_seconds())
+        wall_duration = (end_dt - start_dt).total_seconds()
+        wall_chunk_dur = (chunk_end - chunk_start).total_seconds()
+        vid_dur = _probe_video_duration(p)
+
+        offset_sec = _wall_to_video_offset(wall_offset, wall_chunk_dur, vid_dur)
+        duration_sec = _wall_to_video_offset(wall_duration, wall_chunk_dur, vid_dur) if vid_dur > 0 else wall_duration
+
+        if vid_dur > 0 and wall_chunk_dur > 1.0:
+            logger.debug(
+                "Clip FPS scaling: wall_chunk=%.1fs vid=%.1fs ratio=%.3f  "
+                "wall_offset=%.2fs→vid_offset=%.2fs wall_dur=%.2fs→vid_dur=%.2fs",
+                wall_chunk_dur, vid_dur, vid_dur / wall_chunk_dur,
+                wall_offset, offset_sec, wall_duration, duration_sec,
+            )
+
+        # -ss AFTER -i for frame-accurate seeking (important for mp4v recordings
+        # whose keyframes may be sparse).
         cmd = [
             ffmpeg_exe, "-y",
             "-nostdin",  # Don't wait for user input on errors
-            "-ss", str(offset_sec),
             "-i", str(p),
+            "-ss", str(offset_sec),
             "-t", str(duration_sec),
             "-c:v", "libx264", "-preset", "fast", "-crf", "23",
             "-pix_fmt", "yuv420p", "-movflags", "+faststart",
@@ -445,7 +510,7 @@ def build_clip_from_snapshots(
             out_path.unlink(missing_ok=True)
             return _build_clip_from_snapshots_fallback(camera_id, start_iso, end_iso, fps, allowed_timestamps)
     else:
-        # Merge via concat demuxer
+        # Merge via concat demuxer — apply aggregate FPS scaling
         concat_file = out_dir / f"{base_name}_concat.txt"
         with concat_file.open("w") as f:
             for _, _, p in items:
@@ -453,9 +518,23 @@ def build_clip_from_snapshots(
                 f.write(f"file '{p.resolve().as_posix()}'\n")
                 
         overall_start = items[0][0]
-        offset_sec = max(0.0, (start_dt - overall_start).total_seconds())
-        duration_sec = (end_dt - start_dt).total_seconds()
-        
+        overall_end = items[-1][1]
+        wall_chunk_dur = (overall_end - overall_start).total_seconds()
+        total_vid_dur = sum(_probe_video_duration(p) for _, _, p in items)
+
+        wall_offset = max(0.0, (start_dt - overall_start).total_seconds())
+        wall_duration = (end_dt - start_dt).total_seconds()
+
+        offset_sec = _wall_to_video_offset(wall_offset, wall_chunk_dur, total_vid_dur)
+        duration_sec = _wall_to_video_offset(wall_duration, wall_chunk_dur, total_vid_dur) if total_vid_dur > 0 else wall_duration
+
+        if total_vid_dur > 0 and wall_chunk_dur > 1.0:
+            logger.debug(
+                "Clip concat FPS scaling: wall_total=%.1fs vid_total=%.1fs ratio=%.3f",
+                wall_chunk_dur, total_vid_dur, total_vid_dur / wall_chunk_dur,
+            )
+
+        # -ss AFTER -i for frame-accurate seeking
         cmd = [
             ffmpeg_exe, "-y",
             "-nostdin",  # Don't wait for user input on errors
