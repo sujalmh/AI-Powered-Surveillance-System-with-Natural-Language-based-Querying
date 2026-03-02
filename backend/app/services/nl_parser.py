@@ -27,7 +27,7 @@ class ObjectSpec(BaseModel):
 
 
 class NLFilter(BaseModel):
-    query_type: str = Field(default="visual", description="Type of query: 'visual' (needs clips) or 'informational' (text only)")
+    query_type: str = Field(default="visual", description="Type of query: 'visual' (needs clips), 'informational' (text only), or 'conversational' (greeting/off-topic, no DB query needed)")
     camera_id: Optional[int] = Field(default=None, description="If specified, numeric camera id to filter")
     time: Optional[TimeFilter] = Field(default=None, description="Time window filter")
     objects: Optional[List[ObjectSpec]] = Field(default=None, description="Requested objects")
@@ -222,6 +222,12 @@ PROMPT_TEMPLATE = """You are an intelligent surveillance query parser. Convert t
 CRITICAL INSTRUCTIONS:
 
 1. QUERY TYPE CLASSIFICATION (MANDATORY):
+   - Set query_type = "conversational" if the query is a greeting, casual chat, or off-topic:
+     * Greetings: "hi", "hello", "hey", "good morning", "howdy"
+     * General chat: "how are you", "who are you", "what can you do", "thanks", "ok"
+     * Test messages: "test", "ping"
+     * Any message not related to surveillance, cameras, detections, alerts, or people/objects
+   
    - Set query_type = "visual" if the query is about:
      * Finding/showing objects, people, vehicles, events
      * Actions (running, walking, fighting, carrying)

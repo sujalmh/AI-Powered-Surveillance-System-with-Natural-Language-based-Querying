@@ -20,6 +20,14 @@ _ALERT_RETRIEVAL_RE = re.compile(
     r'|\balerts?\b.*\b(?:show|list|get|find|display|view)\b',
     re.IGNORECASE,
 )
+_CONVERSATIONAL_RE = re.compile(
+    r'^(?:hi+|hello+|hey+|howdy|yo+|sup|what\'?s\s+up|good\s+(?:morning|afternoon|evening|day)|'
+    r'greetings|how\s+are\s+you|how\s+r\s+u|how\s+do\s+you\s+do|nice\s+to\s+meet\s+you|'
+    r'who\s+are\s+you|what\s+(?:are|can)\s+you\s+do|what\s+is\s+this|'
+    r'can\s+you\s+help|help\s+me|thanks?(?:\s+you)?|thank\s+you|bye+|goodbye|see\s+you|'
+    r'lol+|haha+|testing|test|ping|okay|ok)[\s!?.]*$',
+    re.IGNORECASE,
+)
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -723,6 +731,19 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
             # Save user message
             save_message(req.session_id, "user", req.message, None)
 
+            # Fast path: conversational / greeting messages — skip the retrieval pipeline entirely
+            if _CONVERSATIONAL_RE.match(req.message.strip()):
+                from backend.app.services.answer_generator import AnswerGenerator
+                answer = AnswerGenerator().generate_conversational(req.message)
+                save_message(req.session_id, "assistant", answer, None)
+                return ChatSendResponse(
+                    session_id=req.session_id,
+                    parsed_filter={},
+                    results=[],
+                    answer=answer,
+                    metadata={"query_type": "conversational"},
+                )
+
             # Parse NL with LLM (structured) if no override provided; fallback to regex parser
             if req.filter_override is not None:
                 parsed = req.filter_override
@@ -734,6 +755,19 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
                     logger.warning("LLM parsing failed: {}. Falling back to regex parser.", e)
                     parsed = parse_simple_nl_to_filter(req.message)
                     logger.opt(exception=True).info("Regex parsed query: {}", parsed)
+
+            # If LLM (or regex fallback) classified this as a conversational query, handle it here
+            if parsed.get("query_type") == "conversational":
+                from backend.app.services.answer_generator import AnswerGenerator
+                answer = AnswerGenerator().generate_conversational(req.message)
+                save_message(req.session_id, "assistant", answer, None)
+                return ChatSendResponse(
+                    session_id=req.session_id,
+                    parsed_filter=parsed,
+                    results=[],
+                    answer=answer,
+                    metadata={"query_type": "conversational"},
+                )
 
             # If LLM suggested a relative window and absolute timestamp not provided, expand to [now-last_minutes, now]
             # Use UTC to keep timestamps consistent across services
