@@ -142,10 +142,20 @@ def save_message(session_id: str, role: str, content: str, payload: Optional[Dic
     )
 
 
+_answer_generator = None  # lazy singleton – avoids re-initializing heavy resources on every call
+
+
+def _get_answer_generator():
+    global _answer_generator
+    if _answer_generator is None:
+        from backend.app.services.answer_generator import AnswerGenerator
+        _answer_generator = AnswerGenerator()
+    return _answer_generator
+
+
 def handle_conversational_response(session_id: str, message: str, parsed_filter: Optional[Dict[str, Any]] = None) -> "ChatSendResponse":
     """Generate, persist, and return a conversational reply without touching the retrieval pipeline."""
-    from backend.app.services.answer_generator import AnswerGenerator
-    answer = AnswerGenerator().generate_conversational(message)
+    answer = _get_answer_generator().generate_conversational(message)
     save_message(session_id, "assistant", answer, None)
     return ChatSendResponse(
         session_id=session_id,
