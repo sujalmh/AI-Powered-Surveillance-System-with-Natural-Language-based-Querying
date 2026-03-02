@@ -719,13 +719,15 @@ def merge_results(
                     )
             elif requested_obj:
                 # No captions available and user asked for a specific object –
-                # semantic similarity alone is unreliable, demote heavily
+                # semantic similarity alone is unreliable, demote heavily.
+                # Raise threshold to SEM_RAW_THRESH_HIGH (0.50) to avoid
+                # showing wrong-object clips when captions are missing.
                 raw_sem = result.get("score_raw_semantic", 0.0)
-                if raw_sem < SEM_RAW_THRESH_MED:
+                if raw_sem < SEM_RAW_THRESH_HIGH:
                     keys_to_drop.append(_key)
                     logger.debug(
-                        "Filtered semantic result (no caption, low score %.3f): %s",
-                        raw_sem, result.get("clip_path", _key),
+                        "Filtered semantic result (no caption, low score %.3f < %.3f): %s",
+                        raw_sem, SEM_RAW_THRESH_HIGH, result.get("clip_path", _key),
                     )
         for k in keys_to_drop:
             del results_map[k]

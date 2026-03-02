@@ -220,7 +220,7 @@ def parse_simple_nl_to_filter(nl: str) -> Dict[str, Any]:
 
     # object names guess
     object_name = None
-    if re.search(r"\b(person|people)\b", txt):
+    if re.search(r"\b(person|people|persons)\b", txt):
         object_name = "person"
     elif re.search(r"\b(car|cars|vehicle|vehicles)\b", txt):
         object_name = "car"  # adjust as per your YOLO class names
@@ -416,6 +416,35 @@ def parse_simple_nl_to_filter(nl: str) -> Dict[str, Any]:
 
     if ask_color:
         f["__ask_color"] = True
+
+    # Build a concise CLIP-optimized embedding text for vector search.
+    # This is critical: CLIP works best with short visual descriptions.
+    _obj = f.get("objects.object_name")
+    _col = f.get("objects.color")
+    _act = f.get("action")
+    if _col and _act and _obj:
+        f["__embedding_text"] = f"{_obj} wearing {str(_col).lower()} clothing {_act}"
+    elif _col and _obj:
+        f["__embedding_text"] = f"{_obj} wearing {str(_col).lower()} clothing"
+    elif _act and _obj:
+        f["__embedding_text"] = f"{_obj} {_act}"
+    elif _obj:
+        _cc = f.get("count_constraint")
+        if _cc:
+            _gt = _cc.get("gt", 0)
+            _gte = _cc.get("gte", 0)
+            if _gt > 1 or _gte > 1:
+                f["__embedding_text"] = f"multiple {_obj}s"
+            elif _gt == 1 or _gte == 2:
+                f["__embedding_text"] = f"two or more {_obj}s"
+            else:
+                f["__embedding_text"] = _obj
+        else:
+            f["__embedding_text"] = _obj
+    elif _act:
+        f["__embedding_text"] = f"person {_act}"
+    else:
+        f["__embedding_text"] = nl
 
     # Run query expansion so downstream recall-improvement works even in
     # regex fallback mode (was previously only done by the LLM path).

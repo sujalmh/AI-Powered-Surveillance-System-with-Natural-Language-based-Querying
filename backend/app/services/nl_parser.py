@@ -459,19 +459,41 @@ def parse_nl_with_llm(nl: str) -> Dict[str, Any]:
     semantic_query = result.semantic_query
     f["__semantic_query"] = semantic_query
     
-    # Legacy fields for backwards compatibility
-    # Also build a more descriptive semantic query for CLIP when color+object are present
-    obj = f.get("objects.object_name") or "person"
+    # Build a concise, CLIP-optimized embedding text for vector search.
+    # CLIP works best with short visual descriptions (e.g. "car", "person
+    # running", "person wearing red clothing") rather than verbose sentences
+    # like "video footage showing more than one car detected in the scene".
+    obj = f.get("objects.object_name") or ""
     col = f.get("objects.color")
     action = f.get("action")
-    if col and action:
+    if col and action and obj:
         f["__embedding_text"] = f"{obj} wearing {str(col).lower()} clothing {action}"
         f["__colors_norm"] = [str(col)]
-    elif col:
+    elif col and obj:
         f["__embedding_text"] = f"{obj} wearing {str(col).lower()} clothing"
         f["__colors_norm"] = [str(col)]
-    elif action:
+    elif action and obj:
         f["__embedding_text"] = f"{obj} {action}"
+        f["__colors_norm"] = []
+    elif obj:
+        # Use the object name directly — short and precise for CLIP
+        # e.g. "car", "person", "truck"
+        count_constraint = f.get("count_constraint")
+        if count_constraint:
+            # For count queries, prefix with "multiple" for better CLIP recall
+            gt_val = count_constraint.get("gt", 0)
+            gte_val = count_constraint.get("gte", 0)
+            if gt_val > 1 or gte_val > 1:
+                f["__embedding_text"] = f"multiple {obj}s"
+            elif gt_val == 1 or gte_val == 2:
+                f["__embedding_text"] = f"two or more {obj}s"
+            else:
+                f["__embedding_text"] = obj
+        else:
+            f["__embedding_text"] = obj
+        f["__colors_norm"] = []
+    elif action:
+        f["__embedding_text"] = f"person {action}"
         f["__colors_norm"] = []
     else:
         f["__embedding_text"] = semantic_query

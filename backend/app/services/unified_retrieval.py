@@ -277,14 +277,24 @@ class UnifiedRetrieval:
         has_action = parsed_filter.get("action") is not None
         min_confidence = 0.20 if has_action else 0.25
 
+        # Use the CLIP-optimized embedding text when available.
+        # __embedding_text is a short visual description (e.g. "car",
+        # "person wearing red clothing") whereas semantic_query is often
+        # verbose LLM output that CLIP struggles with.
+        clip_query = parsed_filter.get("__embedding_text") or semantic_query
+        logger.debug(
+            "Semantic CLIP query: %r (original semantic_query: %r)",
+            clip_query, semantic_query,
+        )
+
         # Query expansion
         expanded_queries: Optional[List[str]] = None
         if getattr(settings, "ENABLE_CLIP_EXPANSION", True):
-            expanded_queries = self._build_expanded_queries(semantic_query, parsed_filter)
+            expanded_queries = self._build_expanded_queries(clip_query, parsed_filter)
 
         try:
             result = search_unstructured(
-                query=semantic_query,
+                query=clip_query,
                 top_k=limit,
                 camera_id=camera_id,
                 from_iso=from_iso,
@@ -292,6 +302,7 @@ class UnifiedRetrieval:
                 min_confidence=min_confidence,
                 has_action=has_action,
                 expanded_queries=expanded_queries,
+                requested_object=parsed_filter.get("objects.object_name"),
             )
             return result.get("semantic_results", [])
         except Exception:

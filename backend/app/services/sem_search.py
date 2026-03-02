@@ -64,6 +64,40 @@ def _adaptive_min_confidence(
         return 0.10 if has_action else base
 
 
+def _object_captions_match(meta: Dict[str, Any], requested_object: str) -> bool:
+    """
+    Check whether the stored object_captions for a FAISS frame contain
+    the requested object type.  Uses substring matching with common
+    aliases so that e.g. 'car' matches 'a red car parked' or 'vehicle'.
+    """
+    if not requested_object:
+        return True  # no filter
+    caps = meta.get("object_captions") or []
+    if not caps:
+        return True  # no captions stored — don't reject (may be old index)
+
+    req = requested_object.strip().lower()
+    # Alias mapping: expand the requested object to related terms
+    _ALIASES: Dict[str, set] = {
+        "person": {"person", "people", "man", "woman", "boy", "girl",
+                   "pedestrian", "human", "child", "individual"},
+        "car": {"car", "vehicle", "automobile", "sedan", "suv", "truck",
+                "van", "bus", "motorcycle", "motorbike"},
+        "dog": {"dog", "canine", "puppy"},
+        "bicycle": {"bicycle", "bike", "cyclist", "cycling"},
+        "truck": {"truck", "lorry", "semi"},
+        "backpack": {"backpack", "bag", "rucksack"},
+    }
+    targets = _ALIASES.get(req, {req})
+
+    for cap in caps:
+        cap_low = str(cap).strip().lower()
+        for t in targets:
+            if t in cap_low:
+                return True
+    return False
+
+
 def search_unstructured(
     query: str,
     top_k: int = 50,
@@ -73,6 +107,7 @@ def search_unstructured(
     min_confidence: float = 0.15,
     has_action: bool = False,
     expanded_queries: Optional[List[str]] = None,
+    requested_object: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Semantic (vector-only) search using CLIP text embedding + FAISS.
@@ -86,6 +121,7 @@ def search_unstructured(
         to_iso: End time filter (ISO format)
         min_confidence: Minimum confidence threshold (0.0-1.0). Default 0.25 filters out low-quality matches.
         expanded_queries: Optional list of query variants for embedding fusion (first = primary).
+        requested_object: Optional object type (e.g. 'car', 'person') to post-filter FAISS hits.
     """
     if not settings.ENABLE_SEMANTIC:
         return {"mode": "unstructured", "semantic_results": []}
@@ -137,9 +173,23 @@ def search_unstructured(
             return False
         return True
 
-    # Over-fetch to compensate for post-filtering losses (camera/time filters)
-    fetch_multiplier = 2 if (camera_id is not None or from_iso or to_iso) else 1
+    # Over-fetch to compensate for post-filtering losses (camera/time/object filters)
+    fetch_multiplier = 3 if requested_object else (2 if (camera_id is not None or from_iso or to_iso) else 1)
     hits = store.vector_search(query_emb, top_k=top_k * fetch_multiplier, filter_pred=_filter_pred)
+
+    # Post-filter by requested object type using stored object_captions
+    if requested_object:
+        pre_filter_count = len(hits)
+        hits = [
+            h for h in hits
+            if _object_captions_match(h.get("meta", {}), requested_object)
+        ]
+        filtered_out = pre_filter_count - len(hits)
+        if filtered_out > 0:
+            logger.info(
+                "Object-type post-filter (%s): kept %d / %d FAISS hits",
+                requested_object, len(hits), pre_filter_count,
+            )
 
     # Group by clip to form clip-level results
     by_clip: Dict[str, Dict[str, Any]] = {}
