@@ -168,8 +168,13 @@ def build_detection_query_from_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
             q["objects.object_name"] = name
     color = rule.get("color")
     if color:
-        # Match against both legacy single color and new top-3 colors array
-        q["$or"] = [{"objects.color": color}, {"objects.colors": color}]
+        # Match against legacy single color, top-3 colors array, and split-body color arrays
+        q["$or"] = [
+            {"objects.color": color},
+            {"objects.colors": color},
+            {"objects.upper_body_colors": color},
+            {"objects.lower_body_colors": color},
+        ]
     return q
 
 

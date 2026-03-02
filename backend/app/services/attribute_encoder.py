@@ -115,8 +115,15 @@ class AttributeEncoder:
         """
         name = str(obj.get("object_name", "")).strip().lower()
         if name != "person":
-            # Include primary color for non-person objects
+            # Include primary color for non-person objects; fall back from scalar "color" to "colors" list
             color = str(obj.get("color") or "").strip().lower()
+            if not color or color == "unknown":
+                colors_list = obj.get("colors") or []
+                for c in colors_list:
+                    c_str = str(c).strip().lower()
+                    if c_str and c_str != "unknown":
+                        color = c_str
+                        break
             if color and color != "unknown":
                 return f"{color} {name}" if name else "unknown"
             return name or "unknown"

@@ -127,25 +127,29 @@ class HybridSearchEngine:
             if parsed_colors_lower:
                 try:
                     obj_idx = int(meta.get("object_index", -1))
-                    if 0 <= obj_idx < len(doc.get("objects", [])):
-                        ob = doc["objects"][obj_idx]
-                        # Gather all color names: top-3 array + upper/lower body + legacy single
-                        all_colors = set()
-                        for c in (ob.get("colors") or []):
-                            all_colors.add(str(c).strip().lower())
-                        for c in (ob.get("upper_body_colors") or []):
-                            all_colors.add(str(c).strip().lower())
-                        for c in (ob.get("lower_body_colors") or []):
-                            all_colors.add(str(c).strip().lower())
-                        legacy = (ob.get("color") or "").strip().lower()
-                        if legacy:
-                            all_colors.add(legacy)
-                        all_colors.discard("")
-                        all_colors.discard("unknown")
-                        if all_colors and not all_colors.intersection(parsed_colors_lower):
-                            continue
+                    if not (0 <= obj_idx < len(doc.get("objects", []))):
+                        # Invalid/missing object index — treat as non-match when color filter is active
+                        continue
+                    ob = doc["objects"][obj_idx]
+                    # Gather all color names: top-3 array + upper/lower body + legacy single
+                    all_colors = set()
+                    for c in (ob.get("colors") or []):
+                        all_colors.add(str(c).strip().lower())
+                    for c in (ob.get("upper_body_colors") or []):
+                        all_colors.add(str(c).strip().lower())
+                    for c in (ob.get("lower_body_colors") or []):
+                        all_colors.add(str(c).strip().lower())
+                    legacy = (ob.get("color") or "").strip().lower()
+                    if legacy:
+                        all_colors.add(legacy)
+                    all_colors.discard("")
+                    all_colors.discard("unknown")
+                    if not all_colors or not all_colors.intersection(parsed_colors_lower):
+                        # No color metadata at all, or no intersection — reject
+                        continue
                 except Exception:
-                    pass
+                    # On unexpected errors, be conservative and reject
+                    continue
 
             doc2 = dict(doc)
             doc2["_similarity"] = float(c.get("score") or 0.0)

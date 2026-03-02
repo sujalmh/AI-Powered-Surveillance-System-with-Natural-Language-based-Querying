@@ -406,7 +406,7 @@ def get_dominant_color(roi, mask, k=NUM_CLUSTERS):
         pixels = _extract_masked_lab_pixels(roi, mask)
         if pixels is None:
             return (0, 0, 0)
-        results = _kmeans_dominant_colors(pixels, k=1)
+        results = _kmeans_dominant_colors(pixels, k=k)
         if results:
             return results[0][1]  # (R, G, B)
         return (0, 0, 0)

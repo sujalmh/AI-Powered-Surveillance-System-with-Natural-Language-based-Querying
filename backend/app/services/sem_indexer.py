@@ -164,8 +164,13 @@ def _compose_caption_from_detections(camera_id: int, frame_ts: Optional[str], to
                         col = str(o.get("color") or "").strip()
                         if col and col.lower() != "unknown":
                             all_cols.append(col)
+                    # Deduplicate per-person so each unique color contributes at most one count
+                    seen_lower: set = set()
                     for col in all_cols:
-                        person_colors[col] = person_colors.get(col, 0) + 1
+                        key = col.lower()
+                        if key not in seen_lower:
+                            seen_lower.add(key)
+                            person_colors[col] = person_colors.get(col, 0) + 1
                 else:
                     obj_counts[name] = obj_counts.get(name, 0) + 1
 

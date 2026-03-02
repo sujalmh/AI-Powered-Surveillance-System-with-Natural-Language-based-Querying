@@ -48,8 +48,8 @@ def init_indexes() -> None:
         detections.create_index(
             [("objects.colors", ASCENDING), ("timestamp", DESCENDING)]
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.opt(exception=True).warning("Failed to create index on detections (objects.colors / timestamp): {}", e)
     try:
         detections.create_index([("person_count", ASCENDING), ("timestamp", DESCENDING)])
     except Exception:
