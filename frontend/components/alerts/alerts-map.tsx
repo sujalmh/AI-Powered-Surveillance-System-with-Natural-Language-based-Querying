@@ -3,6 +3,7 @@
 import { useMemo, useEffect } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/api";
+import { formatToIST } from "@/lib/time";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -102,7 +103,7 @@ export function AlertsMap() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {c.last_seen ? new Date(c.last_seen).toLocaleString() : "-"}
+                        {c.last_seen ? formatToIST(c.last_seen) : "-"}
                       </TableCell>
                     </TableRow>
                   );

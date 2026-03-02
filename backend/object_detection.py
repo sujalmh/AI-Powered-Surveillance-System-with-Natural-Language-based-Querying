@@ -35,7 +35,7 @@ from backend.app.services.task_queue import submit as task_submit
 def _get_zones_for_camera(zones_collection: Any, camera_id: int) -> List[Dict[str, Any]]:
     """Return list of zone docs for camera, with short TTL cache."""
     global _ZONES_CACHE
-    now = datetime.datetime.now().timestamp()
+    now = datetime.datetime.now(datetime.timezone.utc).timestamp()
     entry = _ZONES_CACHE.get(camera_id)
     if entry is not None and (now - entry[1]) < _ZONES_CACHE_TTL_SEC:
         return entry[0]
@@ -771,7 +771,7 @@ def process_live_stream(
             "source": str(source),
             "location": location,
             "status": "active",
-            "last_seen": datetime.datetime.now().isoformat()
+            "last_seen": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "").rstrip("Z")
         }},
         upsert=True
     )
@@ -896,7 +896,7 @@ def process_live_stream(
             try:
                 cameras_collection.update_one(
                     {"camera_id": camera_id},
-                    {"$set": {"status": "active", "last_seen": datetime.datetime.now().isoformat(), "last_error": None}},
+                    {"$set": {"status": "active", "last_seen": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "").rstrip("Z"), "last_error": None}},
                     upsert=True,
                 )
                 last_heartbeat_time = now_ts
@@ -1295,14 +1295,14 @@ def process_video_file(
         try:
             start_dt = datetime.datetime.fromisoformat(start_iso)
         except Exception:
-            start_dt = datetime.datetime.now()
+            start_dt = datetime.datetime.now(datetime.timezone.utc)
     else:
         try:
             mtime = os.path.getmtime(video_path)
             duration = total_frames / fps if fps > 0 and total_frames > 0 else 0
             start_dt = datetime.datetime.fromtimestamp(max(0, mtime - duration))
         except Exception:
-            start_dt = datetime.datetime.now()
+            start_dt = datetime.datetime.now(datetime.timezone.utc)
 
     logger.info(
         "process_video_file: camera_id=%s path=%s fps=%.1f target_fps=%.1f interval=%d start=%s",

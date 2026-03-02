@@ -2,13 +2,41 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 from loguru import logger
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
 from backend.app.config import settings
 
 # Load env vars to ensure API keys are available
 load_dotenv()
+
+
+def _format_timestamp_ist(dt: datetime) -> str:
+    """
+    Convert datetime to IST (Asia/Kolkata) and format as readable string.
+    Format: "Mar 2, 2026 14:30 IST"
+    """
+    try:
+        # Ensure datetime is timezone-aware (assume UTC if naive)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        # Convert to IST
+        ist_dt = dt.astimezone(ZoneInfo("Asia/Kolkata"))
+        # Format: "Mar 2, 2026 14:30 IST"
+        return ist_dt.strftime("%b %-d, %Y %H:%M IST")
+    except Exception:
+        # Fallback for Windows (no %-d support)
+        try:
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            ist_dt = dt.astimezone(ZoneInfo("Asia/Kolkata"))
+            # Use %d and strip leading zero manually
+            day = ist_dt.day
+            return ist_dt.strftime(f"%b {day}, %Y %H:%M IST")
+        except Exception as e:
+            logger.warning(f"Failed to format timestamp to IST: {e}")
+            return str(dt)
 
 
 class AnswerGenerator:
@@ -194,7 +222,7 @@ class AnswerGenerator:
         for ts_str in (timestamps_list[:10] if timestamps_list else []):
             try:
                 dt = datetime.fromisoformat(str(ts_str).replace('Z', '+00:00'))
-                timestamps_formatted.append(dt.strftime("%Y-%m-%d %I:%M:%S %p"))
+                timestamps_formatted.append(_format_timestamp_ist(dt))
             except Exception:
                 timestamps_formatted.append(str(ts_str))
         
@@ -229,7 +257,7 @@ Alert Logs (up to first 10):
                     try:
                         if trigger_ts:
                             dt = datetime.fromisoformat(str(trigger_ts).replace('Z', '+00:00'))
-                            trigger_ts = dt.strftime("%Y-%m-%d %I:%M:%S %p")
+                            trigger_ts = _format_timestamp_ist(dt)
                     except Exception as e:
                         logger.opt(exception=True).debug("Failed to parse trigger_ts {} for alert {}: {}", trigger_ts, a.get('alert_name') or idx, e)
                     prompt += f"- {idx}. [{a.get('severity', 'info')}] {a.get('alert_name') or 'Unnamed alert'} at {trigger_ts or 'unknown time'} on {cam_str}: {a.get('message')}\n"
@@ -390,8 +418,8 @@ Generate Natural Language Answer:"""
             try:
                 start = datetime.fromisoformat(str(ts["$gte"]).replace('Z', '+00:00'))
                 end = datetime.fromisoformat(str(ts["$lte"]).replace('Z', '+00:00'))
-                start_fmt = start.strftime("%Y-%m-%d %I:%M:%S %p")
-                end_fmt = end.strftime("%Y-%m-%d %I:%M:%S %p")
+                start_fmt = _format_timestamp_ist(start)
+                end_fmt = _format_timestamp_ist(end)
                 duration_min = int((end - start).total_seconds() / 60)
                 parts.append(f"  Time Range: {start_fmt} to {end_fmt} ({duration_min} min)")
             except Exception:
@@ -401,7 +429,7 @@ Generate Natural Language Answer:"""
             try:
                 if isinstance(ts, str):
                     dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
-                    parts.append(f"  Time: {dt.strftime('%Y-%m-%d %I:%M:%S %p')}")
+                    parts.append(f"  Time: {_format_timestamp_ist(dt)}")
                 else:
                     parts.append(f"  Time: {ts}")
             except Exception:

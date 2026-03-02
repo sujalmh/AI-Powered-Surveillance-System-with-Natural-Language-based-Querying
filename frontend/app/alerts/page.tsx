@@ -9,6 +9,7 @@ import { AlertsTable } from "@/components/alerts/alerts-table"
 import { AlertsMap } from "@/components/alerts/alerts-map"
 import { useEffect, useState } from "react"
 import { api } from "@/lib/api"
+import { formatToIST } from "@/lib/time"
 import { toast } from "@/hooks/use-toast"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -39,7 +40,7 @@ export default function AlertsPage() {
         const data = JSON.parse(ev.data);
         toast({
           title: data.message || "Alert triggered",
-          description: `Camera #${data.camera_id ?? "-"} · ${data.triggered_at ? new Date(data.triggered_at).toLocaleString() : ""}`,
+          description: `Camera #${data.camera_id ?? "-"} · ${data.triggered_at ? formatToIST(data.triggered_at) : ""}`,
         });
       } catch (e) {
         // ignore parse errors

@@ -554,7 +554,7 @@ def merge_results(
             )
 
     # --- Final scoring with recency boost & semantic penalties ----------
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     halflife_hours = getattr(settings, "RECENCY_HALFLIFE_HOURS", 24.0) or 24.0
     enable_recency = getattr(settings, "ENABLE_RECENCY_BOOST", True)
 

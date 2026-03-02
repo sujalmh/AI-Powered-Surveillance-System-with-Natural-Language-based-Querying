@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, Play, Square, Wifi, WifiOff } from "lucide-react";
 import { api } from "@/lib/api";
+import { formatToIST } from "@/lib/time";
 
 type CameraDoc = {
   camera_id: number;
@@ -223,7 +224,7 @@ export function CameraSetup() {
                     </span>
                     {camera.last_seen && (
                       <span style={{ fontSize: "0.6875rem", color: "var(--color-text-faint)" }}>
-                        Last seen: {new Date(camera.last_seen).toLocaleString()}
+                        Last seen: {formatToIST(camera.last_seen)}
                       </span>
                     )}
                   </div>

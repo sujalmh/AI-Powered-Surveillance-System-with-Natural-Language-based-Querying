@@ -134,7 +134,7 @@ def main() -> None:
 
     dataset = {
         "version": "1.0",
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now(datetime.timezone.utc).isoformat(),
         "count": len(items),
         "items": items,
         "instructions": (
