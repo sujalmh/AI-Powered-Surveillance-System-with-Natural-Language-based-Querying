@@ -17,23 +17,41 @@ export function timeAgo(ts: string): string {
 }
 
 /**
+ * Normalize a timestamp string to UTC by appending "Z" when the string is an
+ * ISO datetime without any timezone marker (no trailing "Z" and no ±HH:MM offset).
+ * This prevents JavaScript's Date from misinterpreting the string as local time.
+ *
+ * @example
+ *   parsePossiblyUtc("2026-03-02T08:30:00")        // → "2026-03-02T08:30:00Z"
+ *   parsePossiblyUtc("2026-03-02T08:30:00Z")        // → "2026-03-02T08:30:00Z"
+ *   parsePossiblyUtc("2026-03-02T08:30:00+05:30")   // → "2026-03-02T08:30:00+05:30"
+ */
+export function parsePossiblyUtc(ts: string): string {
+    // Already has a timezone marker — return unchanged.
+    if (ts.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(ts)) {
+        return ts;
+    }
+    return ts + "Z";
+}
+
+/**
  * Format timestamp to IST (Asia/Kolkata) timezone.
  * Returns format: "Mar 2, 2026 14:30 IST"
  * Handles null/invalid timestamps gracefully.
  */
 export function formatToIST(ts: string | null | undefined): string {
     if (!ts) return "—";
-    
+
     try {
-        // Parse the timestamp (assumed to be UTC if no timezone info)
-        const date = new Date(ts);
-        
+        // Normalize: treat timezone-less ISO strings as UTC
+        const date = new Date(parsePossiblyUtc(ts));
+
         // Check if date is valid
         if (isNaN(date.getTime())) return "Invalid date";
-        
+
         // Convert to IST (Asia/Kolkata) - IST is UTC+5:30
         const istDate = toZonedTime(date, "Asia/Kolkata");
-        
+
         // Format: "Mar 2, 2026 14:30 IST" (abbreviated month, no seconds)
         return format(istDate, "MMM d, yyyy HH:mm", { timeZone: "Asia/Kolkata" }) + " IST";
     } catch (error) {
@@ -49,11 +67,11 @@ export function formatToIST(ts: string | null | undefined): string {
  */
 export function formatTimeIST(ts: string | null | undefined): string {
     if (!ts) return "—";
-    
+
     try {
-        const date = new Date(ts);
+        const date = new Date(parsePossiblyUtc(ts));
         if (isNaN(date.getTime())) return "Invalid time";
-        
+
         const istDate = toZonedTime(date, "Asia/Kolkata");
         return format(istDate, "HH:mm", { timeZone: "Asia/Kolkata" }) + " IST";
     } catch (error) {

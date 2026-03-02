@@ -40,7 +40,10 @@ export default function AlertsPage() {
         const data = JSON.parse(ev.data);
         toast({
           title: data.message || "Alert triggered",
-          description: `Camera #${data.camera_id ?? "-"} · ${data.triggered_at ? formatToIST(data.triggered_at) : ""}`,
+          description: [
+            `Camera #${data.camera_id ?? "-"}`,
+            ...(data.triggered_at ? [formatToIST(data.triggered_at)] : []),
+          ].join(" · "),
         });
       } catch (e) {
         // ignore parse errors

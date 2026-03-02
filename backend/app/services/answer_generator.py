@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional
 from loguru import logger
 from datetime import datetime, timezone
@@ -482,7 +483,7 @@ Respond conversationally:"""
             return "Hello! How can I help you with your surveillance system today?"
         if "thank" in low or low in {"thanks", "ty"}:
             return "You're welcome! Let me know if you need anything else."
-        if "bye" in low or "goodbye" in low:
+        if re.search(r'\b(bye|goodbye)\b', low):
             return "Goodbye! Feel free to ask if you need anything."
         if "who are you" in low or "what are you" in low:
             return (

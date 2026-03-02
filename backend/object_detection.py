@@ -1300,7 +1300,7 @@ def process_video_file(
         try:
             mtime = os.path.getmtime(video_path)
             duration = total_frames / fps if fps > 0 and total_frames > 0 else 0
-            start_dt = datetime.datetime.fromtimestamp(max(0, mtime - duration))
+            start_dt = datetime.datetime.fromtimestamp(max(0, mtime - duration), tz=datetime.timezone.utc)
         except Exception:
             start_dt = datetime.datetime.now(datetime.timezone.utc)
 

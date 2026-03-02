@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -134,7 +134,7 @@ def main() -> None:
 
     dataset = {
         "version": "1.0",
-        "created_at": datetime.now(datetime.timezone.utc).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
         "count": len(items),
         "items": items,
         "instructions": (
