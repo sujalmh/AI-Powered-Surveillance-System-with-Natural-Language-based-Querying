@@ -667,23 +667,16 @@ def cleanup_corrupt_recordings() -> int:
                 # Skip very small files (already handled elsewhere)
                 if p.stat().st_size < 1024:
                     continue
-                # Quick binary check for moov atom
-                has_moov = False
-                with open(p, "rb") as f:
-                    head = f.read(min(p.stat().st_size, 64 * 1024))
-                if b"moov" in head:
-                    has_moov = True
-                elif p.stat().st_size > 64 * 1024:
-                    with open(p, "rb") as f:
-                        f.seek(max(0, p.stat().st_size - 64 * 1024))
-                        tail = f.read()
-                    has_moov = b"moov" in tail
+                # Check for moov atom using shared utility
+                has_moov = _has_moov_atom(p)
                 if not has_moov:
+                    # Capture file size before deletion
+                    size_mb = p.stat().st_size / 1024 / 1024
                     p.unlink(missing_ok=True)
                     removed += 1
                     logger.warning(
-                        "Removed corrupt recording (no moov atom, {}MB): {}",
-                        p.stat().st_size / 1024 / 1024 if p.exists() else 0,
+                        "Removed corrupt recording (no moov atom, {:.1f}MB): {}",
+                        size_mb,
                         p.name,
                     )
             except Exception as e:
@@ -692,6 +685,8 @@ def cleanup_corrupt_recordings() -> int:
         logger.info("Startup cleanup removed {} corrupt/stale recording(s)", removed)
     return removed
 
+
+from backend.app.services.clip_builder import _has_moov_atom
 
 import queue
 

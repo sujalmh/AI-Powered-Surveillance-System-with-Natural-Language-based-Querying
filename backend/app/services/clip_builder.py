@@ -79,6 +79,83 @@ def _wall_to_video_offset(
     return max(0.0, wall_offset_sec)
 
 
+def _map_wall_range_to_video_range(
+    items: List[Tuple[datetime, datetime, Path]],
+    start_dt: datetime,
+    end_dt: datetime,
+) -> Tuple[float, float]:
+    """
+    Map a wall-clock time range across multiple video files to per-file
+    video-timeline offsets and durations, accounting for per-file FPS mismatch.
+    
+    Returns (offset_sec, duration_sec) for FFmpeg -ss and -t flags.
+    Falls back to wall times if video durations cannot be determined.
+    """
+    if not items:
+        return 0.0, (end_dt - start_dt).total_seconds()
+    
+    overall_start = items[0][0]
+    overall_end = items[-1][1]
+    total_wall_dur = (overall_end - overall_start).total_seconds()
+    
+    # Compute per-file video durations
+    file_video_durs = [_probe_video_duration(p) for _, _, p in items]
+    total_video_dur = sum(file_video_durs)
+    
+    # If we can't determine video durations, fall back to wall times
+    if total_video_dur <= 0 or total_wall_dur <= 1.0:
+        wall_offset = max(0.0, (start_dt - overall_start).total_seconds())
+        wall_duration = (end_dt - start_dt).total_seconds()
+        return wall_offset, wall_duration
+    
+    # Piecewise mapping: walk items and accumulate video time for the requested range
+    offset_sec = 0.0
+    duration_sec = 0.0
+    found_start = False
+    
+    for i, (chunk_start, chunk_end, p) in enumerate(items):
+        wall_chunk_dur = (chunk_end - chunk_start).total_seconds()
+        video_chunk_dur = file_video_durs[i]
+        
+        # Skip segments before start_dt
+        if chunk_end <= start_dt:
+            # Accumulate offset in case start is in a later chunk
+            if video_chunk_dur > 0:
+                ratio = video_chunk_dur / wall_chunk_dur if wall_chunk_dur > 0 else 1.0
+                offset_sec += video_chunk_dur
+            continue
+        
+        # Handle segments that overlap with [start_dt, end_dt]
+        seg_start = max(chunk_start, start_dt)
+        seg_end = min(chunk_end, end_dt)
+        
+        if seg_start < seg_end:
+            wall_seg_offset = (seg_start - chunk_start).total_seconds()
+            wall_seg_dur = (seg_end - seg_start).total_seconds()
+            
+            if not found_start:
+                # First segment: compute absolute offset in video timeline
+                if video_chunk_dur > 0 and wall_chunk_dur > 0:
+                    ratio = video_chunk_dur / wall_chunk_dur
+                    offset_sec += wall_seg_offset * ratio
+                else:
+                    offset_sec += wall_seg_offset
+                found_start = True
+            
+            # Accumulate duration for this segment
+            if video_chunk_dur > 0 and wall_chunk_dur > 0:
+                ratio = video_chunk_dur / wall_chunk_dur
+                duration_sec += wall_seg_dur * ratio
+            else:
+                duration_sec += wall_seg_dur
+        
+        # Stop if we've covered end_dt
+        if seg_end >= end_dt:
+            break
+    
+    return max(0.0, offset_sec), max(0.0, duration_sec)
+
+
 def _parse_ts_from_filename(name: str) -> Optional[datetime]:
     stem = Path(name).stem
     for pat in _TS_PATTERNS:
@@ -545,28 +622,25 @@ def build_clip_from_snapshots(
             out_path.unlink(missing_ok=True)
             return _build_clip_from_snapshots_fallback(camera_id, start_iso, end_iso, fps, allowed_timestamps)
     else:
-        # Merge via concat demuxer — apply aggregate FPS scaling
+        # Merge via concat demuxer — apply piecewise FPS scaling per file
         concat_file = out_dir / f"{base_name}_concat.txt"
         with concat_file.open("w") as f:
             for _, _, p in items:
                 # ffmpeg requires full paths properly formatted for concat
                 f.write(f"file '{p.resolve().as_posix()}'\n")
                 
+        # Use piecewise mapping to account for per-file FPS differences
+        offset_sec, duration_sec = _map_wall_range_to_video_range(items, start_dt, end_dt)
+
         overall_start = items[0][0]
         overall_end = items[-1][1]
         wall_chunk_dur = (overall_end - overall_start).total_seconds()
         total_vid_dur = sum(_probe_video_duration(p) for _, _, p in items)
 
-        wall_offset = max(0.0, (start_dt - overall_start).total_seconds())
-        wall_duration = (end_dt - start_dt).total_seconds()
-
-        offset_sec = _wall_to_video_offset(wall_offset, wall_chunk_dur, total_vid_dur)
-        duration_sec = _wall_to_video_offset(wall_duration, wall_chunk_dur, total_vid_dur) if total_vid_dur > 0 else wall_duration
-
         if total_vid_dur > 0 and wall_chunk_dur > 1.0:
             logger.debug(
-                "Clip concat FPS scaling: wall_total=%.1fs vid_total=%.1fs ratio=%.3f",
-                wall_chunk_dur, total_vid_dur, total_vid_dur / wall_chunk_dur,
+                "Clip concat piecewise mapping: wall_total=%.1fs vid_total=%.1fs overall_ratio=%.3f offset=%.2fs dur=%.2fs",
+                wall_chunk_dur, total_vid_dur, total_vid_dur / wall_chunk_dur, offset_sec, duration_sec,
             )
 
         # -ss AFTER -i for frame-accurate seeking
