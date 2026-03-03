@@ -12,6 +12,7 @@ import json
 from backend.app.core.async_utils import run_sync
 from backend.app.db.mongo import alerts as alerts_col, alert_logs as alert_logs_col
 from backend.app.services.alert_engine import _now_utc_iso, evaluate_rule
+from backend.app.services.nl_parser import parse_nl_with_llm
 
 router = APIRouter()
 
@@ -110,10 +111,23 @@ async def create_alert(req: CreateAlertRequest) -> AlertResponse:
     def _block():
         try:
             now = _now_utc_iso()
+            rule_dict = req.rule.model_dump()
+            
+            # Extract behavior from NLP if nl is provided and behavior is not already set
+            if req.nl and not rule_dict.get("behavior"):
+                try:
+                    parsed = parse_nl_with_llm(req.nl)
+                    # Extract action from parsed NLP result and use it as behavior
+                    if parsed.get("action"):
+                        rule_dict["behavior"] = parsed.get("action")
+                except Exception:
+                    # NLP parsing failure; silently ignore and proceed without behavior extraction
+                    pass
+            
             doc = {
                 "name": req.name,
                 "nl": req.nl,
-                "rule": req.rule.model_dump(),
+                "rule": rule_dict,
                 "enabled": req.enabled,
                 "actions": req.actions or [],
                 "severity": (req.severity or "info"),
