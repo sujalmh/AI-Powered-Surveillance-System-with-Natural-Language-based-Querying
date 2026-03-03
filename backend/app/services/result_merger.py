@@ -67,7 +67,7 @@ def compute_adaptive_gaps(
             return default_max_gap, default_join_gap
         median_gap = float(sorted(gaps)[len(gaps) // 2])
         max_gap = max(1.0, min(30.0, median_gap * 2.0))
-        join_gap = max(3.0, min(30.0, max_gap * 3.0))
+        join_gap = max(3.0, min(8.0, max_gap * 3.0))
         return max_gap, join_gap
     except Exception:
         logger.opt(exception=True).debug("Adaptive gaps computation failed")
@@ -345,6 +345,196 @@ def _fixed_alpha(intent: str, has_count_constraint: bool, has_action: bool) -> f
 # Semantic time-range overlap
 # ======================================================================
 
+def split_sparse_segments(
+    segments: List[Dict[str, Any]],
+    min_gap_abs: float = 5.0,
+    gap_factor: float = 4.0,
+) -> List[Dict[str, Any]]:
+    """
+    Split coalesced segments that contain large internal timestamp gaps.
+
+    If a segment's ``matched_timestamps`` contain a gap that is both
+    > *min_gap_abs* seconds **and** > *gap_factor* × the median gap,
+    the segment is split at that point into tighter sub-segments.
+    This prevents clips from containing long stretches of irrelevant
+    filler between two sparse detection clusters.
+    """
+    output: List[Dict[str, Any]] = []
+    for seg in segments:
+        raw_ts = seg.get("matched_timestamps") or []
+        if len(raw_ts) < 3:
+            output.append(seg)
+            continue
+        try:
+            dts = sorted(parse_ts(t) for t in raw_ts)
+            gaps = [(dts[i + 1] - dts[i]).total_seconds() for i in range(len(dts) - 1)]
+            nonzero = [g for g in gaps if g > 0]
+            if not nonzero:
+                output.append(seg)
+                continue
+            median_g = float(sorted(nonzero)[len(nonzero) // 2])
+            threshold = max(min_gap_abs, median_g * gap_factor)
+
+            # Find the largest gap that exceeds the threshold
+            split_idx = -1
+            max_gap_val = 0.0
+            for i, g in enumerate(gaps):
+                if g > threshold and g > max_gap_val:
+                    max_gap_val = g
+                    split_idx = i
+
+            if split_idx < 0:
+                output.append(seg)
+                continue
+
+            # Split into two clusters at split_idx
+            left_dts = dts[: split_idx + 1]
+            right_dts = dts[split_idx + 1:]
+
+            seg_objects = seg.get("objects") or []
+
+            for cluster in (left_dts, right_dts):
+                if not cluster:
+                    continue
+                c_start, c_end = cluster[0], cluster[-1]
+                new_seg = {
+                    **{k: v for k, v in seg.items()
+                       if k not in ("start", "end", "duration_seconds", "matched_timestamps")},
+                    "start": c_start.isoformat(),
+                    "end": c_end.isoformat(),
+                    "duration_seconds": max(0, int((c_end - c_start).total_seconds())),
+                    "matched_timestamps": [t.isoformat() for t in cluster],
+                    "objects": seg_objects,
+                }
+                output.append(new_seg)
+        except Exception:
+            logger.opt(exception=True).debug("split_sparse_segments failed for one segment")
+            output.append(seg)
+
+    output.sort(key=lambda x: x.get("start", ""), reverse=True)
+    return output
+
+
+def merge_overlapping_results(
+    results: List[Dict[str, Any]],
+    tolerance_sec: float = 3.0,
+) -> List[Dict[str, Any]]:
+    """
+    Merge results from the **same camera** whose time ranges overlap or are
+    within *tolerance_sec* of each other.  Keeps the higher relevance score
+    and unions all metadata (timestamps, objects, frames).
+
+    This is the final dedup pass that eliminates redundant / near-duplicate
+    clips before they are sent to the clip builder.
+    """
+    if len(results) <= 1:
+        return results
+
+    def _semantic_group_key(r: Dict[str, Any]) -> Tuple[Any, str]:
+        cam = r.get("camera_id")
+        obj_name = r.get("object_name")
+        if not obj_name:
+            for o in r.get("objects") or []:
+                if isinstance(o, dict) and o.get("object_name"):
+                    obj_name = o.get("object_name")
+                    break
+        sem = str(obj_name or "").strip().lower() or "__any__"
+        return cam, sem
+
+    by_cam: Dict[Tuple[Any, str], List[Dict[str, Any]]] = defaultdict(list)
+    no_time: List[Dict[str, Any]] = []  # semantic-only without start/end
+    for r in results:
+        cam, _ = _semantic_group_key(r)
+        if cam is not None and (r.get("start") or r.get("end")):
+            by_cam[_semantic_group_key(r)].append(r)
+        else:
+            no_time.append(r)
+
+    merged: List[Dict[str, Any]] = list(no_time)
+    for (cam, sem_key), group in by_cam.items():
+        group.sort(key=lambda x: parse_ts(x.get("start") or x.get("end", "")))
+        clusters: List[Dict[str, Any]] = []
+        for r in group:
+            try:
+                r_start = parse_ts(r.get("start") or r.get("end", ""))
+                r_end = parse_ts(r.get("end") or r.get("start", ""))
+            except Exception:
+                clusters.append(r)
+                continue
+
+            if not clusters:
+                clusters.append(r)
+                continue
+
+            prev = clusters[-1]
+            try:
+                p_end = parse_ts(prev.get("end") or prev.get("start", ""))
+            except Exception:
+                clusters.append(r)
+                continue
+
+            # Overlapping or within tolerance?
+            if (r_start - p_end).total_seconds() <= tolerance_sec:
+                # Merge r into prev
+                p_start = parse_ts(prev.get("start") or prev.get("end", ""))
+                new_start = min(p_start, r_start)
+                new_end = max(p_end, r_end)
+                prev["start"] = new_start.isoformat()
+                prev["end"] = new_end.isoformat()
+                prev["duration_seconds"] = max(0, int((new_end - new_start).total_seconds()))
+
+                # Union matched_timestamps
+                prev_ts = set(prev.get("matched_timestamps") or [])
+                prev_ts.update(r.get("matched_timestamps") or [])
+                prev["matched_timestamps"] = sorted(prev_ts)
+
+                # Union objects
+                prev_objs = list(prev.get("objects") or [])
+                prev_objs.extend(r.get("objects") or [])
+                prev["objects"] = aggregate_objects(prev_objs)
+
+                # Union frames
+                prev_frames = list(prev.get("frames") or [])
+                prev_frames.extend(r.get("frames") or [])
+                prev["frames"] = prev_frames
+
+                # Keep better scores
+                prev["relevance_score"] = max(
+                    prev.get("relevance_score", 0.0),
+                    r.get("relevance_score", 0.0),
+                )
+                prev["score"] = max(
+                    prev.get("score", 0.0),
+                    r.get("score", 0.0),
+                )
+
+                # Promote source to hybrid if merging different sources
+                if prev.get("source") != r.get("source"):
+                    prev["source"] = "hybrid"
+
+                matched_count = max(
+                    prev.get("matched_object_count", 0),
+                    r.get("matched_object_count", 0),
+                    len(prev.get("objects") or []),
+                )
+                prev["matched_object_count"] = matched_count
+            else:
+                clusters.append(r)
+
+        merged.extend(clusters)
+
+    # Re-sort by relevance
+    merged.sort(
+        key=lambda x: (x.get("relevance_score", 0.0), x.get("score", 0.0)),
+        reverse=True,
+    )
+    logger.debug(
+        "merge_overlapping_results: %d → %d results",
+        len(results), len(merged),
+    )
+    return merged
+
+
 def _semantic_time_range(sem: Dict[str, Any]) -> Tuple[Optional[datetime], Optional[datetime]]:
     frames = sem.get("frames") or []
     if not frames:
@@ -391,7 +581,7 @@ def apply_mmr_diversity(
         def _time_bucket(r: Dict[str, Any]) -> int:
             ts_str = r.get("start") or r.get("end") or ""
             try:
-                return int(parse_ts(ts_str).timestamp() / 3600) if ts_str else 0
+                return int(parse_ts(ts_str).timestamp() / 120) if ts_str else 0
             except Exception:
                 return 0
 
@@ -449,6 +639,8 @@ def merge_results(
             logger.debug("Merged structured tracks: {}", len(merged_tracks))
             combined_tracks = coalesce_tracks(merged_tracks, join_gap)
             logger.debug("Coalesced tracks: {}", len(combined_tracks))
+            combined_tracks = split_sparse_segments(combined_tracks)
+            logger.debug("After sparse-split: {}", len(combined_tracks))
         except Exception:
             logger.error("Track merging failed")
             combined_tracks = []
@@ -538,13 +730,15 @@ def merge_results(
                     )
             elif requested_obj:
                 # No captions available and user asked for a specific object –
-                # semantic similarity alone is unreliable, demote heavily
+                # semantic similarity alone is unreliable, demote heavily.
+                # Raise threshold to SEM_RAW_THRESH_HIGH (0.50) to avoid
+                # showing wrong-object clips when captions are missing.
                 raw_sem = result.get("score_raw_semantic", 0.0)
-                if raw_sem < SEM_RAW_THRESH_MED:
+                if raw_sem < SEM_RAW_THRESH_HIGH:
                     keys_to_drop.append(_key)
                     logger.debug(
-                        "Filtered semantic result (no caption, low score %.3f): %s",
-                        raw_sem, result.get("clip_path", _key),
+                        "Filtered semantic result (no caption, low score %.3f < %.3f): %s",
+                        raw_sem, SEM_RAW_THRESH_HIGH, result.get("clip_path", _key),
                     )
         for k in keys_to_drop:
             del results_map[k]
@@ -643,6 +837,9 @@ def merge_results(
         key=lambda x: (x.get("relevance_score", 0.0), x.get("score", 0.0)),
         reverse=True,
     )
+
+    # --- Merge overlapping results from the same camera -----------------
+    results = merge_overlapping_results(results, tolerance_sec=3.0)
 
     # --- Hard cap: return at most MAX_RESULTS = 10 ----------------------
     MAX_RESULTS = 10

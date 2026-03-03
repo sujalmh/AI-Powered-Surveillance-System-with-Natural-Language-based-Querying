@@ -638,6 +638,56 @@ def _auto_build_and_index(camera_id: int, start_iso: str, end_iso: str, every_se
         logger.warning("Auto VLM indexing failed for cam {} [{}..{}]: {}", camera_id, start_iso, end_iso, e)
 
 
+def cleanup_corrupt_recordings() -> int:
+    """
+    Remove corrupt recordings (missing moov atom) and stale conversion files.
+
+    Called at startup to clean up after unclean shutdowns.  mp4v recordings
+    write the moov atom only on ``VideoWriter.release()``; if the process was
+    killed, the file is large but unreadable.
+
+    Returns the number of files removed.
+    """
+    removed = 0
+    recordings_dir: Path = settings.RECORDINGS_DIR
+    if not recordings_dir.exists():
+        return 0
+    for cam_dir in recordings_dir.iterdir():
+        if not cam_dir.is_dir():
+            continue
+        for p in cam_dir.glob("*.mp4"):
+            try:
+                # Remove stale conversion intermediaries
+                if "._converting" in p.name:
+                    if p.stat().st_size < 1024:
+                        p.unlink(missing_ok=True)
+                        removed += 1
+                        logger.info("Removed stale conversion file: {}", p.name)
+                    continue
+                # Skip very small files (already handled elsewhere)
+                if p.stat().st_size < 1024:
+                    continue
+                # Check for moov atom using shared utility
+                has_moov = _has_moov_atom(p)
+                if not has_moov:
+                    # Capture file size before deletion
+                    size_mb = p.stat().st_size / 1024 / 1024
+                    p.unlink(missing_ok=True)
+                    removed += 1
+                    logger.warning(
+                        "Removed corrupt recording (no moov atom, {:.1f}MB): {}",
+                        size_mb,
+                        p.name,
+                    )
+            except Exception as e:
+                logger.debug("cleanup_corrupt_recordings: skip {}: {}", p.name, e)
+    if removed:
+        logger.info("Startup cleanup removed {} corrupt/stale recording(s)", removed)
+    return removed
+
+
+from backend.app.services.clip_builder import _has_moov_atom
+
 import queue
 
 def _ffmpeg_convert_worker(q: queue.Queue):
@@ -650,13 +700,24 @@ def _ffmpeg_convert_worker(q: queue.Queue):
         
     while True:
         try:
-            filepath = q.get()
-            if filepath is None:
+            item = q.get()
+            if item is None:
                 break
+            # Support both old format (str) and new format (str, actual_fps)
+            if isinstance(item, tuple):
+                filepath, actual_fps = item
+            else:
+                filepath, actual_fps = item, 0.0
             filepath = Path(filepath)
             h264_path = filepath.parent / f"{filepath.stem}._converting.mp4"
             cmd = [
                 ffmpeg_exe, "-y", "-i", str(filepath),
+            ]
+            # If we measured actual FPS, tell FFmpeg to re-stamp frames at
+            # the correct rate so video-time matches wall-clock time.
+            if actual_fps >= 1.0:
+                cmd += ["-r", f"{actual_fps:.2f}"]
+            cmd += [
                 "-c:v", "libx264", "-preset", "fast", "-crf", "23",
                 "-pix_fmt", "yuv420p", "-movflags", "+faststart",
                 "-loglevel", "error", str(h264_path)
@@ -692,6 +753,7 @@ class ContinuousRecorder:
         self.current_chunk_start_time = 0.0
         self.current_filepath = None
         self.frame_size = None
+        self._frame_count = 0  # track actual frames written per chunk
         
         self.out_dir = settings.RECORDINGS_DIR / f"camera_{camera_id}"
         self.out_dir.mkdir(parents=True, exist_ok=True)
@@ -705,7 +767,9 @@ class ContinuousRecorder:
         target_size = (w, h)
         
         now = datetime.datetime.now(datetime.timezone.utc)
-        safe_ts = now.isoformat().replace(":", "-").replace(".", "-").replace("+00:00", "Z")
+        # Strip tz info BEFORE replacing separators so the filename is clean
+        # (consistent with snapshot filenames which use naive-UTC timestamps).
+        safe_ts = now.replace(tzinfo=None).isoformat().replace(":", "-").replace(".", "-")
         filename = f"{safe_ts}.mp4"
         self.current_filepath = self.out_dir / filename
         
@@ -713,6 +777,7 @@ class ContinuousRecorder:
         fourcc = _fourcc_fn(*"mp4v")
         self.writer = cv2.VideoWriter(str(self.current_filepath), fourcc, max(1.0, float(self.fps)), target_size)
         self.current_chunk_start_time = time.time()
+        self._frame_count = 0
         
     def write(self, frame):
         now = time.time()
@@ -728,14 +793,22 @@ class ContinuousRecorder:
             if w != target_w or h != target_h:
                 frame = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_AREA)
             self.writer.write(frame)
+            self._frame_count += 1
             
     def _close_writer(self):
         if self.writer is not None:
             self.writer.release()
             self.writer = None
             if self.current_filepath and self.current_filepath.exists():
+                # Compute actual FPS from frames written / wall-clock duration
+                # so the FFmpeg re-encode can fix the video timebase.
+                wall_dur = time.time() - self.current_chunk_start_time
+                actual_fps = self._frame_count / wall_dur if wall_dur > 1.0 else 0.0
                 try:
-                    _conversion_queue.put(str(self.current_filepath), timeout=5.0)
+                    _conversion_queue.put(
+                        (str(self.current_filepath), actual_fps),
+                        timeout=5.0,
+                    )
                 except queue.Full:
                     logger.warning("FFmpeg conversion queue full; dropping file {}", self.current_filepath)
 

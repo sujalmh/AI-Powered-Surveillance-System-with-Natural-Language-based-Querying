@@ -160,6 +160,13 @@ async def lifespan(app: FastAPI):
             "Chat dependencies (parse_nl_with_llm / UnifiedRetrieval) failed to import; "
             "/api/chat/send will fall back to lazy import at request time")
 
+    # Clean up corrupt recordings left by unclean shutdowns (missing moov atom)
+    try:
+        from backend.object_detection import cleanup_corrupt_recordings
+        cleanup_corrupt_recordings()
+    except Exception:
+        logger.opt(exception=True).debug("Recording cleanup skipped")
+
     yield
 
     # Lifespan shutdown — signal the watchdog and let it handle cleanup.

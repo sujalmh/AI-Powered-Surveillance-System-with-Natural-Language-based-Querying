@@ -2,76 +2,54 @@
 
 import { MainLayout } from "@/components/layout/main-layout"
 import { SettingsTabs } from "@/components/settings/settings-tabs"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useTheme } from "next-themes"
 import { Moon, Sun, Monitor } from "lucide-react"
+import "./settings.css"
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("user")
+  const [mounted, setMounted] = useState(false)
   const { theme, setTheme } = useTheme()
+
+  // Prevent hydration mismatch by only rendering theme-dependent UI after mount
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   return (
     <MainLayout>
       <div className="space-y-6">
 
         {/* Appearance island */}
-        <div style={{
-          background: "var(--color-surface)",
-          border: "1px solid var(--color-border)",
-          borderRadius: "var(--radius-lg)",
-          padding: "16px 20px",
-          boxShadow: "var(--shadow-sm)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "16px",
-        }}>
+        <div className="settings-appearance-card">
           <div>
-            <p style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--color-text)" }}>Appearance</p>
-            <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)", marginTop: "2px" }}>
+            <p className="settings-appearance-title">Appearance</p>
+            <p className="settings-appearance-subtitle">
               Choose your preferred theme
             </p>
           </div>
 
           {/* Segmented theme picker */}
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            background: "var(--color-surface-raised)",
-            border: "1px solid var(--color-border)",
-            borderRadius: "var(--radius-md)",
-            padding: "3px",
-            gap: "2px",
-          }}>
+          <div className="settings-theme-picker">
             {[
               { value: "light", label: "Light", icon: Sun },
               { value: "system", label: "System", icon: Monitor },
               { value: "dark", label: "Dark", icon: Moon },
-            ].map(({ value, label, icon: Icon }) => (
-              <button
-                key={value}
-                onClick={() => setTheme(value)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "5px",
-                  padding: "6px 12px",
-                  borderRadius: "var(--radius-sm)",
-                  border: "none",
-                  fontSize: "0.8125rem",
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  transition: "all 150ms ease",
-                  background: theme === value ? "var(--color-surface)" : "transparent",
-                  color: theme === value ? "var(--color-text)" : "var(--color-text-muted)",
-                  boxShadow: theme === value ? "var(--shadow-xs)" : "none",
-                  fontFamily: "var(--font-ui)",
-                }}
-              >
-                <Icon style={{ width: "13px", height: "13px", color: theme === value ? "var(--color-primary)" : "inherit" }} />
-                {label}
-              </button>
-            ))}
+            ].map(({ value, label, icon: Icon }) => {
+              const isActive = mounted && theme === value
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setTheme(value)}
+                  className={`theme-button ${isActive ? "theme-button-active" : ""}`}
+                >
+                  <Icon className="theme-button-icon" />
+                  {label}
+                </button>
+              )
+            })}
           </div>
         </div>
 

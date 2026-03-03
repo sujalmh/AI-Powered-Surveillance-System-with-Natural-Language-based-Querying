@@ -26,10 +26,134 @@ class BuiltClip:
 
 _TS_PATTERNS = [
     # Example: 2025-10-23T20-56-25-468181.jpg (from code that replaces : and . with -)
+    # Also handles legacy filenames with +00-00 or Z suffix after microseconds
     re.compile(r"(?P<y>\d{4})-(?P<m>\d{2})-(?P<d>\d{2})T(?P<H>\d{2})-(?P<M>\d{2})-(?P<S>\d{2})(?:-(?P<us>\d+))?"),
     # Fallback: plain ISO-like without changes: 2025-10-23T20:56:25(.468181)?
     re.compile(r"(?P<y>\d{4})-(?P<m>\d{2})-(?P<d>\d{2})T(?P<H>\d{2}):(?P<M>\d{2}):(?P<S>\d{2})(?:\.(?P<us>\d+))?"),
 ]
+
+
+def _probe_video_duration(path: Path) -> float:
+    """Return the video file's internal duration in seconds, or 0 on failure."""
+    cap = None
+    try:
+        cap = cv2.VideoCapture(str(path))
+        if not cap.isOpened():
+            return 0.0
+        frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        if fps > 0 and frame_count > 0:
+            return frame_count / fps
+    except Exception:
+        pass
+    finally:
+        try:
+            if cap is not None:
+                cap.release()
+        except Exception:
+            pass
+    return 0.0
+
+
+def _wall_to_video_offset(
+    wall_offset_sec: float,
+    wall_duration_sec: float,
+    video_duration_sec: float,
+) -> float:
+    """
+    Convert a wall-clock offset (seconds from chunk start) to a video-file
+    offset, accounting for FPS mismatch between recording header and actual
+    frame delivery rate.
+
+    If the VideoWriter was opened at 25fps but frames arrived at ~20fps,
+    the video's internal timeline is shorter than wall-clock time.  Without
+    scaling, FFmpeg would seek ~22% past the correct position.
+    """
+    if wall_duration_sec > 1.0 and video_duration_sec > 1.0:
+        scaling = video_duration_sec / wall_duration_sec
+        # Sanity: only apply scaling if ratio is within reasonable bounds
+        # (0.3x – 3.0x).  Outside that range, one of the durations is
+        # probably wrong (e.g. corrupt file).
+        if 0.3 <= scaling <= 3.0:
+            return max(0.0, wall_offset_sec * scaling)
+    return max(0.0, wall_offset_sec)
+
+
+def _map_wall_range_to_video_range(
+    items: List[Tuple[datetime, datetime, Path]],
+    start_dt: datetime,
+    end_dt: datetime,
+) -> Tuple[float, float]:
+    """
+    Map a wall-clock time range across multiple video files to per-file
+    video-timeline offsets and durations, accounting for per-file FPS mismatch.
+    
+    Returns (offset_sec, duration_sec) for FFmpeg -ss and -t flags.
+    Falls back to wall times if video durations cannot be determined.
+    """
+    if not items:
+        return 0.0, (end_dt - start_dt).total_seconds()
+    
+    overall_start = items[0][0]
+    overall_end = items[-1][1]
+    total_wall_dur = (overall_end - overall_start).total_seconds()
+    
+    # Compute per-file video durations
+    file_video_durs = [_probe_video_duration(p) for _, _, p in items]
+    total_video_dur = sum(file_video_durs)
+    
+    # If we can't determine video durations, fall back to wall times
+    if total_video_dur <= 0 or total_wall_dur <= 1.0:
+        wall_offset = max(0.0, (start_dt - overall_start).total_seconds())
+        wall_duration = (end_dt - start_dt).total_seconds()
+        return wall_offset, wall_duration
+    
+    # Piecewise mapping: walk items and accumulate video time for the requested range
+    offset_sec = 0.0
+    duration_sec = 0.0
+    found_start = False
+    
+    for i, (chunk_start, chunk_end, p) in enumerate(items):
+        wall_chunk_dur = (chunk_end - chunk_start).total_seconds()
+        video_chunk_dur = file_video_durs[i]
+        
+        # Skip segments before start_dt
+        if chunk_end <= start_dt:
+            # Accumulate offset in case start is in a later chunk
+            if video_chunk_dur > 0:
+                ratio = video_chunk_dur / wall_chunk_dur if wall_chunk_dur > 0 else 1.0
+                offset_sec += video_chunk_dur
+            continue
+        
+        # Handle segments that overlap with [start_dt, end_dt]
+        seg_start = max(chunk_start, start_dt)
+        seg_end = min(chunk_end, end_dt)
+        
+        if seg_start < seg_end:
+            wall_seg_offset = (seg_start - chunk_start).total_seconds()
+            wall_seg_dur = (seg_end - seg_start).total_seconds()
+            
+            if not found_start:
+                # First segment: compute absolute offset in video timeline
+                if video_chunk_dur > 0 and wall_chunk_dur > 0:
+                    ratio = video_chunk_dur / wall_chunk_dur
+                    offset_sec += wall_seg_offset * ratio
+                else:
+                    offset_sec += wall_seg_offset
+                found_start = True
+            
+            # Accumulate duration for this segment
+            if video_chunk_dur > 0 and wall_chunk_dur > 0:
+                ratio = video_chunk_dur / wall_chunk_dur
+                duration_sec += wall_seg_dur * ratio
+            else:
+                duration_sec += wall_seg_dur
+        
+        # Stop if we've covered end_dt
+        if seg_end >= end_dt:
+            break
+    
+    return max(0.0, offset_sec), max(0.0, duration_sec)
 
 
 def _parse_ts_from_filename(name: str) -> Optional[datetime]:
@@ -105,9 +229,54 @@ def _parse_whitelist(stamps: List[str]) -> Set[datetime]:
     return out
 
 
-def _is_mp4_readable(path: Path) -> bool:
-    """Quick check that an MP4 file has a valid moov atom and can be opened."""
+def _has_moov_atom(path: Path) -> bool:
+    """
+    Quick binary check for an MP4 moov atom.
+
+    ISO base media files store data in boxes (atoms) with a 4-byte size
+    followed by a 4-byte type.  We scan for a box whose type is ``moov``.
+    This avoids opening the file with cv2/FFmpeg which would print noisy
+    "moov atom not found" errors to stderr that we cannot capture.
+    """
     try:
+        with open(path, "rb") as f:
+            data = f.read(min(path.stat().st_size, 64 * 1024))  # first 64KB
+        # Also check at end-of-file (moov may be at the tail in non-faststart files)
+        if path.stat().st_size > 64 * 1024:
+            with open(path, "rb") as f:
+                f.seek(max(0, path.stat().st_size - 64 * 1024))
+                data += f.read()
+        return b"moov" in data
+    except Exception:
+        return False
+
+
+def _is_mp4_readable(path: Path) -> bool:
+    """
+    Check that an MP4 file is valid and usable for clip extraction.
+
+    Filters out:
+    - Files smaller than 1KB (incomplete)
+    - Files modified in the last 2 seconds (still being written)
+    - Files missing the moov atom (truncated/corrupt recordings)
+    - Files that fail to open with cv2.VideoCapture
+    """
+    try:
+        # Skip files that are too small or too recent
+        stat = path.stat()
+        if stat.st_size < 1024:  # Less than 1KB
+            return False
+        age_sec = (datetime.now().timestamp() - stat.st_mtime)
+        if age_sec < 2.0:  # Modified less than 2 seconds ago
+            logger.debug("Skipping very recent file (age=%.1fs): %s", age_sec, path.name)
+            return False
+
+        # Fast binary check for moov atom — avoids noisy FFmpeg stderr
+        # when cv2.VideoCapture tries to open a corrupt file.
+        if not _has_moov_atom(path):
+            logger.debug("Skipping recording without moov atom: %s", path.name)
+            return False
+
         cap = cv2.VideoCapture(str(path))
         if not cap.isOpened():
             return False
@@ -133,6 +302,14 @@ def _collect_recordings(
     for p in cam_dir.glob("*.mp4"):
         # Skip temporary files from FFmpeg background conversion
         if p.stem.endswith("_h264") or p.stem.endswith("._converting"):
+            # Clean up stale converting files (<1KB = failed conversion)
+            if p.stem.endswith("._converting"):
+                try:
+                    if p.stat().st_size < 1024:
+                        p.unlink(missing_ok=True)
+                        logger.debug("Cleaned up failed conversion file: %s", p.name)
+                except Exception:
+                    pass
             continue
         ts = _parse_ts_from_filename(p.name)
         if ts is None:
@@ -292,6 +469,7 @@ def _build_clip_from_snapshots_fallback(
         cmd = [
             ffmpeg_exe,
             "-y",  # overwrite
+            "-nostdin",  # don't wait for user input on errors
             "-i", str(out_path),  # input
             "-c:v", "libx264",  # H.264 codec
             "-preset", "fast",  # encoding speed
@@ -401,15 +579,32 @@ def build_clip_from_snapshots(
     import subprocess
     
     if len(items) == 1:
-        # Single file
+        # Single file — apply FPS scaling to correct for mismatch between
+        # the VideoWriter's header FPS and actual frame delivery rate.
         chunk_start, chunk_end, p = items[0]
-        offset_sec = max(0.0, (start_dt - chunk_start).total_seconds())
-        duration_sec = (end_dt - start_dt).total_seconds()
-        
+        wall_offset = max(0.0, (start_dt - chunk_start).total_seconds())
+        wall_duration = (end_dt - start_dt).total_seconds()
+        wall_chunk_dur = (chunk_end - chunk_start).total_seconds()
+        vid_dur = _probe_video_duration(p)
+
+        offset_sec = _wall_to_video_offset(wall_offset, wall_chunk_dur, vid_dur)
+        duration_sec = _wall_to_video_offset(wall_duration, wall_chunk_dur, vid_dur) if vid_dur > 0 else wall_duration
+
+        if vid_dur > 0 and wall_chunk_dur > 1.0:
+            logger.debug(
+                "Clip FPS scaling: wall_chunk=%.1fs vid=%.1fs ratio=%.3f  "
+                "wall_offset=%.2fs→vid_offset=%.2fs wall_dur=%.2fs→vid_dur=%.2fs",
+                wall_chunk_dur, vid_dur, vid_dur / wall_chunk_dur,
+                wall_offset, offset_sec, wall_duration, duration_sec,
+            )
+
+        # -ss AFTER -i for frame-accurate seeking (important for mp4v recordings
+        # whose keyframes may be sparse).
         cmd = [
             ffmpeg_exe, "-y",
-            "-ss", str(offset_sec),
+            "-nostdin",  # Don't wait for user input on errors
             "-i", str(p),
+            "-ss", str(offset_sec),
             "-t", str(duration_sec),
             "-c:v", "libx264", "-preset", "fast", "-crf", "23",
             "-pix_fmt", "yuv420p", "-movflags", "+faststart",
@@ -427,19 +622,31 @@ def build_clip_from_snapshots(
             out_path.unlink(missing_ok=True)
             return _build_clip_from_snapshots_fallback(camera_id, start_iso, end_iso, fps, allowed_timestamps)
     else:
-        # Merge via concat demuxer
+        # Merge via concat demuxer — apply piecewise FPS scaling per file
         concat_file = out_dir / f"{base_name}_concat.txt"
         with concat_file.open("w") as f:
             for _, _, p in items:
                 # ffmpeg requires full paths properly formatted for concat
                 f.write(f"file '{p.resolve().as_posix()}'\n")
                 
+        # Use piecewise mapping to account for per-file FPS differences
+        offset_sec, duration_sec = _map_wall_range_to_video_range(items, start_dt, end_dt)
+
         overall_start = items[0][0]
-        offset_sec = max(0.0, (start_dt - overall_start).total_seconds())
-        duration_sec = (end_dt - start_dt).total_seconds()
-        
+        overall_end = items[-1][1]
+        wall_chunk_dur = (overall_end - overall_start).total_seconds()
+        total_vid_dur = sum(_probe_video_duration(p) for _, _, p in items)
+
+        if total_vid_dur > 0 and wall_chunk_dur > 1.0:
+            logger.debug(
+                "Clip concat piecewise mapping: wall_total=%.1fs vid_total=%.1fs overall_ratio=%.3f offset=%.2fs dur=%.2fs",
+                wall_chunk_dur, total_vid_dur, total_vid_dur / wall_chunk_dur, offset_sec, duration_sec,
+            )
+
+        # -ss AFTER -i for frame-accurate seeking
         cmd = [
             ffmpeg_exe, "-y",
+            "-nostdin",  # Don't wait for user input on errors
             "-f", "concat", "-safe", "0",
             "-i", str(concat_file),
             "-ss", str(offset_sec),

@@ -87,6 +87,35 @@ COLOR_SYNONYMS: Dict[str, List[str]] = {
 }
 
 
+def build_embedding_text(parsed_filter: Dict[str, Any], fallback_text: str) -> str:
+    """
+    Build concise CLIP-optimized embedding text from parsed filter fields.
+    """
+    obj = parsed_filter.get("objects.object_name") or ""
+    col = parsed_filter.get("objects.color")
+    action = parsed_filter.get("action")
+
+    if col and action and obj:
+        return f"{obj} wearing {str(col).lower()} clothing {action}"
+    if col and obj:
+        return f"{obj} wearing {str(col).lower()} clothing"
+    if action and obj:
+        return f"{obj} {action}"
+    if obj:
+        count_constraint = parsed_filter.get("count_constraint")
+        if count_constraint:
+            gt_val = count_constraint.get("gt", 0)
+            gte_val = count_constraint.get("gte", 0)
+            if gt_val > 1 or gte_val > 1:
+                return f"multiple {obj}s"
+            if gt_val == 1 or gte_val == 2:
+                return f"two or more {obj}s"
+        return obj
+    if action:
+        return f"person {action}"
+    return fallback_text
+
+
 def _expand_parsed_filter(f: Dict[str, Any]) -> None:
     """
     Add __expanded_terms to the parsed filter for downstream recall improvement.
@@ -459,23 +488,12 @@ def parse_nl_with_llm(nl: str) -> Dict[str, Any]:
     semantic_query = result.semantic_query
     f["__semantic_query"] = semantic_query
     
-    # Legacy fields for backwards compatibility
-    # Also build a more descriptive semantic query for CLIP when color+object are present
-    obj = f.get("objects.object_name") or "person"
-    col = f.get("objects.color")
-    action = f.get("action")
-    if col and action:
-        f["__embedding_text"] = f"{obj} wearing {str(col).lower()} clothing {action}"
-        f["__colors_norm"] = [str(col)]
-    elif col:
-        f["__embedding_text"] = f"{obj} wearing {str(col).lower()} clothing"
-        f["__colors_norm"] = [str(col)]
-    elif action:
-        f["__embedding_text"] = f"{obj} {action}"
-        f["__colors_norm"] = []
-    else:
-        f["__embedding_text"] = semantic_query
-        f["__colors_norm"] = []
+    # Build a concise, CLIP-optimized embedding text for vector search.
+    # CLIP works best with short visual descriptions (e.g. "car", "person
+    # running", "person wearing red clothing") rather than verbose sentences
+    # like "video footage showing more than one car detected in the scene".
+    f["__embedding_text"] = build_embedding_text(f, semantic_query)
+    f["__colors_norm"] = [str(f.get("objects.color"))] if f.get("objects.color") and f.get("objects.object_name") else []
 
     # Query expansion: add synonym-based expanded terms for recall (optional downstream use)
     _expand_parsed_filter(f)

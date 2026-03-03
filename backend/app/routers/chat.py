@@ -220,7 +220,7 @@ def parse_simple_nl_to_filter(nl: str) -> Dict[str, Any]:
 
     # object names guess
     object_name = None
-    if re.search(r"\b(person|people)\b", txt):
+    if re.search(r"\b(person|people|persons)\b", txt):
         object_name = "person"
     elif re.search(r"\b(car|cars|vehicle|vehicles)\b", txt):
         object_name = "car"  # adjust as per your YOLO class names
@@ -416,6 +416,11 @@ def parse_simple_nl_to_filter(nl: str) -> Dict[str, Any]:
 
     if ask_color:
         f["__ask_color"] = True
+
+    # Build a concise CLIP-optimized embedding text for vector search.
+    # This is critical: CLIP works best with short visual descriptions.
+    from backend.app.services.nl_parser import build_embedding_text
+    f["__embedding_text"] = build_embedding_text(f, nl)
 
     # Run query expansion so downstream recall-improvement works even in
     # regex fallback mode (was previously only done by the LLM path).
