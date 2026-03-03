@@ -282,7 +282,11 @@ class UnifiedRetrieval:
         # __embedding_text is a short visual description (e.g. "car",
         # "person wearing red clothing") whereas semantic_query is often
         # verbose LLM output that CLIP struggles with.
-        clip_query = parsed_filter.get("__embedding_text") or semantic_query
+        embedding_text = parsed_filter.get("__embedding_text")
+        if isinstance(embedding_text, str) and embedding_text:
+            clip_query = embedding_text
+        else:
+            clip_query = semantic_query or ""
         
         # Safety: truncate verbose queries — CLIP retrieval degrades above ~8 words
         clip_words = clip_query.split()
