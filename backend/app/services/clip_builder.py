@@ -146,13 +146,36 @@ def _parse_whitelist(stamps: List[str]) -> Set[datetime]:
     return out
 
 
+def _has_moov_atom(path: Path) -> bool:
+    """
+    Quick binary check for an MP4 moov atom.
+
+    ISO base media files store data in boxes (atoms) with a 4-byte size
+    followed by a 4-byte type.  We scan for a box whose type is ``moov``.
+    This avoids opening the file with cv2/FFmpeg which would print noisy
+    "moov atom not found" errors to stderr that we cannot capture.
+    """
+    try:
+        with open(path, "rb") as f:
+            data = f.read(min(path.stat().st_size, 64 * 1024))  # first 64KB
+        # Also check at end-of-file (moov may be at the tail in non-faststart files)
+        if path.stat().st_size > 64 * 1024:
+            with open(path, "rb") as f:
+                f.seek(max(0, path.stat().st_size - 64 * 1024))
+                data += f.read()
+        return b"moov" in data
+    except Exception:
+        return False
+
+
 def _is_mp4_readable(path: Path) -> bool:
     """
-    Check that an MP4 file has a valid moov atom and can be opened.
-    
+    Check that an MP4 file is valid and usable for clip extraction.
+
     Filters out:
     - Files smaller than 1KB (incomplete)
     - Files modified in the last 2 seconds (still being written)
+    - Files missing the moov atom (truncated/corrupt recordings)
     - Files that fail to open with cv2.VideoCapture
     """
     try:
@@ -164,7 +187,13 @@ def _is_mp4_readable(path: Path) -> bool:
         if age_sec < 2.0:  # Modified less than 2 seconds ago
             logger.debug("Skipping very recent file (age=%.1fs): %s", age_sec, path.name)
             return False
-            
+
+        # Fast binary check for moov atom — avoids noisy FFmpeg stderr
+        # when cv2.VideoCapture tries to open a corrupt file.
+        if not _has_moov_atom(path):
+            logger.debug("Skipping recording without moov atom: %s", path.name)
+            return False
+
         cap = cv2.VideoCapture(str(path))
         if not cap.isOpened():
             return False

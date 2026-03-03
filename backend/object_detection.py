@@ -638,6 +638,61 @@ def _auto_build_and_index(camera_id: int, start_iso: str, end_iso: str, every_se
         logger.warning("Auto VLM indexing failed for cam {} [{}..{}]: {}", camera_id, start_iso, end_iso, e)
 
 
+def cleanup_corrupt_recordings() -> int:
+    """
+    Remove corrupt recordings (missing moov atom) and stale conversion files.
+
+    Called at startup to clean up after unclean shutdowns.  mp4v recordings
+    write the moov atom only on ``VideoWriter.release()``; if the process was
+    killed, the file is large but unreadable.
+
+    Returns the number of files removed.
+    """
+    removed = 0
+    recordings_dir: Path = settings.RECORDINGS_DIR
+    if not recordings_dir.exists():
+        return 0
+    for cam_dir in recordings_dir.iterdir():
+        if not cam_dir.is_dir():
+            continue
+        for p in cam_dir.glob("*.mp4"):
+            try:
+                # Remove stale conversion intermediaries
+                if "._converting" in p.name:
+                    if p.stat().st_size < 1024:
+                        p.unlink(missing_ok=True)
+                        removed += 1
+                        logger.info("Removed stale conversion file: {}", p.name)
+                    continue
+                # Skip very small files (already handled elsewhere)
+                if p.stat().st_size < 1024:
+                    continue
+                # Quick binary check for moov atom
+                has_moov = False
+                with open(p, "rb") as f:
+                    head = f.read(min(p.stat().st_size, 64 * 1024))
+                if b"moov" in head:
+                    has_moov = True
+                elif p.stat().st_size > 64 * 1024:
+                    with open(p, "rb") as f:
+                        f.seek(max(0, p.stat().st_size - 64 * 1024))
+                        tail = f.read()
+                    has_moov = b"moov" in tail
+                if not has_moov:
+                    p.unlink(missing_ok=True)
+                    removed += 1
+                    logger.warning(
+                        "Removed corrupt recording (no moov atom, {}MB): {}",
+                        p.stat().st_size / 1024 / 1024 if p.exists() else 0,
+                        p.name,
+                    )
+            except Exception as e:
+                logger.debug("cleanup_corrupt_recordings: skip {}: {}", p.name, e)
+    if removed:
+        logger.info("Startup cleanup removed {} corrupt/stale recording(s)", removed)
+    return removed
+
+
 import queue
 
 def _ffmpeg_convert_worker(q: queue.Queue):
