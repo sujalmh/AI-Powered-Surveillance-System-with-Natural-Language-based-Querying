@@ -87,6 +87,35 @@ COLOR_SYNONYMS: Dict[str, List[str]] = {
 }
 
 
+def build_embedding_text(parsed_filter: Dict[str, Any], fallback_text: str) -> str:
+    """
+    Build concise CLIP-optimized embedding text from parsed filter fields.
+    """
+    obj = parsed_filter.get("objects.object_name") or ""
+    col = parsed_filter.get("objects.color")
+    action = parsed_filter.get("action")
+
+    if col and action and obj:
+        return f"{obj} wearing {str(col).lower()} clothing {action}"
+    if col and obj:
+        return f"{obj} wearing {str(col).lower()} clothing"
+    if action and obj:
+        return f"{obj} {action}"
+    if obj:
+        count_constraint = parsed_filter.get("count_constraint")
+        if count_constraint:
+            gt_val = count_constraint.get("gt", 0)
+            gte_val = count_constraint.get("gte", 0)
+            if gt_val > 1 or gte_val > 1:
+                return f"multiple {obj}s"
+            if gt_val == 1 or gte_val == 2:
+                return f"two or more {obj}s"
+        return obj
+    if action:
+        return f"person {action}"
+    return fallback_text
+
+
 def _expand_parsed_filter(f: Dict[str, Any]) -> None:
     """
     Add __expanded_terms to the parsed filter for downstream recall improvement.
@@ -463,41 +492,8 @@ def parse_nl_with_llm(nl: str) -> Dict[str, Any]:
     # CLIP works best with short visual descriptions (e.g. "car", "person
     # running", "person wearing red clothing") rather than verbose sentences
     # like "video footage showing more than one car detected in the scene".
-    obj = f.get("objects.object_name") or ""
-    col = f.get("objects.color")
-    action = f.get("action")
-    if col and action and obj:
-        f["__embedding_text"] = f"{obj} wearing {str(col).lower()} clothing {action}"
-        f["__colors_norm"] = [str(col)]
-    elif col and obj:
-        f["__embedding_text"] = f"{obj} wearing {str(col).lower()} clothing"
-        f["__colors_norm"] = [str(col)]
-    elif action and obj:
-        f["__embedding_text"] = f"{obj} {action}"
-        f["__colors_norm"] = []
-    elif obj:
-        # Use the object name directly — short and precise for CLIP
-        # e.g. "car", "person", "truck"
-        count_constraint = f.get("count_constraint")
-        if count_constraint:
-            # For count queries, prefix with "multiple" for better CLIP recall
-            gt_val = count_constraint.get("gt", 0)
-            gte_val = count_constraint.get("gte", 0)
-            if gt_val > 1 or gte_val > 1:
-                f["__embedding_text"] = f"multiple {obj}s"
-            elif gt_val == 1 or gte_val == 2:
-                f["__embedding_text"] = f"two or more {obj}s"
-            else:
-                f["__embedding_text"] = obj
-        else:
-            f["__embedding_text"] = obj
-        f["__colors_norm"] = []
-    elif action:
-        f["__embedding_text"] = f"person {action}"
-        f["__colors_norm"] = []
-    else:
-        f["__embedding_text"] = semantic_query
-        f["__colors_norm"] = []
+    f["__embedding_text"] = build_embedding_text(f, semantic_query)
+    f["__colors_norm"] = [str(f.get("objects.color"))] if f.get("objects.color") and f.get("objects.object_name") else []
 
     # Query expansion: add synonym-based expanded terms for recall (optional downstream use)
     _expand_parsed_filter(f)

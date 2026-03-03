@@ -350,8 +350,15 @@ class UnifiedRetrieval:
         if not timestamps:
             raise ValueError("Empty timestamp list")
 
-        dts = sorted(parse_ts(t) for t in timestamps)
-        if len(dts) <= 2:
+        parsed_dts = [parse_ts(t) for t in timestamps]
+        dts = sorted(dt for dt in parsed_dts if dt != datetime.min)
+        if not dts:
+            # Fallback to original string bounds if all timestamps are unparseable.
+            sorted_ts = sorted(timestamps)
+            return sorted_ts[0], sorted_ts[-1]
+        if len(dts) == 1:
+            return dts[0].isoformat(), dts[0].isoformat()
+        if len(dts) == 2:
             return dts[0].isoformat(), dts[-1].isoformat()
 
         gaps = [(dts[i + 1] - dts[i]).total_seconds() for i in range(len(dts) - 1)]
@@ -443,7 +450,11 @@ class UnifiedRetrieval:
                         ds = parse_ts(dense_start)
                         de = parse_ts(dense_end)
                         dense_dur = (de - ds).total_seconds()
-                        full_dur = float(rc.get("duration_seconds", 0) or 60)
+                        duration_raw = rc.get("duration_seconds")
+                        try:
+                            full_dur = float(duration_raw) if duration_raw else 0.0
+                        except Exception:
+                            full_dur = 0.0
                         if full_dur > 0 and dense_dur < full_dur * 0.6:
                             # Worthwhile to re-build a trimmer clip
                             cam = rc.get("camera_id")
@@ -465,6 +476,10 @@ class UnifiedRetrieval:
                                     "Re-trimmed semantic clip cam=%s: %.1fs → %.1fs",
                                     cam, full_dur, dense_dur + 2 * buffer_sec,
                                 )
+                        elif full_dur <= 0:
+                            logger.debug(
+                                "Skipping semantic clip re-trim decision due to missing/invalid duration_seconds"
+                            )
                 except Exception as e:
                     logger.debug("Semantic clip re-trim skipped: %s", e)
 

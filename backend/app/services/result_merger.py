@@ -430,17 +430,28 @@ def merge_overlapping_results(
     if len(results) <= 1:
         return results
 
-    by_cam: Dict[Any, List[Dict[str, Any]]] = defaultdict(list)
+    def _semantic_group_key(r: Dict[str, Any]) -> Tuple[Any, str]:
+        cam = r.get("camera_id")
+        obj_name = r.get("object_name")
+        if not obj_name:
+            for o in r.get("objects") or []:
+                if isinstance(o, dict) and o.get("object_name"):
+                    obj_name = o.get("object_name")
+                    break
+        sem = str(obj_name or "").strip().lower() or "__any__"
+        return cam, sem
+
+    by_cam: Dict[Tuple[Any, str], List[Dict[str, Any]]] = defaultdict(list)
     no_time: List[Dict[str, Any]] = []  # semantic-only without start/end
     for r in results:
-        cam = r.get("camera_id")
+        cam, _ = _semantic_group_key(r)
         if cam is not None and (r.get("start") or r.get("end")):
-            by_cam[cam].append(r)
+            by_cam[_semantic_group_key(r)].append(r)
         else:
             no_time.append(r)
 
     merged: List[Dict[str, Any]] = list(no_time)
-    for cam, group in by_cam.items():
+    for (cam, sem_key), group in by_cam.items():
         group.sort(key=lambda x: parse_ts(x.get("start") or x.get("end", "")))
         clusters: List[Dict[str, Any]] = []
         for r in group:

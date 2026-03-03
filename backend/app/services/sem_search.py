@@ -4,6 +4,7 @@ from loguru import logger
 from collections import defaultdict
 from datetime import datetime
 from functools import lru_cache
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -67,14 +68,13 @@ def _adaptive_min_confidence(
 def _object_captions_match(meta: Dict[str, Any], requested_object: str) -> bool:
     """
     Check whether the stored object_captions for a FAISS frame contain
-    the requested object type.  Uses substring matching with common
-    aliases so that e.g. 'car' matches 'a red car parked' or 'vehicle'.
+    the requested object type using whole-word token matching with aliases.
     """
     if not requested_object:
         return True  # no filter
     caps = meta.get("object_captions") or []
     if not caps:
-        return True  # no captions stored — don't reject (may be old index)
+        return False  # missing captions should not auto-pass object-constrained queries
 
     req = requested_object.strip().lower()
     # Alias mapping: expand the requested object to related terms
@@ -89,11 +89,20 @@ def _object_captions_match(meta: Dict[str, Any], requested_object: str) -> bool:
         "backpack": {"backpack", "bag", "rucksack"},
     }
     targets = _ALIASES.get(req, {req})
+    target_tokens = set()
+    for t in targets:
+        t = str(t).strip().lower()
+        if not t:
+            continue
+        target_tokens.update(re.findall(r"[a-z0-9]+", t))
+    if not target_tokens:
+        return False
 
     for cap in caps:
         cap_low = str(cap).strip().lower()
-        for t in targets:
-            if t in cap_low:
+        cap_tokens = set(re.findall(r"[a-z0-9]+", cap_low))
+        for t in target_tokens:
+            if t in cap_tokens:
                 return True
     return False
 

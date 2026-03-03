@@ -5,6 +5,7 @@ import { SettingsTabs } from "@/components/settings/settings-tabs"
 import { useState, useEffect } from "react"
 import { useTheme } from "next-themes"
 import { Moon, Sun, Monitor } from "lucide-react"
+import "./settings.css"
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("user")
@@ -21,34 +22,16 @@ export default function SettingsPage() {
       <div className="space-y-6">
 
         {/* Appearance island */}
-        <div style={{
-          background: "var(--color-surface)",
-          border: "1px solid var(--color-border)",
-          borderRadius: "var(--radius-lg)",
-          padding: "16px 20px",
-          boxShadow: "var(--shadow-sm)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "16px",
-        }}>
+        <div className="settings-appearance-card">
           <div>
-            <p style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--color-text)" }}>Appearance</p>
-            <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)", marginTop: "2px" }}>
+            <p className="settings-appearance-title">Appearance</p>
+            <p className="settings-appearance-subtitle">
               Choose your preferred theme
             </p>
           </div>
 
           {/* Segmented theme picker */}
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            background: "var(--color-surface-raised)",
-            border: "1px solid var(--color-border)",
-            borderRadius: "var(--radius-md)",
-            padding: "3px",
-            gap: "2px",
-          }}>
+          <div className="settings-theme-picker">
             {[
               { value: "light", label: "Light", icon: Sun },
               { value: "system", label: "System", icon: Monitor },
@@ -58,25 +41,11 @@ export default function SettingsPage() {
               return (
                 <button
                   key={value}
+                  type="button"
                   onClick={() => setTheme(value)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "5px",
-                    padding: "6px 12px",
-                    borderRadius: "var(--radius-sm)",
-                    border: "none",
-                    fontSize: "0.8125rem",
-                    fontWeight: 500,
-                    cursor: "pointer",
-                    transition: "all 150ms ease",
-                    background: isActive ? "var(--color-surface)" : "transparent",
-                    color: isActive ? "var(--color-text)" : "var(--color-text-muted)",
-                    boxShadow: isActive ? "var(--shadow-xs)" : "none",
-                    fontFamily: "var(--font-ui)",
-                  }}
+                  className={`theme-button ${isActive ? "theme-button-active" : ""}`}
                 >
-                  <Icon style={{ width: "13px", height: "13px", color: isActive ? "var(--color-primary)" : "inherit" }} />
+                  <Icon className="theme-button-icon" />
                   {label}
                 </button>
               )

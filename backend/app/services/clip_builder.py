@@ -35,17 +35,23 @@ _TS_PATTERNS = [
 
 def _probe_video_duration(path: Path) -> float:
     """Return the video file's internal duration in seconds, or 0 on failure."""
+    cap = None
     try:
         cap = cv2.VideoCapture(str(path))
         if not cap.isOpened():
             return 0.0
         frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
         fps = cap.get(cv2.CAP_PROP_FPS)
-        cap.release()
         if fps > 0 and frame_count > 0:
             return frame_count / fps
     except Exception:
         pass
+    finally:
+        try:
+            if cap is not None:
+                cap.release()
+        except Exception:
+            pass
     return 0.0
 
 
