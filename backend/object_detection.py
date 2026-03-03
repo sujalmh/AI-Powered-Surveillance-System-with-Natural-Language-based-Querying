@@ -980,8 +980,6 @@ def enrich_detected_object(
     CRITICAL: Uses original unmasked ROI for color detection to avoid contamination
     from artificial black background pixels in masked_roi.
     """
-    from pymongo import UpdateOne
-    
     # Color extraction using ORIGINAL unmasked ROI with mask for pixel selection
     # This prevents black background contamination in color detection
     if obj_name == "person":
@@ -1349,12 +1347,15 @@ def process_live_stream(
                     else:
                         mask_src = np.zeros((frame.shape[0], frame.shape[1]), dtype=np.uint8)
                     mask_full = cv2.resize(mask_src, (frame.shape[1], frame.shape[0]), interpolation=cv2.INTER_NEAREST)
-                    # Hard binary threshold — exclude soft boundary pixels that leak background
+                    # Pass original float mask to _extract_masked_lab_pixels for stricter >0.6 thresholding
+                    # (convert to binary uint8 only for display/bitwise operations)
                     if mask_full.dtype in (np.float32, np.float64):
-                        mask_full = (mask_full > 0.5).astype(np.uint8) * 255
+                        mask_roi_display = (mask_full > 0.6).astype(np.uint8) * 255
+                    else:
+                        mask_roi_display = mask_full[y1:y2, x1:x2] if mask_full.shape[0] > y2 else mask_full
                     mask_roi = mask_full[y1:y2, x1:x2]
                     # For display: Apply mask to ROI so only segmented pixels are visible (background zeroed)
-                    masked_roi = cv2.bitwise_and(roi, roi, mask=mask_roi if mask_roi.dtype == np.uint8 else (mask_roi > 0).astype(np.uint8))
+                    masked_roi = cv2.bitwise_and(roi, roi, mask=mask_roi_display if mask_roi_display.dtype == np.uint8 else (mask_roi_display > 0).astype(np.uint8))
                     
                     obj = enrich_detected_object(
                         obj_name=obj_name,
@@ -1693,12 +1694,15 @@ def process_video_file(
                     else:
                         mask_src = np.zeros((frame.shape[0], frame.shape[1]), dtype=np.uint8)
                     mask_full = cv2.resize(mask_src, (frame.shape[1], frame.shape[0]), interpolation=cv2.INTER_NEAREST)
-                    # Hard binary threshold — exclude soft boundary pixels that leak background
+                    # Pass original float mask to _extract_masked_lab_pixels for stricter >0.6 thresholding
+                    # (convert to binary uint8 only for display/bitwise operations)
                     if mask_full.dtype in (np.float32, np.float64):
-                        mask_full = (mask_full > 0.5).astype(np.uint8) * 255
+                        mask_roi_display = (mask_full > 0.6).astype(np.uint8) * 255
+                    else:
+                        mask_roi_display = mask_full[y1:y2, x1:x2] if mask_full.shape[0] > y2 else mask_full
                     mask_roi = mask_full[y1:y2, x1:x2]
                     # Apply mask to ROI so only segmented pixels are visible (background zeroed)
-                    masked_roi = cv2.bitwise_and(roi, roi, mask=mask_roi if mask_roi.dtype == np.uint8 else (mask_roi > 0).astype(np.uint8))
+                    masked_roi = cv2.bitwise_and(roi, roi, mask=mask_roi_display if mask_roi_display.dtype == np.uint8 else (mask_roi_display > 0).astype(np.uint8))
 
                     obj = enrich_detected_object(
                         obj_name=obj_name,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -116,18 +117,30 @@ async def create_alert(req: CreateAlertRequest) -> AlertResponse:
             
             # Extract behavior from NLP if nl is provided and behavior is not already set
             if req.nl and not rule_dict.get("behavior"):
+                NLP_PARSE_TIMEOUT_SECONDS = 30.0
+                executor = ThreadPoolExecutor(max_workers=1)
                 try:
-                    parsed = parse_nl_with_llm(req.nl)
+                    future = executor.submit(parse_nl_with_llm, req.nl)
+                    parsed = future.result(timeout=NLP_PARSE_TIMEOUT_SECONDS)
                     # Extract action from parsed NLP result and use it as behavior
                     if parsed.get("action"):
                         rule_dict["behavior"] = parsed.get("action")
+                except FutureTimeoutError:
+                    logger.warning(
+                        "NLP parsing timeout after {} seconds while creating alert name={} nl_len={}",
+                        NLP_PARSE_TIMEOUT_SECONDS,
+                        req.name,
+                        len(req.nl or ""),
+                    )
                 except Exception:
                     logger.exception(
-                        "NLP parsing failed while creating alert name={} nl_len={} has_rule_keys={}",
+                        "NLP parsing error while creating alert name={} nl_len={} has_rule_keys={}",
                         req.name,
                         len(req.nl or ""),
                         bool(rule_dict),
                     )
+                finally:
+                    executor.shutdown(wait=False)
             
             doc = {
                 "name": req.name,
