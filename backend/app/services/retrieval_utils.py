@@ -138,6 +138,66 @@ def count_matches_constraint(count: int, constraint: Dict[str, int]) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Color family mapping — backward compat for old CSS3-granular data & fuzzy user queries.
+# Maps each basic colour to a set of names that belong to the same perceptual family.
+# ---------------------------------------------------------------------------
+COLOR_FAMILIES: Dict[str, frozenset] = {
+    "red":    frozenset({"red", "crimson", "maroon", "scarlet", "burgundy", "firebrick", "darkred", "dark red"}),
+    "blue":   frozenset({"blue", "navy", "azure", "cobalt", "royal blue", "royalblue", "steelblue",
+                          "steel blue", "dodgerblue", "dodger blue", "cornflowerblue", "darkblue",
+                          "cyan", "teal", "turquoise", "aqua", "cadetblue"}),
+    "green":  frozenset({"green", "lime", "olive", "emerald", "forestgreen", "forest green",
+                          "limegreen", "lime green", "darkgreen", "dark green", "seagreen",
+                          "sea green", "springgreen", "spring green", "cyan", "teal"}),
+    "yellow": frozenset({"yellow", "gold", "amber", "khaki", "lemon", "lightyellow", "light yellow"}),
+    "orange": frozenset({"orange", "coral", "tangerine", "peach", "darkorange", "dark orange",
+                          "orangered", "orange red", "tomato"}),
+    "pink":   frozenset({"pink", "magenta", "fuchsia", "rose", "salmon", "hotpink", "hot pink",
+                          "lightpink", "light pink", "deeppink", "deep pink"}),
+    "purple": frozenset({"purple", "violet", "indigo", "lavender", "plum", "orchid",
+                          "darkviolet", "dark violet", "blueviolet", "blue violet",
+                          "mediumpurple", "medium purple"}),
+    "black":  frozenset({"black", "dark"}),
+    "white":  frozenset({"white", "ivory", "cream", "snow", "linen", "floralwhite", "floral white",
+                          "ghostwhite", "ghost white", "beige"}),
+    "gray":   frozenset({"gray", "grey", "silver", "charcoal", "slate", "darkgray", "dark gray",
+                          "lightgray", "light gray", "dimgray", "dim gray", "gainsboro"}),
+    "brown":  frozenset({"brown", "tan", "chocolate", "sienna", "saddlebrown", "saddle brown",
+                          "peru", "burlywood", "sandy brown", "sandybrown", "rosybrown", "rosy brown"}),
+    "cyan":   frozenset({"cyan", "teal", "turquoise", "aqua", "aquamarine"}),
+}
+
+# Invert for O(1) lookup: detected_name → set of families it belongs to
+_COLOR_TO_FAMILIES: Dict[str, set] = {}
+for _family, _members in COLOR_FAMILIES.items():
+    for _m in _members:
+        _COLOR_TO_FAMILIES.setdefault(_m, set()).add(_family)
+    _COLOR_TO_FAMILIES.setdefault(_family, set()).add(_family)
+
+
+def _color_family_match(requested: str, detected: str) -> bool:
+    """Return True if *detected* colour belongs to the same family as *requested*.
+    
+    A colour like 'cyan' may belong to both the 'blue' and 'cyan' families,
+    so we check bidirectionally: is the detected colour a member of the
+    requested colour's family, OR vice-versa?
+    """
+    req = requested.strip().lower()
+    det = detected.strip().lower()
+    if req == det:
+        return True
+    # Check if detected is in the requested colour's family members
+    family = COLOR_FAMILIES.get(req)
+    if family and det in family:
+        return True
+    # Check if requested is in the detected colour's family members
+    det_family = COLOR_FAMILIES.get(det)
+    if det_family and req in det_family:
+        return True
+    return False
+
+
+# ---------------------------------------------------------------------------
 # Object matching
 # ---------------------------------------------------------------------------
 def object_matches(obj: Dict[str, Any], parsed_filter: Dict[str, Any]) -> bool:
@@ -150,7 +210,7 @@ def object_matches(obj: Dict[str, Any], parsed_filter: Dict[str, Any]) -> bool:
         return False
     if color:
         # Match against top-3 colors array + upper/lower body colors + legacy single color
-        all_obj_colors = set()
+        all_obj_colors: set = set()
         for c in (obj.get("colors") or []):
             all_obj_colors.add(str(c).strip().lower())
         for c in (obj.get("upper_body_colors") or []):
@@ -162,8 +222,11 @@ def object_matches(obj: Dict[str, Any], parsed_filter: Dict[str, Any]) -> bool:
             all_obj_colors.add(legacy)
         all_obj_colors.discard("")
         all_obj_colors.discard("unknown")
-        if str(color).lower() not in all_obj_colors:
-            return False
+        color_lower = str(color).lower()
+        # Exact match first, then family match for backward compat with old CSS3 names
+        if color_lower not in all_obj_colors:
+            if not any(_color_family_match(color_lower, c) for c in all_obj_colors):
+                return False
     return True
 
 

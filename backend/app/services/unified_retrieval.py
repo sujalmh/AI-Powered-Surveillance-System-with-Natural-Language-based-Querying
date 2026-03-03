@@ -283,12 +283,14 @@ class UnifiedRetrieval:
         # verbose LLM output that CLIP struggles with.
         clip_query = parsed_filter.get("__embedding_text") or semantic_query
         
-        # Warn if clip_query is too verbose (>10 words = suboptimal for CLIP)
-        if len(clip_query.split()) > 10:
+        # Safety: truncate verbose queries — CLIP retrieval degrades above ~8 words
+        clip_words = clip_query.split()
+        if len(clip_words) > 8:
             logger.warning(
-                "CLIP query may be too verbose (%d words): %r. Consider shortening for better retrieval.",
-                len(clip_query.split()), clip_query
+                "CLIP query too verbose (%d words): %r — truncating to 8 words for better retrieval.",
+                len(clip_words), clip_query
             )
+            clip_query = " ".join(clip_words[:8])
         
         logger.info(
             "Semantic CLIP query (%d words): %r (original semantic_query: %r)",

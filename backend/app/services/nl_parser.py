@@ -79,11 +79,12 @@ ACTION_SYNONYMS: Dict[str, List[str]] = {
 }
 COLOR_SYNONYMS: Dict[str, List[str]] = {
     "red": ["red", "crimson", "maroon", "burgundy", "scarlet"],
-    "blue": ["blue", "navy", "azure", "cobalt"],
+    "blue": ["blue", "navy", "azure", "cobalt", "cyan", "teal"],
     "green": ["green", "lime", "emerald", "teal"],
     "black": ["black", "dark"],
     "white": ["white", "light"],
     "yellow": ["yellow", "gold", "amber"],
+    "cyan": ["cyan", "teal", "turquoise", "aqua"],
 }
 
 
@@ -116,22 +117,32 @@ def build_embedding_text(parsed_filter: Dict[str, Any], fallback_text: str) -> s
     if action:
         return f"person {action}"
     
-    # Fallback: extract key visual terms from semantic query (max 8 words)
-    # Remove common filler words that don't help CLIP visual matching
+    # Fallback: extract key visual terms from semantic query (max 6 words)
+    # Remove common filler words that don't help CLIP visual matching.
+    # CLIP works best with short phrases (2-6 words), not full sentences.
     if fallback_text:
         filler_words = {
             "show", "showing", "shows", "video", "footage", "clip", "clips",
             "find", "search", "where", "when", "the", "a", "an", "is", "are",
             "was", "were", "have", "has", "had", "can", "could", "would", "should",
-            "me", "please", "want", "need", "looking", "for", "detected", "detection"
+            "me", "please", "want", "need", "looking", "for", "detected", "detection",
+            "surveillance", "camera", "cameras", "frame", "frames", "scene",
+            "recent", "latest", "last", "any", "all", "some", "get", "give",
+            "from", "with", "that", "this", "there", "their", "them", "then",
+            "which", "what", "does", "did", "been", "being", "just", "also",
+            "very", "really", "only", "into", "about", "near", "around",
         }
         words = fallback_text.lower().split()
         # Keep visual terms, remove filler
         visual_terms = [w for w in words if w not in filler_words and len(w) > 2]
         if visual_terms:
-            # Limit to 8 words for CLIP efficiency
-            return " ".join(visual_terms[:8])
+            # Limit to 6 words for optimal CLIP retrieval
+            return " ".join(visual_terms[:6])
     
+    # Last resort: truncate raw text to 6 words to avoid sending full sentences to CLIP
+    words = fallback_text.split() if fallback_text else []
+    if len(words) > 6:
+        return " ".join(words[:6])
     return fallback_text
 
 
