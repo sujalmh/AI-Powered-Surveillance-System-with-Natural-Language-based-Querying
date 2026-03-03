@@ -17,6 +17,7 @@ from loguru import logger
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
+import hashlib
 
 from backend.app.config import settings
 from backend.app.db.mongo import (
@@ -285,17 +286,25 @@ class UnifiedRetrieval:
         
         # Safety: truncate verbose queries — CLIP retrieval degrades above ~8 words
         clip_words = clip_query.split()
+        clip_query_hash = hashlib.sha256((clip_query or "").encode("utf-8")).hexdigest()[:12]
+        semantic_query_hash = hashlib.sha256((semantic_query or "").encode("utf-8")).hexdigest()[:12]
         if len(clip_words) > 8:
             logger.warning(
-                "CLIP query too verbose (%d words): %r — truncating to 8 words for better retrieval.",
-                len(clip_words), clip_query
+                "CLIP query too verbose (words={}) - truncating to 8 words (clip_hash={})",
+                len(clip_words),
+                clip_query_hash,
             )
+            logger.debug("Original verbose CLIP query text before truncation: {}", clip_query)
             clip_query = " ".join(clip_words[:8])
-        
+
         logger.info(
-            "Semantic CLIP query (%d words): %r (original semantic_query: %r)",
-            len(clip_query.split()), clip_query, semantic_query,
+            "Semantic CLIP query metadata clip_words={} semantic_words={} clip_hash={} semantic_hash={}",
+            len(clip_query.split()),
+            len((semantic_query or "").split()),
+            hashlib.sha256((clip_query or "").encode("utf-8")).hexdigest()[:12],
+            semantic_query_hash,
         )
+        logger.debug("Semantic CLIP query text clip_query='{}' semantic_query='{}'", clip_query, semantic_query)
 
         # Query expansion
         expanded_queries: Optional[List[str]] = None

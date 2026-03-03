@@ -323,13 +323,22 @@ def _extract_masked_lab_pixels(roi_bgr: np.ndarray, mask: np.ndarray) -> Optiona
     kernel_size = max(2, min(roi_bgr.shape[0], roi_bgr.shape[1]) // 50)  # Adaptive kernel size
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
     mask_eroded = cv2.erode(mask_bin, kernel, iterations=1)
-    
+
     # Convert to LAB color space BEFORE masking (important: work with original colors)
     lab_roi_cv = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2LAB)
-    pixels_cv = lab_roi_cv[mask_eroded > 0]
-    
-    if pixels_cv.shape[0] < 10:
-        return None
+
+    if int(np.count_nonzero(mask_eroded)) < 10:
+        # Fallback for tiny/skinny masks where erosion wipes too much signal.
+        pixels_cv = lab_roi_cv[mask_bin > 0]
+        if pixels_cv.shape[0] < 3:
+            return None
+    else:
+        pixels_cv = lab_roi_cv[mask_eroded > 0]
+        if pixels_cv.shape[0] < 10:
+            fallback_pixels = lab_roi_cv[mask_bin > 0]
+            if fallback_pixels.shape[0] < 3:
+                return None
+            pixels_cv = fallback_pixels
 
     # Convert OpenCV LAB (uint8) → standard CIE L*a*b* so KMeans clusters
     # in a perceptually uniform space (correct lightness weighting).

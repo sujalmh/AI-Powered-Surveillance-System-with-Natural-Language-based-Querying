@@ -13,6 +13,7 @@ from backend.app.core.async_utils import run_sync
 from backend.app.db.mongo import alerts as alerts_col, alert_logs as alert_logs_col
 from backend.app.services.alert_engine import _now_utc_iso, evaluate_rule
 from backend.app.services.nl_parser import parse_nl_with_llm
+from loguru import logger
 
 router = APIRouter()
 
@@ -121,8 +122,12 @@ async def create_alert(req: CreateAlertRequest) -> AlertResponse:
                     if parsed.get("action"):
                         rule_dict["behavior"] = parsed.get("action")
                 except Exception:
-                    # NLP parsing failure; silently ignore and proceed without behavior extraction
-                    pass
+                    logger.exception(
+                        "NLP parsing failed while creating alert name={} nl_len={} has_rule_keys={}",
+                        req.name,
+                        len(req.nl or ""),
+                        bool(rule_dict),
+                    )
             
             doc = {
                 "name": req.name,

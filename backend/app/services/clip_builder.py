@@ -307,9 +307,9 @@ def _collect_recordings(
                 try:
                     if p.stat().st_size < 1024:
                         p.unlink(missing_ok=True)
-                        logger.debug("Cleaned up failed conversion file: %s", p.name)
+                        logger.debug("Cleaned up failed conversion file: {}", p.name)
                 except Exception as e:
-                    logger.debug("Failed to clean up stale conversion file %s: %s", p.name, e, exc_info=True)
+                    logger.opt(exception=True).debug("Failed to clean up stale conversion file {}: {}", p.name, e)
             continue
         ts = _parse_ts_from_filename(p.name)
         if ts is None:

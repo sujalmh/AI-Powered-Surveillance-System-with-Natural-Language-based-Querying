@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from loguru import logger
 import math
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 from backend.app.config import settings
 from backend.app.services.retrieval_utils import (
@@ -361,10 +361,10 @@ def split_sparse_segments(
     filler between sparse detection clusters.
     """
     output: List[Dict[str, Any]] = []
-    queue: List[Dict[str, Any]] = list(segments)
-    
+    queue: Deque[Dict[str, Any]] = deque(segments)
+
     while queue:
-        seg = queue.pop(0)
+        seg = queue.popleft()
         raw_ts = seg.get("matched_timestamps") or []
         if len(raw_ts) < 3:
             output.append(seg)
