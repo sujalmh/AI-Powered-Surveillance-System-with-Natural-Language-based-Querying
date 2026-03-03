@@ -351,16 +351,20 @@ def split_sparse_segments(
     gap_factor: float = 4.0,
 ) -> List[Dict[str, Any]]:
     """
-    Split coalesced segments that contain large internal timestamp gaps.
+    Iteratively split segments that contain large internal timestamp gaps.
 
-    If a segment's ``matched_timestamps`` contain a gap that is both
-    > *min_gap_abs* seconds **and** > *gap_factor* × the median gap,
-    the segment is split at that point into tighter sub-segments.
+    For each segment's ``matched_timestamps``, compute gaps and threshold.
+    If a gap exceeds threshold, split at the largest gap into left/right clusters.
+    Push both clusters back for re-evaluation so they can be further split.
+    Only append segments to output when no gap exceeds threshold.
     This prevents clips from containing long stretches of irrelevant
-    filler between two sparse detection clusters.
+    filler between sparse detection clusters.
     """
     output: List[Dict[str, Any]] = []
-    for seg in segments:
+    queue: List[Dict[str, Any]] = list(segments)
+    
+    while queue:
+        seg = queue.pop(0)
         raw_ts = seg.get("matched_timestamps") or []
         if len(raw_ts) < 3:
             output.append(seg)
@@ -384,10 +388,11 @@ def split_sparse_segments(
                     split_idx = i
 
             if split_idx < 0:
+                # No gap exceeds threshold; finalize this segment
                 output.append(seg)
                 continue
 
-            # Split into two clusters at split_idx
+            # Split into two clusters at split_idx and re-queue for further splitting
             left_dts = dts[: split_idx + 1]
             right_dts = dts[split_idx + 1:]
 
@@ -406,7 +411,7 @@ def split_sparse_segments(
                     "matched_timestamps": [t.isoformat() for t in cluster],
                     "objects": seg_objects,
                 }
-                output.append(new_seg)
+                queue.append(new_seg)  # Re-queue for further splitting evaluation
         except Exception:
             logger.opt(exception=True).debug("split_sparse_segments failed for one segment")
             output.append(seg)
@@ -451,7 +456,7 @@ def merge_overlapping_results(
             no_time.append(r)
 
     merged: List[Dict[str, Any]] = list(no_time)
-    for (cam, sem_key), group in by_cam.items():
+    for (_cam, _sem_key), group in by_cam.items():
         group.sort(key=lambda x: parse_ts(x.get("start") or x.get("end", "")))
         clusters: List[Dict[str, Any]] = []
         for r in group:
