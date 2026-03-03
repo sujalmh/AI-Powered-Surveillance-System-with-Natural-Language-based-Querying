@@ -90,11 +90,13 @@ COLOR_SYNONYMS: Dict[str, List[str]] = {
 def build_embedding_text(parsed_filter: Dict[str, Any], fallback_text: str) -> str:
     """
     Build concise CLIP-optimized embedding text from parsed filter fields.
+    CLIP works best with SHORT visual descriptions (2-5 words) rather than sentences.
     """
     obj = parsed_filter.get("objects.object_name") or ""
     col = parsed_filter.get("objects.color")
     action = parsed_filter.get("action")
 
+    # Build from structured fields (preferred - most accurate for CLIP)
     if col and action and obj:
         return f"{obj} wearing {str(col).lower()} clothing {action}"
     if col and obj:
@@ -113,6 +115,23 @@ def build_embedding_text(parsed_filter: Dict[str, Any], fallback_text: str) -> s
         return obj
     if action:
         return f"person {action}"
+    
+    # Fallback: extract key visual terms from semantic query (max 8 words)
+    # Remove common filler words that don't help CLIP visual matching
+    if fallback_text:
+        filler_words = {
+            "show", "showing", "shows", "video", "footage", "clip", "clips",
+            "find", "search", "where", "when", "the", "a", "an", "is", "are",
+            "was", "were", "have", "has", "had", "can", "could", "would", "should",
+            "me", "please", "want", "need", "looking", "for", "detected", "detection"
+        }
+        words = fallback_text.lower().split()
+        # Keep visual terms, remove filler
+        visual_terms = [w for w in words if w not in filler_words and len(w) > 2]
+        if visual_terms:
+            # Limit to 8 words for CLIP efficiency
+            return " ".join(visual_terms[:8])
+    
     return fallback_text
 
 

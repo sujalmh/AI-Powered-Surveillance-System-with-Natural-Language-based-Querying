@@ -282,21 +282,32 @@ def closest_color(rgb_color):
 def _extract_masked_lab_pixels(roi_bgr: np.ndarray, mask: np.ndarray) -> Optional[np.ndarray]:
     """
     Extract LAB pixels from only the segmented (masked) region of an ROI.
-    Applies a hard binary threshold (>0.5) on the mask to exclude soft boundary pixels.
+    Applies a hard binary threshold (>0.6) on the mask to exclude soft boundary pixels.
+    Also applies morphological erosion to avoid edge contamination from background.
     Returns Nx3 LAB array or None if insufficient pixels.
     """
     if roi_bgr is None or roi_bgr.size == 0 or mask is None or mask.size == 0:
         return None
-    # Hard binary threshold — exclude soft boundary pixels that leak background
+    
+    # Hard binary threshold with higher threshold to exclude edge pixels
     if mask.dtype in (np.float32, np.float64):
-        mask_bin = (mask > 0.5).astype(np.uint8)
+        mask_bin = (mask > 0.6).astype(np.uint8)
     else:
-        mask_bin = (mask > 127).astype(np.uint8) if mask.max() > 1 else mask.astype(np.uint8)
+        mask_bin = (mask > 150).astype(np.uint8) if mask.max() > 1 else mask.astype(np.uint8)
+    
     # Ensure mask dimensions match ROI
     if mask_bin.shape[:2] != roi_bgr.shape[:2]:
         mask_bin = cv2.resize(mask_bin, (roi_bgr.shape[1], roi_bgr.shape[0]), interpolation=cv2.INTER_NEAREST)
+    
+    # Apply erosion to shrink mask slightly and remove edge pixels that may contain background bleed
+    kernel_size = max(2, min(roi_bgr.shape[0], roi_bgr.shape[1]) // 50)  # Adaptive kernel size
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+    mask_eroded = cv2.erode(mask_bin, kernel, iterations=1)
+    
+    # Convert to LAB color space BEFORE masking (important: work with original colors)
     lab_roi = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2LAB)
-    pixels = lab_roi[mask_bin > 0]
+    pixels = lab_roi[mask_eroded > 0]
+    
     if pixels.shape[0] < 10:
         return None
     return pixels
@@ -906,7 +917,8 @@ class ThreadedFrameReader:
 # =========================================
 def enrich_detected_object(
     obj_name: str,
-    masked_roi: np.ndarray,
+    roi: np.ndarray,  # IMPORTANT: Original unmasked ROI for accurate color detection
+    masked_roi: np.ndarray,  # Masked version for display/attribute inference
     mask_roi: np.ndarray,
     x1: int, x2: int, y1: int, y2: int,
     track_id: Any,
@@ -922,14 +934,21 @@ def enrich_detected_object(
     person_meta: List[Dict[str, Any]],
     attr_encoder: Any
 ) -> Dict[str, Any]:
-    """Helper to unify bounding-box extraction logic in both live and file stream."""
+    """
+    Helper to unify bounding-box extraction logic in both live and file stream.
+    
+    CRITICAL: Uses original unmasked ROI for color detection to avoid contamination
+    from artificial black background pixels in masked_roi.
+    """
     from pymongo import UpdateOne
-    # Color extraction: persons get upper/lower body split; others get top-3
+    
+    # Color extraction using ORIGINAL unmasked ROI with mask for pixel selection
+    # This prevents black background contamination in color detection
     if obj_name == "person":
-        color_info = get_person_body_colors(masked_roi, mask_roi)
+        color_info = get_person_body_colors(roi, mask_roi)
         color_name = color_info["color"]
     else:
-        top_colors = get_top_colors(masked_roi, mask_roi, k=3)
+        top_colors = get_top_colors(roi, mask_roi, k=3)
         color_name = top_colors[0] if top_colors else "Unknown"
         color_info = {"color": color_name, "colors": top_colors}
 
@@ -1294,11 +1313,12 @@ def process_live_stream(
                     if mask_full.dtype in (np.float32, np.float64):
                         mask_full = (mask_full > 0.5).astype(np.uint8) * 255
                     mask_roi = mask_full[y1:y2, x1:x2]
-                    # Apply mask to ROI so only segmented pixels are visible (background zeroed)
+                    # For display: Apply mask to ROI so only segmented pixels are visible (background zeroed)
                     masked_roi = cv2.bitwise_and(roi, roi, mask=mask_roi if mask_roi.dtype == np.uint8 else (mask_roi > 0).astype(np.uint8))
                     
                     obj = enrich_detected_object(
                         obj_name=obj_name,
+                        roi=roi,  # Original unmasked ROI for accurate color detection
                         masked_roi=masked_roi,
                         mask_roi=mask_roi,
                         x1=x1, x2=x2, y1=y1, y2=y2,
@@ -1642,6 +1662,7 @@ def process_video_file(
 
                     obj = enrich_detected_object(
                         obj_name=obj_name,
+                        roi=roi,  # Original unmasked ROI for accurate color detection
                         masked_roi=masked_roi,
                         mask_roi=mask_roi,
                         x1=x1, x2=x2, y1=y1, y2=y2,

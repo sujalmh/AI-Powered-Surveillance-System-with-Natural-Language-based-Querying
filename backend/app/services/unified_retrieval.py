@@ -282,9 +282,17 @@ class UnifiedRetrieval:
         # "person wearing red clothing") whereas semantic_query is often
         # verbose LLM output that CLIP struggles with.
         clip_query = parsed_filter.get("__embedding_text") or semantic_query
-        logger.debug(
-            "Semantic CLIP query: %r (original semantic_query: %r)",
-            clip_query, semantic_query,
+        
+        # Warn if clip_query is too verbose (>10 words = suboptimal for CLIP)
+        if len(clip_query.split()) > 10:
+            logger.warning(
+                "CLIP query may be too verbose (%d words): %r. Consider shortening for better retrieval.",
+                len(clip_query.split()), clip_query
+            )
+        
+        logger.info(
+            "Semantic CLIP query (%d words): %r (original semantic_query: %r)",
+            len(clip_query.split()), clip_query, semantic_query,
         )
 
         # Query expansion
