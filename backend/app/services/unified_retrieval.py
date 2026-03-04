@@ -17,6 +17,7 @@ from loguru import logger
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
+import hashlib
 
 from backend.app.config import settings
 from backend.app.db.mongo import (
@@ -281,11 +282,34 @@ class UnifiedRetrieval:
         # __embedding_text is a short visual description (e.g. "car",
         # "person wearing red clothing") whereas semantic_query is often
         # verbose LLM output that CLIP struggles with.
-        clip_query = parsed_filter.get("__embedding_text") or semantic_query
-        logger.debug(
-            "Semantic CLIP query: %r (original semantic_query: %r)",
-            clip_query, semantic_query,
+        embedding_text = parsed_filter.get("__embedding_text")
+        if isinstance(embedding_text, str) and embedding_text:
+            clip_query = embedding_text
+        else:
+            clip_query = semantic_query or ""
+        
+        # Safety: truncate verbose queries — CLIP retrieval degrades above ~8 words
+        clip_words = clip_query.split()
+        semantic_query_hash = hashlib.sha256((semantic_query or "").encode("utf-8")).hexdigest()[:12]
+        if len(clip_words) > 8:
+            logger.warning(
+                "CLIP query too verbose (words={}) - truncating to 8 words",
+                len(clip_words),
+            )
+            logger.debug("Original verbose CLIP query text before truncation: {}", clip_query)
+            clip_query = " ".join(clip_words[:8])
+        
+        # Update hash after truncation so it reflects final query
+        clip_query_hash = hashlib.sha256((clip_query or "").encode("utf-8")).hexdigest()[:12]
+
+        logger.info(
+            "Semantic CLIP query metadata clip_words={} semantic_words={} clip_hash={} semantic_hash={}",
+            len(clip_query.split()),
+            len((semantic_query or "").split()),
+            clip_query_hash,
+            semantic_query_hash,
         )
+        logger.debug("Semantic CLIP query text clip_query='{}' semantic_query='{}'", clip_query, semantic_query)
 
         # Query expansion
         expanded_queries: Optional[List[str]] = None

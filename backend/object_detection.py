@@ -179,14 +179,23 @@ def ensure_attributes_model_loaded() -> bool:
 # =================================================================
 # ADVANCED COLOR UTILITIES (CIEDE2000 Implementation)
 # =================================================================
-CSS3_COLORS = {
-    'Red': '#FF0000', 'Green': '#008000', 'Blue': '#0000FF', 'Yellow': '#FFFF00',
-    'Black': '#000000', 'White': '#FFFFFF', 'Purple': '#800080', 'Orange': '#FFA500',
-    'Pink': '#FFC0CB', 'Brown': '#A52A2A', 'Gray': '#808080', 'Cyan': '#00FFFF',
-    'Magenta': '#FF00FF', 'Lime': '#00FF00', 'Navy': '#000080', 'Olive': '#808000',
-    'Teal': '#008080', 'Violet': '#EE82EE', 'Maroon': '#800000', 'Silver': '#C0C0C0',
-    'Gold': '#FFD700', 'Coral': '#FF7F50', 'Turquoise': '#40E0D0', 'Salmon': '#FA8072',
-    'Indigo': '#4B0082'
+# Simplified surveillance-optimized palette: 11 basic color categories.
+# Users search for basic names ("red", "blue", "black") — not CSS3 specifics
+# like "Coral", "Salmon", or "Turquoise".  CIEDE2000 with correct CIE L*a*b*
+# scaling maps any detected colour to the perceptually nearest basic name.
+SURVEILLANCE_COLORS = {
+    'Red': '#CC0000',       # Shifted slightly dark to capture maroons/dark reds
+    'Blue': '#0000FF',
+    'Green': '#008000',
+    'Yellow': '#FFFF00',
+    'Orange': '#FF8C00',
+    'Pink': '#FF69B4',
+    'Purple': '#800080',
+    'Black': '#000000',
+    'White': '#FFFFFF',
+    'Gray': '#A0A0A0',      # Shifted lighter to capture silvers/light grays correctly
+    'Brown': '#8B4513',
+    'Cyan': '#00BBBB',      # Covers teal, turquoise, aqua — distinct from blue/green
 }
 
 def hex_to_rgb(hex_color):
@@ -194,15 +203,26 @@ def hex_to_rgb(hex_color):
     hex_color = hex_color.lstrip('#')
     return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
 
-CSS3_RGB_COLORS = {name: hex_to_rgb(code) for name, code in CSS3_COLORS.items()}
+SURVEILLANCE_RGB_COLORS = {name: hex_to_rgb(code) for name, code in SURVEILLANCE_COLORS.items()}
 
 def rgb_to_lab(rgb):
-    """Convert RGB to LAB using OpenCV."""
-    rgb_arr = np.array([[rgb]], dtype=np.uint8)
-    lab = cv2.cvtColor(rgb_arr, cv2.COLOR_RGB2LAB)[0][0]
-    return tuple(map(float, lab))
+    """Convert RGB to **standard CIE L*a*b*** via OpenCV with proper scale correction.
 
-CSS3_LAB_COLORS = {name: rgb_to_lab(rgb) for name, rgb in CSS3_RGB_COLORS.items()}
+    OpenCV stores LAB in uint8 as:  L=[0,255]  a=[0,255]  b=[0,255]
+    Standard CIE L*a*b*:            L*=[0,100]  a*=[-128,127]  b*=[-128,127]
+
+    The CIEDE2000 formula expects standard CIE L*a*b* — feeding it the raw
+    OpenCV-scaled values breaks lightness compensation (S_L) and collapses
+    hue angles into the first quadrant, causing wildly incorrect colour names.
+    """
+    rgb_arr = np.array([[rgb]], dtype=np.uint8)
+    lab_cv = cv2.cvtColor(rgb_arr, cv2.COLOR_RGB2LAB)[0][0]
+    L_star = float(lab_cv[0]) * 100.0 / 255.0
+    a_star = float(lab_cv[1]) - 128.0
+    b_star = float(lab_cv[2]) - 128.0
+    return (L_star, a_star, b_star)
+
+SURVEILLANCE_LAB_COLORS = {name: rgb_to_lab(rgb) for name, rgb in SURVEILLANCE_RGB_COLORS.items()}
 
 def delta_e_ciede2000(lab1, lab2, k_L=1, k_C=1, k_H=1):
     """Compute CIEDE2000 color difference between two LAB colors."""
@@ -271,34 +291,61 @@ def delta_e_ciede2000(lab1, lab2, k_L=1, k_C=1, k_H=1):
     return dE
 
 def closest_color(rgb_color):
-    """Find closest named color to given RGB color using CIEDE2000."""
+    """Find closest basic named color to given RGB color using CIEDE2000."""
     if rgb_color == (0, 0, 0):
         return "Unknown"
     
     lab_color = rgb_to_lab(rgb_color)
-    return min(CSS3_LAB_COLORS, key=lambda name: delta_e_ciede2000(lab_color, CSS3_LAB_COLORS[name]))
+    return min(SURVEILLANCE_LAB_COLORS, key=lambda name: delta_e_ciede2000(lab_color, SURVEILLANCE_LAB_COLORS[name]))
 
 
 def _extract_masked_lab_pixels(roi_bgr: np.ndarray, mask: np.ndarray) -> Optional[np.ndarray]:
     """
     Extract LAB pixels from only the segmented (masked) region of an ROI.
-    Applies a hard binary threshold (>0.5) on the mask to exclude soft boundary pixels.
+    Applies a hard binary threshold (>0.6) on the mask to exclude soft boundary pixels.
+    Also applies morphological erosion to avoid edge contamination from background.
     Returns Nx3 LAB array or None if insufficient pixels.
     """
     if roi_bgr is None or roi_bgr.size == 0 or mask is None or mask.size == 0:
         return None
-    # Hard binary threshold — exclude soft boundary pixels that leak background
+    
+    # Hard binary threshold with higher threshold to exclude edge pixels
     if mask.dtype in (np.float32, np.float64):
-        mask_bin = (mask > 0.5).astype(np.uint8)
+        mask_bin = (mask > 0.6).astype(np.uint8)
     else:
-        mask_bin = (mask > 127).astype(np.uint8) if mask.max() > 1 else mask.astype(np.uint8)
+        mask_bin = (mask > 153).astype(np.uint8) if mask.max() > 1 else mask.astype(np.uint8)
+    
     # Ensure mask dimensions match ROI
     if mask_bin.shape[:2] != roi_bgr.shape[:2]:
         mask_bin = cv2.resize(mask_bin, (roi_bgr.shape[1], roi_bgr.shape[0]), interpolation=cv2.INTER_NEAREST)
-    lab_roi = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2LAB)
-    pixels = lab_roi[mask_bin > 0]
-    if pixels.shape[0] < 10:
-        return None
+    
+    # Apply erosion to shrink mask slightly and remove edge pixels that may contain background bleed
+    kernel_size = max(2, min(roi_bgr.shape[0], roi_bgr.shape[1]) // 50)  # Adaptive kernel size
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+    mask_eroded = cv2.erode(mask_bin, kernel, iterations=1)
+
+    # Convert to LAB color space BEFORE masking (important: work with original colors)
+    lab_roi_cv = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2LAB)
+
+    if int(np.count_nonzero(mask_eroded)) < 10:
+        # Fallback for tiny/skinny masks where erosion wipes too much signal.
+        pixels_cv = lab_roi_cv[mask_bin > 0]
+        if pixels_cv.shape[0] < 3:
+            return None
+    else:
+        pixels_cv = lab_roi_cv[mask_eroded > 0]
+        if pixels_cv.shape[0] < 10:
+            fallback_pixels = lab_roi_cv[mask_bin > 0]
+            if fallback_pixels.shape[0] < 3:
+                return None
+            pixels_cv = fallback_pixels
+
+    # Convert OpenCV LAB (uint8) → standard CIE L*a*b* so KMeans clusters
+    # in a perceptually uniform space (correct lightness weighting).
+    pixels = pixels_cv.astype(np.float32)
+    pixels[:, 0] = pixels[:, 0] * (100.0 / 255.0)   # L*: 0-100
+    pixels[:, 1] = pixels[:, 1] - 128.0               # a*: -128..+127
+    pixels[:, 2] = pixels[:, 2] - 128.0               # b*: -128..+127
     return pixels
 
 
@@ -321,8 +368,12 @@ def _kmeans_dominant_colors(lab_pixels: np.ndarray, k: int = 3) -> List[Tuple[st
 
     results: List[Tuple[str, Tuple[int, int, int]]] = []
     for idx in sorted_indices[:k]:
-        center_lab = km.cluster_centers_[idx]
-        lab_arr = np.array([[[int(center_lab[0]), int(center_lab[1]), int(center_lab[2])]]], dtype=np.uint8)
+        center_lab = km.cluster_centers_[idx]  # standard CIE L*a*b*
+        # Convert standard L*a*b* → OpenCV LAB uint8 → RGB for display
+        L_cv = int(np.clip(center_lab[0] * 255.0 / 100.0, 0, 255))
+        a_cv = int(np.clip(center_lab[1] + 128.0, 0, 255))
+        b_cv = int(np.clip(center_lab[2] + 128.0, 0, 255))
+        lab_arr = np.array([[[L_cv, a_cv, b_cv]]], dtype=np.uint8)
         rgb = cv2.cvtColor(lab_arr, cv2.COLOR_LAB2RGB)[0][0]
         rgb_tuple = (int(rgb[0]), int(rgb[1]), int(rgb[2]))
         name = closest_color(rgb_tuple)
@@ -906,7 +957,8 @@ class ThreadedFrameReader:
 # =========================================
 def enrich_detected_object(
     obj_name: str,
-    masked_roi: np.ndarray,
+    roi: np.ndarray,  # IMPORTANT: Original unmasked ROI for accurate color detection
+    masked_roi: np.ndarray,  # Masked version for display/attribute inference
     mask_roi: np.ndarray,
     x1: int, x2: int, y1: int, y2: int,
     track_id: Any,
@@ -922,14 +974,19 @@ def enrich_detected_object(
     person_meta: List[Dict[str, Any]],
     attr_encoder: Any
 ) -> Dict[str, Any]:
-    """Helper to unify bounding-box extraction logic in both live and file stream."""
-    from pymongo import UpdateOne
-    # Color extraction: persons get upper/lower body split; others get top-3
+    """
+    Helper to unify bounding-box extraction logic in both live and file stream.
+    
+    CRITICAL: Uses original unmasked ROI for color detection to avoid contamination
+    from artificial black background pixels in masked_roi.
+    """
+    # Color extraction using ORIGINAL unmasked ROI with mask for pixel selection
+    # This prevents black background contamination in color detection
     if obj_name == "person":
-        color_info = get_person_body_colors(masked_roi, mask_roi)
+        color_info = get_person_body_colors(roi, mask_roi)
         color_name = color_info["color"]
     else:
-        top_colors = get_top_colors(masked_roi, mask_roi, k=3)
+        top_colors = get_top_colors(roi, mask_roi, k=3)
         color_name = top_colors[0] if top_colors else "Unknown"
         color_info = {"color": color_name, "colors": top_colors}
 
@@ -1290,15 +1347,19 @@ def process_live_stream(
                     else:
                         mask_src = np.zeros((frame.shape[0], frame.shape[1]), dtype=np.uint8)
                     mask_full = cv2.resize(mask_src, (frame.shape[1], frame.shape[0]), interpolation=cv2.INTER_NEAREST)
-                    # Hard binary threshold — exclude soft boundary pixels that leak background
-                    if mask_full.dtype in (np.float32, np.float64):
-                        mask_full = (mask_full > 0.5).astype(np.uint8) * 255
+                    # Pass original float mask to _extract_masked_lab_pixels for stricter >0.6 thresholding
+                    # (convert to binary uint8 only for display/bitwise operations)
                     mask_roi = mask_full[y1:y2, x1:x2]
-                    # Apply mask to ROI so only segmented pixels are visible (background zeroed)
-                    masked_roi = cv2.bitwise_and(roi, roi, mask=mask_roi if mask_roi.dtype == np.uint8 else (mask_roi > 0).astype(np.uint8))
+                    if mask_full.dtype in (np.float32, np.float64):
+                        mask_roi_display = (mask_roi > 0.6).astype(np.uint8) * 255
+                    else:
+                        mask_roi_display = mask_roi if mask_roi.dtype == np.uint8 else (mask_roi > 0).astype(np.uint8)
+                    # For display: Apply mask to ROI so only segmented pixels are visible (background zeroed)
+                    masked_roi = cv2.bitwise_and(roi, roi, mask=mask_roi_display)
                     
                     obj = enrich_detected_object(
                         obj_name=obj_name,
+                        roi=roi,  # Original unmasked ROI for accurate color detection
                         masked_roi=masked_roi,
                         mask_roi=mask_roi,
                         x1=x1, x2=x2, y1=y1, y2=y2,
@@ -1633,15 +1694,19 @@ def process_video_file(
                     else:
                         mask_src = np.zeros((frame.shape[0], frame.shape[1]), dtype=np.uint8)
                     mask_full = cv2.resize(mask_src, (frame.shape[1], frame.shape[0]), interpolation=cv2.INTER_NEAREST)
-                    # Hard binary threshold — exclude soft boundary pixels that leak background
-                    if mask_full.dtype in (np.float32, np.float64):
-                        mask_full = (mask_full > 0.5).astype(np.uint8) * 255
+                    # Pass original float mask to _extract_masked_lab_pixels for stricter >0.6 thresholding
+                    # (convert to binary uint8 only for display/bitwise operations)
                     mask_roi = mask_full[y1:y2, x1:x2]
+                    if mask_full.dtype in (np.float32, np.float64):
+                        mask_roi_display = (mask_roi > 0.6).astype(np.uint8) * 255
+                    else:
+                        mask_roi_display = mask_roi if mask_roi.dtype == np.uint8 else (mask_roi > 0).astype(np.uint8)
                     # Apply mask to ROI so only segmented pixels are visible (background zeroed)
-                    masked_roi = cv2.bitwise_and(roi, roi, mask=mask_roi if mask_roi.dtype == np.uint8 else (mask_roi > 0).astype(np.uint8))
+                    masked_roi = cv2.bitwise_and(roi, roi, mask=mask_roi_display)
 
                     obj = enrich_detected_object(
                         obj_name=obj_name,
+                        roi=roi,  # Original unmasked ROI for accurate color detection
                         masked_roi=masked_roi,
                         mask_roi=mask_roi,
                         x1=x1, x2=x2, y1=y1, y2=y2,

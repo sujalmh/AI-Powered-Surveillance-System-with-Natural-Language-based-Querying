@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -12,6 +13,8 @@ import json
 from backend.app.core.async_utils import run_sync
 from backend.app.db.mongo import alerts as alerts_col, alert_logs as alert_logs_col
 from backend.app.services.alert_engine import _now_utc_iso, evaluate_rule
+from backend.app.services.nl_parser import parse_nl_with_llm
+from loguru import logger
 
 router = APIRouter()
 
@@ -110,10 +113,39 @@ async def create_alert(req: CreateAlertRequest) -> AlertResponse:
     def _block():
         try:
             now = _now_utc_iso()
+            rule_dict = req.rule.model_dump()
+            
+            # Extract behavior from NLP if nl is provided and behavior is not already set
+            if req.nl and not rule_dict.get("behavior"):
+                NLP_PARSE_TIMEOUT_SECONDS = 30.0
+                executor = ThreadPoolExecutor(max_workers=1)
+                try:
+                    future = executor.submit(parse_nl_with_llm, req.nl)
+                    parsed = future.result(timeout=NLP_PARSE_TIMEOUT_SECONDS)
+                    # Extract action from parsed NLP result and use it as behavior
+                    if parsed.get("action"):
+                        rule_dict["behavior"] = parsed.get("action")
+                except FutureTimeoutError:
+                    logger.warning(
+                        "NLP parsing timeout after {} seconds while creating alert name={} nl_len={}",
+                        NLP_PARSE_TIMEOUT_SECONDS,
+                        req.name,
+                        len(req.nl or ""),
+                    )
+                except Exception:
+                    logger.exception(
+                        "NLP parsing error while creating alert name={} nl_len={} has_rule_keys={}",
+                        req.name,
+                        len(req.nl or ""),
+                        bool(rule_dict),
+                    )
+                finally:
+                    executor.shutdown(wait=False)
+            
             doc = {
                 "name": req.name,
                 "nl": req.nl,
-                "rule": req.rule.model_dump(),
+                "rule": rule_dict,
                 "enabled": req.enabled,
                 "actions": req.actions or [],
                 "severity": (req.severity or "info"),
