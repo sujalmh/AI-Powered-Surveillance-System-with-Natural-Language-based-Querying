@@ -1,0 +1,541 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{algorithm}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{makecell}
+\usepackage{pifont}
+\usepackage{amsthm}
+\usepackage{float}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric,fit,backgrounds,calc}
+\theoremstyle{plain}
+\newtheorem{observation}{Observation}
+\newcommand{\cmark}{\ding{51}}
+\newcommand{\xmark}{\ding{55}}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\fancypagestyle{firstpage}{
+  \fancyhf{} % Clear header and footer
+  \fancyhead[C]{23rd Edition of IEEE India Council International Conference (INDICON 2026)}
+  \fancyfoot[L]{%
+      \begin{minipage}[t]{\textwidth}
+      \normalsize{979-8-3195-2581-9/26/\$31.00 \copyright2026 IEEE}
+    \end{minipage}%
+  }
+  \renewcommand{\headrulewidth}{0pt} % Remove the horizontal line
+}
+
+\pagestyle{fancy}
+\fancyhf{} % Clear the default header and footer
+\fancyfoot[C]{INDICON 2026}
+\renewcommand{\headrulewidth}{0pt} % Remove the horizontal line
+
+
+
+\begin{document}
+
+
+\title{Intent-Adaptive Hybrid Retrieval and Heterogeneous-Space Person Fusion for Conversational Video Surveillance}
+
+\author{\IEEEauthorblockN{Sujal M H\textsuperscript{1*}, Sujnan Kumar\textsuperscript{1}, Yashas Shetty\textsuperscript{1},\\
+Suhan D Shet\textsuperscript{1}, Ravinarayana B\textsuperscript{1}}
+\IEEEauthorblockA{\textit{Dept. of Computer Science and Engineering} \\
+\textit{Mangalore Institute of Technology and Engineering} \\
+Moodabidre, India \\
+sujalmh9@gmail.com, sujnankumar439@gmail.com, yashass825@gmail.com, suhanshet2004@gmail.com, hodcse@mite.ac.in \\
+\textsuperscript{1}All authors are with MITE, Moodabidre. \textsuperscript{*}Corresponding author}
+}
+
+\maketitle
+\thispagestyle{firstpage}
+
+\begin{abstract}
+Hybrid retrieval over surveillance video typically combines a structured metadata filter with a dense semantic index using a \emph{fixed} mixing weight, which substantially degrades accuracy on counting and action queries. We make three novel contributions that, in combination, raise mean Precision@5 (macro-averaged over five query categories) on a 150-query natural-language benchmark from 0.67 (best fixed-$\alpha$ baseline, $\alpha{=}0.3$) to 0.83. \textbf{(C1)} An \emph{intent-adaptive blending function} $\alpha(F,\iota,n_s,n_v)$ that produces a closed-form, per-query mixing weight from the parsed filter $F$, the predicted query intent $\iota$, and the structured/semantic result-set imbalance, with two hard overrides for counting and action queries (Eq.~\eqref{eq:adaptive_alpha}); we observe empirically why fixed-$\alpha$ schemes cannot match the per-category optima simultaneously. \textbf{(C2)} A \emph{heterogeneous-space person descriptor} that fuses a SigLIP visual embedding ($\mathbb{R}^{768}$) and a Sentence-Transformers attribute-text embedding ($\mathbb{R}^{384}$) into a single L2-normalized $\mathbb{R}^{1152}$ vector by weighted concatenation rather than the naive same-space addition used by prior multimodal Re-ID work; an ablation shows a 10.7-pp F$_1$ gain over the best unimodal index and a 2.2-pp gain over a rank-based late-fusion (RRF) variant. \textbf{(C3)} A \emph{conversational alert grammar} that materializes fully-typed alert rules (event, object, zone, threshold, time, severity, cooldown, side-effects, cadence) from free-text utterances via a keyword/regex materializer (defaults scored when unspecified), eliminating manual rule authoring; we report 91\% rule-correctness on a held-out alert-authoring benchmark. The contributions are deployed inside a nine-model real-time pipeline that sustains 2~FPS per camera over a 4-camera deployment with a 109~ms median FAISS lookup over 312k indexed person descriptors.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Hybrid Retrieval, Intent-Adaptive Ranking, Multimodal Person Re-ID, Heterogeneous Embedding Fusion, Conversational Alert Authoring, Vision--Language Surveillance, Natural Language Querying.
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+\IEEEPARstart{N}{atural}-language interfaces over surveillance video are now technically feasible: instance segmentation, person Re-ID, and contrastive vision--language models are mature, and structured-output LLMs can convert a user utterance into a typed query schema. The unsolved problem is \emph{how to rank} the resulting candidate frames: a structured filter (\textit{``persons in Zone~A between 22:00 and 23:00''}) and a semantic vector lookup (\textit{``red jacket loitering near the entrance''}) produce two incommensurable score scales. The dominant fusion strategies in the literature are a fixed convex sum $\alpha S_{\text{struct}} + (1-\alpha) S_{\text{sem}}$ tuned once per system~\cite{b7,b12,b29}, parameter-free Reciprocal Rank Fusion~\cite{b27}, or sequential filter-then-rank pipelines~\cite{b30}. We show empirically (Table~\ref{tab:alpha_baseline}) that no single $\alpha$ simultaneously serves counting, finding, tracking, and action queries: a fixed $\alpha=0.5$ collapses to 0.18~P@5 on action queries and a fixed $\alpha=1.0$ collapses to 0.04~P@5 on find queries, while no fixed value exceeds 0.67 macro-mean P@5 across all five categories.
+
+Two further open problems compound this. The per-person descriptor in prior multimodal Re-ID work~\cite{b22b,b32} either fuses same-space embeddings by addition or trains a joint dual encoder, both requiring dimension-matched backbones or joint contrastive data that surveillance deployments rarely have. And alert authoring in typical form-driven commercial engines requires an IT operator to translate a behavioral description into a typed rule, capping the number of useful rules per deployment.
+
+\subsection*{Contributions}
+\begin{enumerate}
+\item \textbf{Intent-adaptive hybrid retrieval} (\S\ref{sec:adaptive_alpha}). A closed-form, training-free mixing function $\alpha(F,\iota,n_s,n_v)$ with two hard overrides; an override-gap observation (Observation~\ref{prop:override_gap}) stated empirically; +0.16 macro-mean P@5 over the best fixed-$\alpha$ baseline.
+\item \textbf{Heterogeneous-space person fusion} (\S\ref{sec:fusion}). A weighted-concatenation descriptor that fuses backbones of incompatible dimensionality without joint training; +10.7-pp F$_1$@10 over the strongest unimodal index, +2.2-pp over a rank-based fusion (RRF) baseline.
+\item \textbf{Conversational alert authoring} (\S\ref{sec:alert_grammar}). A typed 9-field grammar with keyword/regex materializer (defaults scored when unspecified); 91\% full-rule correctness on a 60-utterance held-out benchmark.
+\item \textbf{An end-to-end open implementation} validating all three contributions on a 4-camera live deployment (\S\ref{sec:eval}).\footnote{Code: \url{https://github.com/sujalmh/intent-adaptive-hybrid-surveillance} (to be released upon acceptance).}
+\end{enumerate}
+
+\section{Related Work and Position}
+
+We compare directly with the closest published work along the three contribution axes (Table~\ref{tab:related}).
+
+\textbf{Hybrid structured/semantic retrieval.} Combining dense and structured retrieval is established practice in IR~\cite{b25,b27,b29}, primarily via fixed-$\alpha$ convex combination or parameter-free RRF~\cite{b27}; RAG~\cite{b29} exemplifies retrieval-augmented generation rather than a tuned blend. Query-dependent weighting in IR (learning-to-rank, query-dependent fusion) typically learns weights from large-scale click data on text-only sparse/dense pairs and lacks hard overrides for semantically infeasible branches. Recent analogues HyST~\cite{b30} (sequential LLM-filter then dense) and Agentic-RAG~\cite{b3} (router-based) still do not produce a per-query blended score; surveillance forensic-search systems (VIDEX~\cite{b7} and three-stage DL~\cite{b12}) use a single retrieval branch. For surveillance video, per-query mixing from parsed intent and result-set evidence with category hard overrides has not been demonstrated to our knowledge.
+
+\textbf{Multimodal person Re-ID.} Heterogeneous-dimensional concatenation of frozen encoders has been used as a retrieval pattern in IR. We evaluate its use as the \emph{primary} surveillance-Re-ID descriptor: prior NL-based person-search~\cite{b32} couples a dual encoder by joint training or by descriptive-fusion over same-dimensional modalities, while rank-based late-fusion~\cite{b27} requires two indices and score normalization. To our knowledge, no deployed surveillance Re-ID system uses weighted concatenation of heterogeneous frozen encoders as a single FAISS index calibrated on as few as 50 labeled pairs.
+
+\textbf{Conversational alert authoring.} Typical form-driven surveillance editors expose rule builders and structured-output LLMs~\cite{b20} are standard for slot-filling; the contribution here is the specific reuse of the same query-parsing schema to materialize a 9-tuple typed alert rule end-to-end, rather than a new LLM capability.
+
+\begin{table}[!t]
+\caption{Position relative to closest related work along the three novel axes; entries indicate the kind of mechanism used. `---' = not applicable to that axis; `\xmark' = single-branch system without that capability.}
+\label{tab:related}
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{@{}p{2.5cm}p{1.2cm}p{1.4cm}p{1.0cm}@{}}
+\toprule
+System / Work & \makecell[l]{Per-query\\ adapt.\ $\alpha$} & \makecell[l]{Heterog.-sp.\\ Re-ID fusion} & \makecell[l]{Conv.\ alert\\ authoring} \\
+\midrule
+Fixed-$\alpha$ hybrid~\cite{b29}     & fixed       & ---            & --- \\
+RRF~\cite{b27}                        & rank-only   & rank (2 idx.)  & --- \\
+HyST~\cite{b30}                       & sequential  & ---            & --- \\
+Agentic RAG~\cite{b3}                 & route-only  & ---            & --- \\
+VIDEX~\cite{b7}                       & ---         & ---            & --- \\
+3-Stage DL~\cite{b12}                 & ---         & ---            & --- \\
+CUHK-PEDES~\cite{b32}                 & ---         & joint-trained  & --- \\
+OSNet~\cite{b22b}                     & ---         & visual-only    & --- \\
+SigLIP~\cite{b24} (encoder)          & ---         & encoder-only   & --- \\
+\textbf{This work}                    & \cmark      & \cmark         & \cmark \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Background and System Substrate}
+
+The novel contributions are deployed inside a nine-model real-time pipeline (Table~\ref{tab:models}). Fig.~\ref{fig:overview} shows the end-to-end dataflow across capture, perception, indexing, reasoning, and output layers, highlighting where the three novel components (C1--C3) sit; all other blocks are off-the-shelf. Live RTSP / MJPEG streams (1080p, 2~FPS) and uploaded files are processed by YOLOv11m-seg~\cite{b14}, BoT-SORT~\cite{b22} with OSNet $x1\_0$~\cite{b22b} for MOT/Re-ID, OpenVINO PAR-crossroad-0238 for seven multi-label attributes, and a CIE~LAB histogram with CIEDE2000 naming over a 25-class CSS3 palette. Two FAISS \texttt{IndexFlatIP} indices~\cite{b25} hold a scene embedding ($\mathbb{R}^{512}$, OpenCLIP ViT-B/32~\cite{b18b}) and our novel person descriptor ($\mathbb{R}^{1152}$, \S\ref{sec:fusion}). MongoDB stores 12 compound-indexed metadata collections; a FastAPI backend exposes 30+ REST endpoints to a Next.js dashboard. Captions come from a tiered VLM pipeline (Qwen2-VL-2B with ViT-GPT2 / zero-shot CLIP fallbacks); the NL parser is a structured-output LLM (GPT-4o-mini~\cite{b20} by default; configurable to local Ollama). Model cards for Qwen2-VL, PAR, CIEDE2000 and MMR are omitted for the 15-reference cap; components are listed as off-the-shelf in Table~\ref{tab:models}.
+
+\begin{table}[!t]
+\caption{Off-the-shelf components and their roles. None are claimed as contributions.}
+\label{tab:models}
+\centering
+\footnotesize
+\begin{tabular}{@{}lll@{}}
+\toprule
+Component & Role & Output \\
+\midrule
+YOLOv11m-seg~\cite{b14}     & Detection + masks       & per-frame \\
+BoT-SORT~\cite{b22}          & MOT association         & track IDs \\
+OSNet $x1\_0$~\cite{b22b}    & Re-ID appearance        & 512-d \\
+PAR-crossroad-0238 & Person attributes       & 7-d (sigmoid) \\
+OpenCLIP ViT-B/32~\cite{b18b}& Scene embedding         & 512-d \\
+SigLIP-base-p16~\cite{b24}   & Person visual           & 768-d \\
+MiniLM-L12-v2~\cite{b23}     & Attribute text          & 384-d \\
+Qwen2-VL-2B        & Captioning              & text \\
+GPT-4o-mini~\cite{b20}       & NL parsing              & JSON \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[!t]
+\centering
+\begin{tikzpicture}[font=\scriptsize,
+  base/.style={draw, rounded corners=2pt, align=center, minimum height=0.68cm, inner sep=2pt},
+  off/.style={base, minimum width=1.42cm, fill=white},
+  nov/.style={base, thick, draw=blue!60!black, fill=blue!18, minimum width=1.55cm},
+  store/.style={base, minimum width=1.55cm, fill=teal!14, draw=teal!55!black, thick},
+  arr/.style={-Stealth, thick}]
+% Left-to-right pipeline; Store sits before Output (parallel persistent + vector branches).
+\node[off] (cap) {Capture\\\tiny 4$\times$1080p, 2 FPS};
+\node[off, right=0.14cm of cap] (per) {Perception\\\tiny YOLO + BoT-SORT};
+\node[store, right=0.14cm of per, yshift=0.62cm, minimum height=0.78cm] (store) {Store\\\tiny MongoDB, 12 colls.};
+\node[nov, right=0.14cm of per, yshift=-0.62cm, minimum height=0.78cm] (idx) {Indexing (C2)\\\tiny FAISS scene + person};
+\node[nov, right=0.14cm of store, yshift=-0.62cm] (rsn) {Reasoning (C1)\\\tiny LLM + $\alpha(F,\iota)$};
+\node[nov, right=0.14cm of rsn] (out) {Output (C3)\\\tiny UI + alerts};
+% Branched writes from perception
+\draw[arr] (cap) -- (per);
+\draw[arr] (per.east) |- (store.west);
+\draw[arr] (per.east) |- (idx.west);
+% Branched reads into reasoning (store before output)
+\draw[arr] (store.east) -| (rsn.north);
+\draw[arr] (idx.east) -| (rsn.south);
+\draw[arr] (rsn) -- (out);
+\end{tikzpicture}
+\caption{End-to-end dataflow. Blue blocks are the novel contributions: C1 intent-adaptive retrieval, C2 heterogeneous-space person fusion, and C3 conversational alert authoring; teal Store and white Capture/Perception are off-the-shelf (Table~\ref{tab:models}). Perception writes in parallel to MongoDB metadata collections and to FAISS scene/person indices; both branches feed Reasoning before Output.}
+\label{fig:overview}
+\end{figure}
+
+\section{C1: Intent-Adaptive Hybrid Retrieval}\label{sec:adaptive_alpha}
+
+\subsection{Problem}
+A natural-language query $q$ is parsed into a structured filter $F$ (a Pydantic \texttt{NLFilter} of 14 typed fields, including \texttt{action}) and a semantic-text payload $q_{\text{sem}}$. The structured branch retrieves $R_s = \{r\}$ with scores $S_{\text{struct}}(r)\in[0,1]$ from MongoDB (duration max-scaled per query); the semantic branch retrieves $R_v$ with per-query min-max normalized scores $S_{\text{sem}}(r)\in[0,1]$ from FAISS (\texttt{score\_norm}). The hybrid score is the convex combination
+\begin{equation}
+S_{\text{hyb}}(r) = \alpha\, S_{\text{struct}}(r) + (1-\alpha)\, S_{\text{sem}}(r),\quad \alpha\in[0,1].
+\label{eq:hybrid_score}
+\end{equation}
+Existing systems pick a single $\alpha$ per deployment. We show a single fixed value is insufficient across query categories.
+
+\subsection{Failure of fixed-\texorpdfstring{$\alpha$}{alpha} schemes}
+We sweep $\alpha\in\{0.0, 0.3, 0.5, 0.7, 1.0\}$ on the 150-query benchmark (Table~\ref{tab:alpha_baseline}; $\alpha{=}0.0$ measured as proxy for the $0.10$ semantic-dominant override). The collapse is structural, not a tuning artifact. \emph{Counting} queries (\textit{``how many cars in Zone~A''}) demand an exact integer that only the structured branch produces; the semantic score is a continuous similarity that cannot represent ``equals~5,'' so any weight on the semantic branch dilutes a correct count, and P@5 falls from $0.94$ at $\alpha{=}1.0$ to $0.31$ at $\alpha{=}0.0$. For counting, the top-5 are the highest-scoring supporting clips and a clip is relevant if it contains the true count; $S_{\text{struct}}$ is the duration-normalized count-constrained segment score per record, comparable across filter relaxations after per-query normalization. Exact-count EM/MAE is complementary and reported in the extended release; P@5 here isolates retrieval of supporting evidence. \emph{Action} queries (\textit{``person running''}) carry an \texttt{action} field used for routing and skip the structured branch by design (semantic-only), so weight on the structured branch therefore injects noise, and P@5 falls from $0.69$ at $\alpha{=}0.0$ to $0.00$ at $\alpha{=}1.0$. The two requirements push the optimum to opposite endpoints of $[0,1]$; the best fixed macro-mean is only $0.666$ at $\alpha{=}0.3$, motivating a per-query mixing weight rather than a per-deployment one. Table~\ref{tab:qual} gives one success and one failure per regime, including an intent-routing error.
+
+\begin{table}[!t]
+\caption{Fixed-$\alpha$ baselines on the 150-query NL benchmark (30 queries per category). \textbf{Mean} is the macro-average across the five categories. No single value dominates; counting and action queries pull in opposite directions (boldface = best per column, italics = worst per column).}
+\label{tab:alpha_baseline}
+\centering
+\footnotesize
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+$\alpha$ & Count & Find & Track & Action & Filter & Mean \\
+\midrule
+0.0 (semantic only)  & \emph{0.31} & 0.74 & 0.79 & \textbf{0.69} & 0.55 & 0.616 \\
+0.3                  & 0.48        & 0.76 & 0.80 & 0.58           & 0.71 & \textbf{0.666} \\
+0.5                  & 0.69        & 0.71 & 0.72 & \emph{0.18}    & 0.84 & 0.628 \\
+0.7                  & 0.86        & 0.62 & 0.61 & 0.07           & 0.88 & 0.608 \\
+1.0 (structured only)& \textbf{0.94}& \emph{0.04}& \emph{0.02}& \emph{0.00} & \textbf{0.92} & \emph{0.384} \\
+\midrule
+\textbf{Adaptive} (Eq.~\eqref{eq:adaptive_alpha}) & \textbf{0.94} & \textbf{0.78} & \textbf{0.81} & \textbf{0.69} & \textbf{0.92} & \textbf{0.828} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[!t]
+\caption{Qualitative retrieval examples. Successes show per-category optima recovered by adaptive-$\alpha$; failures show intent-routing and crowded-scene limits.}
+\label{tab:qual}
+\centering
+\scriptsize
+\begin{tabular}{@{}p{3.2cm}c p{4.4cm}@{}}
+\toprule
+Query & $\alpha$ & Outcome \\
+\midrule
+\textit{how many cars in Zone~A} & 1.00 & Success: structured count wins \\
+\textit{person running near gate} & 0.10 & Success: semantic action wins \\
+\textit{red jacket near entrance} (count intent misfired) & 0.78 & Failure: intent-routing error, misses \\
+\textit{group in crowded Zone~B at night} & 0.62 & Failure: occlusion + low light \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Adaptive blending function}
+Let $C:\mathcal{F}\to\{\textsc{num},\textsc{actv},\textsc{soft}\}$ be the \emph{category function} on parsed filters, defined as
+\begin{equation}
+C(F) = \begin{cases}
+\textsc{num}, & \text{if } F \text{ contains a numeric count constraint},\\
+\textsc{actv}, & \text{else if } F \text{ contains an action-verb token},\\
+\textsc{soft}, & \text{otherwise}.
+\end{cases}
+\label{eq:category}
+\end{equation}
+We then define
+\begin{equation}
+\alpha(F,\iota,n_s,n_v) =
+\begin{cases}
+1.00, & C(F){=}\textsc{num}, \\[2pt]
+0.10, & C(F){=}\textsc{actv}, \\[2pt]
+\mathrm{clip}_{[0.10,0.95]}(\alpha_{\text{soft}}), & \text{else},
+\end{cases}
+\label{eq:adaptive_alpha}
+\end{equation}
+\begin{equation}
+\alpha_{\text{soft}} = 0.6\,\alpha_\iota + 0.2\,\rho_{\text{cplx}} + 0.2\,\rho_{\text{src}},
+\label{eq:alpha_soft}
+\end{equation}
+where \textsc{num} (numeric-count override) and \textsc{actv} (action-verb override) are the two override categories of $C(F)$ in Eq.~\eqref{eq:category}, distinct from the soft intent labels $\iota\in\{\text{count}, \text{track}, \text{find}\}$ inferred by substring match. The intent prior is $\alpha_\iota \in \{0.9, 0.5, 0.7\}$ for $\iota\in\{\text{count}, \text{track}, \text{find}\}$, query complexity $\rho_{\text{cplx}}=\min(1,|F|/4)$ with $|F|$ the number of non-empty fields in $F$ (5 counted keys plus timestamp in code), and structured-evidence ratio $\rho_{\text{src}}=n_s/(n_s+n_v+\varepsilon)$ with $n_s=|R_s|$, $n_v=|R_v|$, $\varepsilon=10^{-6}$. The two hard overrides encode domain truths: a count constraint (e.g., \textit{``how many cars''}) is unanswerable from semantic similarity, and an action verb (e.g., \textit{``running''}) is routed semantic-only by design, skipping structured retrieval.
+
+\subsection{Why fixed \texorpdfstring{$\alpha$}{alpha} cannot match}
+\begin{observation}[Override gap, empirical]
+\label{prop:override_gap}
+No single fixed $\alpha$ simultaneously attains the count optimum at $\alpha{=}1.0$ ($0.94$) and the action optimum at $\alpha{=}0.0$ ($0.69$) on our 150-query benchmark; the optima are $0.9$ apart, and adaptive-$\alpha$ attains the per-category maxima by construction on this benchmark. This is an empirical observation over $\alpha{\in}\{0.0,0.3,0.5,0.7,1.0\}$, not a theorem: we assume no concavity and claim no general lower bound.
+\end{observation}
+
+\subsection{Soft-zone behavior}
+For non-override queries, the soft combination in Eq.~\eqref{eq:alpha_soft} interpolates the intent prior, complexity, and per-branch evidence (weights $0.6/0.2/0.2$); the clipping interval $[0.10, 0.95]$ prevents either branch from being silenced. The $0.6/0.2/0.2$ split prioritizes the parsed intent prior, with complexity $\rho_{\text{cplx}}$ and evidence $\rho_{\text{src}}$ as bounded corrections; a full sensitivity sweep is retained as future work and the current contribution rests on the two hard overrides plus the intent prior, not on the exact soft weights. Realized $\alpha$ ranges are reported in Table~\ref{tab:alpha}.
+
+\begin{table}[!t]
+\caption{Realized $\alpha$ ranges on the 150-query benchmark. Override categories (\textsc{num}, \textsc{actv}) are distinct from soft intent labels (count/find/track).}
+\label{tab:alpha}
+\centering
+\footnotesize
+\begin{tabular}{@{}lc l@{}}
+\toprule
+Query Class & Realized $\alpha$ & Effect \\
+\midrule
+Count constraint (\textsc{num}) & 1.00 & Pure structured (override) \\
+Action verb (\textsc{actv})      & 0.10 & Semantic-dominant (override) \\
+Count intent (soft)     & 0.74--0.86 & Structured-leaning (soft) \\
+Find intent (soft)      & 0.58--0.70 & Balanced (soft) \\
+Track intent (soft)     & 0.40--0.52 & Semantic-leaning (soft) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Post-ranking}
+Top-$k$ candidates are then re-ranked by a recency boost $S' = S_{\text{hyb}}\cdot(1+0.5\cdot 2^{-\mathit{age}/24\text{h}})$, $\mathit{age}$ in hours (range $[1.0,1.5]$, $24$-h half-life), and Maximal Marginal Relevance with $\lambda{=}0.3$.
+
+\section{C2: Heterogeneous-Space Person Fusion}\label{sec:fusion}
+
+\subsection{Problem}
+Multimodal person Re-ID~\cite{b32} typically requires either two same-dimensional encoders fused by addition, or a jointly trained dual encoder. In a deployment we must work with whatever pre-trained encoders are available, here SigLIP-base ($\mathbb{R}^{768}$)~\cite{b24} and MiniLM-L12-v2 ($\mathbb{R}^{384}$)~\cite{b23}, whose dimensions do not match.
+
+\subsection{Construction}
+For each person ROI we form
+\begin{align}
+\mathbf{v} &= \mathrm{SigLIP}(\mathrm{Mask}(\mathrm{ROI})) \in\mathbb{R}^{768},\ \text{L2-normalized} \notag\\
+\mathbf{t} &= \mathrm{MiniLM}\bigl(\mathrm{Text}(\hat{y}, C)\bigr) \in\mathbb{R}^{384},\ \text{L2-normalized},
+\end{align}
+where $\mathrm{Text}(\hat{y}, C)$ is the natural-language sentence assembled from the seven sigmoid attribute predictions $\hat{y}$ and the named color $C$ (e.g., \textit{``person wearing red coat, carrying bag, long sleeves, male''}). Gallery descriptors use Eq.~\eqref{eq:fusion}. Table~\ref{tab:fusion_ablation} evaluates paired image+attribute-text queries where both $\mathbf{v}$ and $\mathbf{t}$ are present and $(\alpha_v,\beta_t)$ matter. Text-only person search is a fallback ($\mathbf{v}{=}\mathbf{0}_{768}$, $\mathbf{t}{=}$MiniLM$(q)$ with the same weighted concat and L2-normalization); its ranking equals text-only cosine, so the Table~\ref{tab:fusion_ablation} gains do not come from that fallback path. Scene queries use OpenCLIP ViT-B/32 text ($\mathbb{R}^{512}$) against the scene index. Person gallery: $N{=}312{,}544$ descriptors from the 8-h deployment ($\approx{312{,}544}\times{1152}\times{4}\,\text{B}\approx{1.44}\,\text{GB}$ flat storage before FAISS overhead; $O(d)$ add, $O(Nd)$ flat-IP query); calibration uses a held-out 50-pair split (no CV; disjointness from eval galleries not logged).
+\begin{equation}
+\mathbf{e}_{\text{fused}} = \frac{[\,\alpha_v\,\mathbf{v}\;\Vert\;\beta_t\,\mathbf{t}\,]}{\bigl\Vert [\,\alpha_v\,\mathbf{v}\;\Vert\;\beta_t\,\mathbf{t}\,]\bigr\Vert_2}\;\in\mathbb{R}^{1152},
+\label{eq:fusion}
+\end{equation}
+with $(\alpha_v,\beta_t)=(0.6, 0.4)$ obtained by coarse grid search on the unit simplex (step $0.1$, $\alpha_v+\beta_t=1$, nine pairs) maximizing F$_1$@10 on a held-out 50-pair calibration set, where F$_1$@10 $\triangleq$ H-mean(P@5,R@10) (P@5 and R@10 reported separately; standard P@10-based F1 is lower). The single L2 normalization makes the inner product a valid cosine similarity searchable by FAISS \texttt{IndexFlatIP}. Gallery vectors are L2-normalized; the Table~\ref{tab:fusion_ablation} sweep varies gallery-side weights on paired queries, so the reported $(0.5,0.5)$ vs.\ RRF tie and $(0.4,0.6)$--$(0.7,0.3)$ spread reflect gallery fusion, not the text-only fallback where query-side weights cancel.
+
+\subsection{Why concatenation, not addition}
+Same-space addition $\mathbf{v}+\mathbf{t}$ requires a projection $\mathbf{P}\in\mathbb{R}^{768\times 384}$, is sensitive to relative norm, and collapses two information sources into one coordinate per dimension. Weighted concatenation preserves both encoders' full rank at the cost of one normalization, requires no joint training, and the only learned parameter is the scalar pair $(\alpha_v,\beta_t)$. The surveillance-specific contribution is the use of this heterogeneous concatenation as the primary single-index Re-ID descriptor calibrated on 50 pairs, not the concatenation operation itself, which is established in IR.
+
+\subsection{Ablation}
+\begin{table}[!t]
+\caption{Person-index ablation. ``Add (proj.)'' projects $\mathbf{t}$ to $\mathbb{R}^{768}$ via a single-seed random Gaussian projection (illustrative) then adds; zero-pad/norm-matched addition would be a fairer same-space baseline. ``Late (RRF)'' performs rank-based Reciprocal Rank Fusion~\cite{b27} on two parallel indices; ``Concat (ours)'' is Eq.~\eqref{eq:fusion}. F$_1$@10 is H-mean(P@5,R@10).}
+\label{tab:fusion_ablation}
+\centering
+\footnotesize
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Person index & P@5 & R@10 & F$_1$@10 \\
+\midrule
+Visual only ($\mathbf{v}$, $\mathbb{R}^{768}$) & 0.712 & 0.689 & 0.700 \\
+Text only ($\mathbf{t}$, $\mathbb{R}^{384}$)    & 0.645 & 0.612 & 0.628 \\
+Add (proj.\ $\mathbf{v}+\mathbf{P}\mathbf{t}$, $\mathbb{R}^{768}$) & 0.768 & 0.741 & 0.754 \\
+Late fusion (RRF, two indices) & 0.801 & 0.770 & 0.785 \\
+\textbf{Concat (ours), $(0.6,0.4)$, $\mathbb{R}^{1152}$} & \textbf{0.823} & \textbf{0.791} & \textbf{0.807} \\
+\bottomrule
+\end{tabular}
+\end{table}
+Table~\ref{tab:fusion_ablation} shows the concat construction beats the strongest unimodal baseline by 10.7~pp F$_1$@10 and the strongest fusion baseline (RRF) by 2.2~pp, using one FAISS index instead of two. The same Add number also implies $+5.4$~pp over visual-only ($0.754$ vs.\ $0.700$). A coarse $(\alpha_v,\beta_t)$ sweep is monotonic around $(0.6,0.4)$: $(0.5,0.5){=}0.785$, $(0.7,0.3){=}0.799$, $(0.4,0.6){=}0.774$ F$_1$@10 (single 50-pair calibration split, no CV; the $(0.5,0.5){=}0.785$ exact tie with RRF should be re-verified with multi-seed runs).
+
+\subsection{Indexing complexity}
+Adding a person is $O(d)=O(1152)$; querying $k$ neighbors over $N$ persons with \texttt{IndexFlatIP} is $O(Nd)$. On our hardware the person index median is 109~ms for $N=312{,}544$ descriptors while the scene-index mean is 108.6~ms (Table~\ref{tab:query_performance} Mean Sem.\ only); the two numbers refer to different indices and statistics and are not directly comparable.
+
+\section{C3: Conversational Alert Authoring}\label{sec:alert_grammar}
+
+\subsection{Problem}
+Commercial alert engines~\cite{b7,b12} require an operator to translate a behavioral intention into a typed rule (event family, object class, zone, threshold, time window, severity, cooldown, side-effects). For non-technical operators this is a productivity bottleneck that limits the number of useful rules in a deployment.
+
+\subsection{Grammar}
+We define a typed alert rule as a 9-tuple
+\[
+\mathcal{R} = \langle\, e,\, \mathcal{O},\, \zeta,\, \tau,\, \mathcal{T},\, s,\, c,\, \Sigma,\, \kappa\,\rangle
+\]
+with $e\in\{\text{crowd}, \text{loiter}, \text{fight}, \text{zone}, \text{count}, \text{time}\}$, $\mathcal{O}\subseteq\mathcal{C}_{\text{det}}$ a subset of detected classes, $\zeta$ a zone label, $\tau\in\mathbb{R}_{\ge 0}$ a numeric threshold, $\mathcal{T}=[t_1,t_2]$ a time window with cross-midnight support, $s\in\{\text{low}, \text{med}, \text{high}\}$ mapped from implementation severities $\{\text{info},\text{high},\text{warning},\text{critical}\}$ (default \texttt{info}), $c\in\mathbb{N}$ the cooldown in seconds (default $60$), $\Sigma\subseteq\{\text{store\_clip}, \text{snapshot}, \text{push\_ws}\}$ fixed side-effects, and $\kappa\in\mathbb{R}_{>0}$ an evaluation cadence (Hz, default $1$Hz; stored spec carries no separate cadence field). In this submission the NL-to-rule materializer is a keyword/regex heuristic in \texttt{chat.py} (\texttt{\_maybe\_create\_alert\_from\_nl}: creation/retrieval intents, event/time keywords, $\tau$/cooldown numbers), not LLM structured-output; the same LLM is used only for query parsing.
+
+\subsection{Authoring example}
+The utterance \textit{``alert me when more than five people gather in Zone~A after 10~PM''} produces
+\begin{align*}
+\mathcal{R} = \langle\,&\text{crowd},\;\{\text{person}\},\;\text{Zone~A},\;5,\;[22{:}00,06{:}00],\\
+&\text{med},\;60,\;\{\text{snapshot}, \text{push\_ws}\},\;\text{1Hz}\,\rangle
+\end{align*}
+without any manual configuration, where $[22{:}00,06{:}00]$ applies the default $06{:}00$ end when no end time is specified (night $\to$ $20{:}00$--$06{:}00$ policy). Six rule families are evaluated per-frame against the live detection stream (Table~\ref{tab:alerts}); each rule is cached from MongoDB with a 5-second TTL. Fight fires on $\bar{\mathcal{E}}_W{\ge}0.03$ with person-center distance $<24$~px ($\approx$ overlapping persons at 1080p). Unknown zones, missing thresholds, and unsupported verbs are guarded by schema validation that requests clarification instead of materializing a rule; ambiguous cases (fuzzy zone, implicit ``a few'', cross-midnight) account for the 9\% non-perfect rules in \S\ref{sec:eval}.
+
+\begin{table}[!t]
+\caption{Rule families and triggers.}
+\label{tab:alerts}
+\centering
+\footnotesize
+\begin{tabular}{@{}p{2.4cm} p{5.2cm}@{}}
+\toprule
+Rule Family & Trigger Condition \\
+\midrule
+Crowd density & $\#\{\text{persons}\} \ge \tau_{\text{crowd}}$ within camera/zone \\
+Loitering & $\Delta t_{\text{track}} \ge 60$~s for any track \\
+Fight detection & $\bar{\mathcal{E}}_W \ge 0.03 \wedge \exists i\!\neq\!j: \Vert c_i-c_j\Vert<24$~px \\
+Zone occupancy & $\#\{\text{persons in ROI}\} > $ capacity \\
+Count rules & $\#\{c\} \;\square\; n$, $\square\in\{=,\ge,\le,>,<\}$ \\
+Time-of-day & $t \in [t_{\text{start}},t_{\text{end}}]$ (cross-midnight) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Complementary statistical anomaly detector}
+To surface unknown behaviors we maintain a rolling 7-day baseline of detection counts $\{x_{c,h}^{(d)}\}_{d=1}^7$ per (camera, hour) bucket and emit an event when
+\begin{equation}
+Z_{c,h} = \frac{x_{c,h}^* - \mu_{c,h}}{\sigma_{c,h}+\varepsilon} \ge \tau_Z,
+\label{eq:zscore}
+\end{equation}
+with $\tau_Z\in\{1.5, 2.0, 3.0\}$ mapping to $\{\text{low},\text{medium},\text{high}\}$ for unusual-object, off-hours, and crowd-spike events (Table~\ref{tab:anomaly_results}); $+\varepsilon$ guards $\sigma{=}0$. Unusual-object uses a count heuristic, off-hours fires when no baseline exists, and crowd-spike uses $z{\ge}2.0$. The $3.7$ FP/day on unusual-object is acknowledged high.
+
+\begin{table}[!t]
+\caption{Z-score anomaly detector (7-day labeled subset).}
+\label{tab:anomaly_results}
+\centering
+\footnotesize
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Event Type & Precision & Recall & F$_1$ & FPR/day \\
+\midrule
+\texttt{crowd\_spike}    & 0.872 & 0.811 & 0.840 & 1.4 \\
+\texttt{off\_hours}      & 0.804 & 0.866 & 0.834 & 2.1 \\
+\texttt{unusual\_object} & 0.713 & 0.792 & 0.751 & 3.7 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Implementation Detail (Brief)}
+
+The complete detection-and-indexing loop is given in Algorithm~\ref{alg:index}; the resolution loop that consumes Eqs.~\eqref{eq:adaptive_alpha} and~\eqref{eq:fusion} is Algorithm~\ref{alg:resolve}. The end-to-end pipeline is organized as five dataflow layers (capture, perception, indexing, reasoning, output) in which the three novel components (C1, C2, C3) are the only non-off-the-shelf blocks; all other modules are listed in Table~\ref{tab:models}.
+
+\begin{algorithm}[!t]
+\caption{Detection and indexing per frame.}
+\label{alg:index}
+\begin{algorithmic}[1]
+\STATE \textbf{Input}: frame $F_t$, timestamp $t$
+\STATE $D_t \leftarrow \mathrm{YOLOv11mSeg}(F_t,\tau_{\det}{=}0.5)$
+\FOR{each $(b_i,m_i,c_i,p_i)\in D_t$}
+    \STATE $\mathbf{q}\leftarrow \mathrm{LABHistogramMode}(F_t[b_i],m_i)$
+    \STATE $C\leftarrow \arg\min_{\mathbf{p}_j}\Delta E_{00}(\mathbf{q},\mathbf{p}_j)$
+    \IF{$c_i{=}\texttt{person} \wedge w(b_i)\ge 60$}
+        \STATE $\hat{y}\leftarrow \sigma(\mathrm{PAR}(\mathrm{Letterbox}(\mathrm{Mask},80,160)))$
+        \STATE $\mathbf{e}\leftarrow$ Eq.~\eqref{eq:fusion}; $\mathrm{FAISS}_p$.add$(\mathbf{e})$
+    \ENDIF
+    \STATE MongoDB.insert(record)
+\ENDFOR
+\IF{$t\bmod\Delta_{\text{idx}}=0$} \STATE EnqueueSemanticIndexing($F_t$) \ENDIF
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[!t]
+\caption{NL query resolution using Eqs.~\eqref{eq:adaptive_alpha},~\eqref{eq:fusion}. Person text queries use $\mathbf{v}{=}\mathbf{0}$, $\mathbf{t}{=}$MiniLM$(q_{\text{sem}})$ against the 1152-d person index; scene queries use $g_T$ against the 512-d scene index.}
+\label{alg:resolve}
+\begin{algorithmic}[1]
+\STATE \textbf{Input}: NL query $q$
+\STATE $F, q_{\text{sem}}, \iota \leftarrow \mathrm{LLM\_Parse}(q)$
+\STATE $R_s\leftarrow$ MongoDB.find$(F)$; $R_v\leftarrow$ FAISS.search$(g_T(q_{\text{sem}}),k)$ \COMMENT{$g_T$: OpenCLIP text for scene; MiniLM + zero-visual for person}
+\STATE $\alpha\leftarrow \alpha(F,\iota,|R_s|,|R_v|)$ \COMMENT{Eq.~\eqref{eq:adaptive_alpha}; action queries skip $R_s$}
+\STATE $R\leftarrow \mathrm{Merge}(R_s,R_v)$; rescore by Eq.~\eqref{eq:hybrid_score} on per-query normalized scores
+\STATE $R\leftarrow \mathrm{RecencyBoost}\circ\mathrm{MMR}\circ\mathrm{ConfFilter}(R)$ \COMMENT{recency $(1{+}0.5{\cdot}2^{-\mathit{age}/24h})$; MMR $\lambda{=}0.3$ unablated}
+\RETURN $R[:k]$, $\mathrm{LLM\_Answer}(q,R)$
+\end{algorithmic}
+\end{algorithm}
+
+\section{Evaluation}\label{sec:eval}
+
+\subsection{Setup}
+Hardware: Intel i7-13700K, RTX~4070 (12~GB), 32~GB DDR5, Windows~11. Software: Python~3.12, PyTorch~2.3, CUDA~12.1, OpenVINO~2024.2, FAISS~1.8, MongoDB~7. Live evaluation: four 1080p IP cameras at 2~FPS per stream for $\sim$8~h ($\sim$230k frames, 1.25M detections) in a single notified indoor/outdoor premises. Retrieval evaluation: a 150-query NL benchmark spanning five categories (30 queries each: count, find, track, action, filter). Queries were authored from live-clip observations to cover zone/time, attribute, and action intents; each query has human-annotated relevant clip sets (single annotator, no agreement reported; tuning and test share the same 150 queries unless noted). For counting, relevance means the clip contains the true count and P@5 measures supporting-clip retrieval, not exact-count EM/MAE, which we note as complementary. Alert benchmark: 60 held-out utterances with reference 9-field rule annotations. Person calibration: 50-pair split (no CV, disjointness from eval galleries not logged). Benchmarks and eval scripts are packaged for release upon acceptance. Three text encoders are used by role: OpenCLIP ViT-B/32 for scene queries, SigLIP-base for person visual, MiniLM-L12-v2 for attribute/person text; no encoder ablation is claimed.
+
+\textbf{Statistical protocol.} We report mean P@5 with a 95\% bootstrap CI (10{,}000 query-level resamples); macro-mean is the mean of the five category means ($n{=}30$ each). Paired comparisons (adaptive vs.\ fixed-$\alpha$, concat vs.\ each fusion baseline) use a two-sided paired bootstrap on per-query P@5 deltas plus a Wilcoxon signed-rank cross-check; significance threshold $p<0.05$ without multiple-testing correction (find $p{=}0.04$ and track $p{=}0.07$ are marginal and do not survive Holm correction for five categories). Grouped resampling by video/identity and corrected thresholds are retained as follow-up; correlated queries from the same video may narrow CIs.
+
+\subsection{C1 -- adaptive-\texorpdfstring{$\alpha$}{alpha} vs.\ fixed-\texorpdfstring{$\alpha$}{alpha}}
+Adaptive-$\alpha$ raises macro-mean P@5 from the best fixed-$\alpha$ value $0.666\,(\pm0.039)$ at $\alpha{=}0.3$ to $0.828\,(\pm0.034)$, an absolute gain of $+0.162$ with paired-bootstrap 95\% CI $[+0.118,+0.207]$ over 150 queries (Table~\ref{tab:alpha_baseline_ci}). A per-intent fixed-$\alpha$ lookup derived from Table~\ref{tab:alpha_baseline} (count$\to$1.0, action$\to$0.0, filter$\to$1.0, find/track$\to$0.3) reaches $0.822$ macro-mean ($0.94{+}0.76{+}0.80{+}0.69{+}0.92/5$), so the soft terms ($\rho_{\text{cplx}},\rho_{\text{src}}$, $0.6/0.2/0.2$ unablated) contribute $+0.006$ over that lookup; the paired bootstrap and Wilcoxon signed-rank tests both reject equality of adaptive vs.\ best single fixed-$\alpha$ at $p<10^{-4}$; per-category gains against the per-category best fixed-$\alpha$ are zero on the override categories (count, action) and on filter (where $\alpha{=}1.0$ already saturates), and positive on find ($+0.02$, $p=0.04$) and track ($+0.01$, $p=0.07$, both marginal without correction). Crucially, the gain in macro-mean comes from the fact that no single fixed $\alpha$ can match the count, action, and filter optima simultaneously (Observation~\ref{prop:override_gap}); adaptive-$\alpha$ does so by construction.
+
+\begin{table}[!t]
+\caption{Per-category P@5 with 95\% bootstrap CIs (10{,}000 resamples, $n{=}30$ per category, $n{=}150$ overall). $\Delta$ is the per-query mean of (adaptive $-$ per-category best-fixed-$\alpha$); $p$ is two-sided paired bootstrap. The bottom row compares the best single fixed-$\alpha$ macro-mean ($\alpha{=}0.3$) against adaptive-$\alpha$.}
+\label{tab:alpha_baseline_ci}
+\centering
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Category & Best fixed-$\alpha$ & Adaptive & $\Delta$ ($p$) \\
+\midrule
+Count   & $0.94\pm0.05$ ($\alpha{=}1.0$) & $0.94\pm0.05$ & $+0.00$ (n.s.) \\
+Find    & $0.76\pm0.07$ ($\alpha{=}0.3$) & $0.78\pm0.07$ & $+0.02$ ($0.04$) \\
+Track   & $0.80\pm0.06$ ($\alpha{=}0.3$) & $0.81\pm0.06$ & $+0.01$ ($0.07$) \\
+Action  & $0.69\pm0.08$ ($\alpha{=}0.0$) & $0.69\pm0.08$ & $+0.00$ (n.s.) \\
+Filter  & $0.92\pm0.05$ ($\alpha{=}1.0$) & $0.92\pm0.05$ & $+0.00$ (n.s.) \\
+\midrule
+\textbf{\makecell[l]{Macro-mean\\ (best single fixed-$\alpha$)}} & $0.666\pm0.039$ & $\mathbf{0.828\pm0.034}$ & $\mathbf{+0.162}$ ($<10^{-4}$) \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\subsection{C2 -- fusion ablation}
+The heterogeneous-space concat descriptor reaches $\mathrm{F}_1@10=0.807\,(\pm0.024)$, beating the best unimodal index ($0.700\pm0.031$) by $+10.7$~pp (paired bootstrap 95\% CI $[+7.9,+13.4]$, $p<10^{-4}$) and the best fusion baseline RRF ($0.785\pm0.026$) by $+2.2$~pp ($95\%$ CI $[+0.4,+4.1]$, $p=0.018$, Wilcoxon $p=0.022$). The same-space additive baseline (single-seed random Gaussian projection) gives $+5.4$~pp over visual-only ($p=0.003$) but remains $5.3$~pp below the concat construction ($p=0.001$). Significance therefore holds against both unimodal and fusion baselines, with the concat-vs-RRF margin being the smallest and least conservative.
+
+\subsection{C3 — alert authoring}
+The 60 held-out utterances exercise all nine rule fields (Table~\ref{tab:alert_authoring}); ``Rule-correctness'' requires all nine to be correct. Closed-vocabulary defaults (severity \texttt{info}, cadence $1$Hz) reach $1.00$ when unspecified; conditional accuracy when specified is lower. The hardest specified fields are zone naming ($0.88$, fuzzy references such as \textit{``the back entrance''} vs.\ canonical \texttt{Zone~B}) and time window ($0.92$, cross-midnight intervals such as \textit{``after 10~PM''} parsed as $[22{:}00,06{:}00]$); threshold ($0.93$) misses on implicit quantifiers (\textit{``a few''}), and object-set expansion ($0.95$) under-expands category nouns (\textit{``vehicle''} $\to$ \{\texttt{car}\}). Aggregated, $0.91$ of utterances yield a fully-correct rule on the first attempt; the remaining $9\%$ require a single zone- or threshold-level correction, never a structural rewrite.
+\begin{table}[!t]
+\caption{Conversational alert authoring on a held-out 60-utterance set. ``Field-level'' = per-field exact match, ``Rule-correctness'' = all 9 fields correct.}
+\label{tab:alert_authoring}
+\centering
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular*}{\columnwidth}{@{\extracolsep{\fill}}lcl@{}}
+\toprule
+Field & Acc.\ & Hardest mistake \\
+\midrule
+Event family       & 0.97 & loiter vs.\ zone \\
+Object set         & 0.95 & ``vehicle'' $\to$ \{car, truck\} \\
+Zone               & 0.88 & fuzzy zone names \\
+Threshold $\tau$   & 0.93 & implicit (``a few'') \\
+Time window        & 0.92 & cross-midnight \\
+Severity           & 1.00 & --- \\
+Cooldown           & 0.98 & --- \\
+Side-effects       & 0.95 & implied snapshot \\
+Cadence            & 1.00 & --- \\
+\midrule
+\textbf{Rule-correctness} & \textbf{0.91} & --- \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+\subsection{Supporting numbers}
+Substrate metrics are summarized in Table~\ref{tab:substrate}; the Z-score anomaly detector (Eq.~\eqref{eq:zscore}) is in Table~\ref{tab:anomaly_results}.
+\begin{table}[!t]
+\caption{Substrate metrics (YOLOv11m-seg detection, BoT-SORT+OSNet tracking mean over 4 cameras, PAR macro, color naming on 1{,}568 ROIs, Z-score anomaly).}
+\label{tab:substrate}
+\centering
+\footnotesize
+\begin{tabular}{@{}llc@{}}
+\toprule
+Stage & Metric & Value \\
+\midrule
+Detection (person)   & Precision / F$_1$ / mAP@0.5 & 0.965 / 0.927 / 0.873 \\
+Tracking (mean)      & MOTA / IDF1                  & 0.909 / 0.865 \\
+Person attributes    & Macro F$_1$ (7 attrs)        & 0.882 \\
+Color naming         & CIEDE2000 / RGB-Euclid       & 0.923 / 0.821 \\
+NL parsing           & Field-correctness            & 0.94 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[!t]
+\caption{End-to-end query latency by category. ``Sem.\ only'' isolates the FAISS lookup (scene-index mean $108.6$ms); ``Total'' includes LLM parsing, hybrid blending, MMR, and clip stitching. Person index has $N{=}312{,}544$ descriptors with $109$ms median; scene and person numbers are not interchangeable. Total mean is $6.0$s (Find $12.0$s, parse outlier $6.4$s on Find); FAISS is not the bottleneck.}
+\label{tab:query_performance}
+\centering
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular*}{\columnwidth}{@{\extracolsep{\fill}}lcccc@{}}
+\toprule
+Category & Parse (ms) & Sem.\ only (ms) & Total (ms) & P@5 \\
+\midrule
+Count   & 1{,}768 & \phantom{0}94 & 3{,}441 & 0.94 \\
+Track   & 2{,}101 & 109           & 5{,}413 & 0.81 \\
+Find    & 6{,}405 & 121           & 11{,}983 & 0.78 \\
+Action  & 2{,}423 & 137           & 6{,}131 & 0.69 \\
+Filter  & 1{,}590 & \phantom{0}82 & 3{,}108 & 0.92 \\
+\midrule
+\textbf{Mean} & 2{,}857 & \textbf{108.6} & 6{,}015 & \textbf{0.83} \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+The 4-camera deployment sustains 2.0~FPS per stream for detection/tracking at 4.2~GB resident memory, 7.8~GB VRAM, and 68\% mean GPU utilization (91\% p95) on the RTX~4070; VLM captioning (Qwen2-VL-2B with fallbacks) runs on keyframes only and is excluded from the 2-FPS tracking budget. End-to-end NL query latency is interactive-only (mean $6.0$s, Find $12.0$s incl.\ $6.4$s parse outlier; per-category means in Table~\ref{tab:query_performance}, percentile and concurrent-load profiling as follow-up); the $108.6$ms FAISS mean is the retrieval step alone and is not the bottleneck.
+
+\section{Discussion and Conclusion}
+
+\textbf{Generalization.} All three contributions are schema-decoupled: C1 needs only a category function $C(\cdot)$ with finitely many overrides; C2 admits any pair of frozen encoders, with only $(\alpha_v,\beta_t)$ learned on a 50-pair calibration set; C3's grammar requires only a typed-schema and trigger-function extension per new event family. Evaluation here is a single 4-camera premises ($\sim$8~h); cross-site, night/rain, and viewpoint-shift evaluation is follow-up.
+
+\textbf{Limitations.} (i)~Observation~\ref{prop:override_gap} is empirical: it assumes steep degradation away from per-category optima on our benchmark and is not guaranteed in general. Crowded scenes, partial occlusion, camera-domain shifts (viewpoint, illumination), and ambiguous action phrasing degrade both branches and are not isolated in this evaluation. (ii)~Concat fusion costs $d_v+d_t$ bytes per descriptor ($\approx{1.44}$~GB for $312$k flat); galleries with $N>10^7$ would motivate IVF-PQ over flat IP; MMR ($\lambda{=}0.3$) and recency are unablated. (iii)~Alert-grammar correctness depends on the LLM; we observed a 6-pp drop with local 7B models; ambiguous zones, implicit thresholds (``a few''), cross-midnight windows, and unsupported commands require a clarify/abstain validator, currently keyword-guard plus manual correction; no OSNet-only or public-ReID baseline is reported. (iv)~\emph{Demographic bias, privacy and consent.} PAR-crossroad-0238 was trained on a corpus skewed toward adult, daylight imagery; its binary \textit{gender} attribute is a coarse visual proxy. Live capture was in notified premises with face imagery retained per-camera for at most 8~h of operation; access is role-gated by zone with audit logging, raw imagery is capped per-camera with face-blur and gender-off switches; we mitigate by using gender only as a soft cue and reporting its ablation as follow-up.
+
+\textbf{Conclusion.} The three contributions raise macro-mean P@5 from 0.67 to 0.83, gain 10.7-/2.2-pp F$_1$@10 over unimodal/RRF baselines, and reach 91\% full-rule alert-authoring correctness on a 4-camera, 312k-descriptor deployment, showing that schema-aware fusion closes the gap between dense retrieval and a usable conversational surveillance interface. Release includes query/relevance definitions, eval scripts, fusion parameters, and alert schema to enable independent verification.
+
+\bibliographystyle{IEEEtran}
+\bibliography{References}
+
+\end{document}
