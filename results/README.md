@@ -68,6 +68,18 @@ numbers.
   This track is released-subset evidence for the deployed query path; it is
   single-camera and does **not** reproduce the 4-camera/312k deployment
   numbers.
+- `end_to_end_minimax_results.json` / `end_to_end_minimax_tables.md`: the
+  **cross-model replication** of the end-to-end track, produced by
+  `python backend/scripts/eval_end_to_end.py --model
+  opencode-go/minimax-m3.1-flash-free --out-prefix end_to_end_minimax`.
+  A second free model parses the same 150 queries and yields a *different*
+  filter on 33 of them (the object class on 22, the action on 11), yet every
+  reported number is identical to the primary run's to three decimals
+  (macro P@5 0.450 adaptive against 0.448 for the best tune-selected fixed
+  alpha, delta +0.002, p 0.80, per-category 0.36 / 0.82 / 0.53 / 0.09 /
+  0.45, oracle gap -0.088).  The end-to-end result therefore does not depend
+  on the particular parser.  The two runs differ only in parse latency
+  (mean 3.0 s versus 4.4 s, p95 5.0 s versus 9.0 s).
 - `parser_results.json` / `parser_results.md`: the **parser-quality** track,
   produced by `backend/scripts/eval_parser.py`.  Every query of the released
   benchmark is parsed through the production path

@@ -62,25 +62,27 @@ Structured window-count estimate (mode of caption counts) vs anchor-frame truth:
 | per_intent_tuned | 0.564 | 0.566 | +0.002 |
 | paper_lookup | 0.370 | 0.308 | -0.062 |
 
-Adaptive z-score vs min-max paired ΔP@5 = +0.016 [+0.006, +0.028], p=0.0000.
+Adaptive z-score vs min-max paired ΔP@5 = +0.016 [+0.006, +0.028], p=< 0.0007.
 
 
 ## Adaptive vs tune-selected best fixed-alpha
 
-- **minmax**: `adaptive vs fixed_0.7 (fixed alpha selected on tune split)`. ΔP@5 = -0.082 [-0.134, -0.038], p=0.0000; grouped Δ = -0.082 [-0.190, -0.011], p=0.0067.
-  - count: Δ=+0.040 [-0.020, +0.100], p=0.2633, Holm-reject=False
-  - find: Δ=+0.000 [+0.000, +0.000], p=1.0000, Holm-reject=False
-  - track: Δ=+0.000 [+0.000, +0.000], p=1.0000, Holm-reject=False
-  - action: Δ=-0.450 [-0.600, -0.300], p=0.0000, Holm-reject=True
-  - filter: Δ=+0.000 [+0.000, +0.000], p=1.0000, Holm-reject=False
+P-values are two-sided paired bootstrap with 3000 resamples. `< 0.0007` is the resolution floor (2/3000): no resample fell on the null side, so the p-value is below the floor and not exactly zero. The raw p-values are in `retrieval_results.json`.
+
+- **minmax**: `adaptive vs fixed_0.7 (fixed alpha selected on tune split)`. ΔP@5 = -0.082 [-0.134, -0.038], p=< 0.0007; grouped Δ = -0.082 [-0.190, -0.011], p=0.0067.
+  - count: Δ=+0.040 [-0.020, +0.100], p=0.2633 (Holm p=1.0000), Holm-reject=False
+  - find: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
+  - track: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
+  - action: Δ=-0.450 [-0.600, -0.300], p=< 0.0007 (Holm p=< 0.0007), Holm-reject=True
+  - filter: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
   - per-intent tuned vs adaptive: Δ=+0.078 [+0.032, +0.128], p=0.0007
-- **zscore**: `adaptive vs fixed_1.0 (fixed alpha selected on tune split)`. ΔP@5 = -0.108 [-0.158, -0.064], p=0.0000; grouped Δ = -0.108 [-0.213, -0.039], p=0.0000.
-  - count: Δ=+0.000 [+0.000, +0.000], p=1.0000, Holm-reject=False
-  - find: Δ=-0.010 [-0.030, +0.000], p=0.7267, Holm-reject=False
-  - track: Δ=-0.010 [-0.030, +0.000], p=0.7193, Holm-reject=False
-  - action: Δ=-0.470 [-0.620, -0.330], p=0.0000, Holm-reject=True
-  - filter: Δ=-0.050 [-0.090, -0.010], p=0.0100, Holm-reject=True
-  - per-intent tuned vs adaptive: Δ=+0.096 [+0.048, +0.146], p=0.0000
+- **zscore**: `adaptive vs fixed_1.0 (fixed alpha selected on tune split)`. ΔP@5 = -0.108 [-0.158, -0.064], p=< 0.0007; grouped Δ = -0.108 [-0.213, -0.039], p=< 0.0007.
+  - count: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
+  - find: Δ=-0.010 [-0.030, +0.000], p=0.7267 (Holm p=1.0000), Holm-reject=False
+  - track: Δ=-0.010 [-0.030, +0.000], p=0.7193 (Holm p=1.0000), Holm-reject=False
+  - action: Δ=-0.470 [-0.620, -0.330], p=< 0.0007 (Holm p=< 0.0007), Holm-reject=True
+  - filter: Δ=-0.050 [-0.090, -0.010], p=0.0100 (Holm p=0.0400), Holm-reject=True
+  - per-intent tuned vs adaptive: Δ=+0.096 [+0.048, +0.146], p=< 0.0007
 
 ## Per-intent alpha selected on the tune split
 

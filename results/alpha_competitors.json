@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-21T16:34:54.787755+00:00",
+  "generated_at": "2026-10-21T21:29:58.340277+00:00",
   "scope": {
     "benchmark": "backend/benchmarks/queries_control.jsonl (protocol-matched control)",
     "note": "Released single-camera subset; not the paper's 4-camera / 312k deployment benchmark. Full-deployment numbers are reported separately.",

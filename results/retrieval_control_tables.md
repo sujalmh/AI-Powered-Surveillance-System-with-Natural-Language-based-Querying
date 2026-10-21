@@ -53,24 +53,26 @@ The control's count queries are count-constrained retrieval questions (`exactly 
 | per_intent_tuned | 0.536 | 0.534 | -0.002 |
 | paper_lookup | 0.428 | 0.366 | -0.062 |
 
-Adaptive z-score vs min-max paired ΔP@5 = +0.014 [+0.004, +0.026], p=0.0000.
+Adaptive z-score vs min-max paired ΔP@5 = +0.014 [+0.004, +0.026], p=< 0.0007.
 
 
 ## Adaptive vs tune-selected best fixed-alpha
 
+P-values are two-sided paired bootstrap with 3000 resamples. `< 0.0007` is the resolution floor (2/3000): no resample fell on the null side, so the p-value is below the floor and not exactly zero. The raw p-values are in `retrieval_control_results.json`.
+
 - **minmax**: `adaptive vs fixed_0.7 (fixed alpha selected on tune split)`. ΔP@5 = +0.000 [+0.000, +0.000], p=1.0000; grouped Δ = +0.000 [+0.000, +0.000], p=1.0000.
-  - count: Δ=+0.000 [+0.000, +0.000], p=1.0000, Holm-reject=False
-  - find: Δ=+0.000 [+0.000, +0.000], p=1.0000, Holm-reject=False
-  - track: Δ=+0.000 [+0.000, +0.000], p=1.0000, Holm-reject=False
-  - action: Δ=+0.000 [+0.000, +0.000], p=1.0000, Holm-reject=False
-  - filter: Δ=+0.000 [+0.000, +0.000], p=1.0000, Holm-reject=False
+  - count: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
+  - find: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
+  - track: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
+  - action: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
+  - filter: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
   - per-intent tuned vs adaptive: Δ=-0.002 [-0.006, +0.000], p=0.7253
 - **zscore**: `adaptive vs fixed_0.7 (fixed alpha selected on tune split)`. ΔP@5 = +0.002 [+0.000, +0.006], p=0.7187; grouped Δ = +0.002 [+0.000, +0.007], p=0.7113.
-  - count: Δ=+0.010 [+0.000, +0.030], p=0.7353, Holm-reject=False
-  - find: Δ=+0.000 [+0.000, +0.000], p=1.0000, Holm-reject=False
-  - track: Δ=+0.000 [+0.000, +0.000], p=1.0000, Holm-reject=False
-  - action: Δ=+0.000 [+0.000, +0.000], p=1.0000, Holm-reject=False
-  - filter: Δ=+0.000 [+0.000, +0.000], p=1.0000, Holm-reject=False
+  - count: Δ=+0.010 [+0.000, +0.030], p=0.7353 (Holm p=1.0000), Holm-reject=False
+  - find: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
+  - track: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
+  - action: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
+  - filter: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
   - per-intent tuned vs adaptive: Δ=+0.010 [-0.000, +0.020], p=0.0773
 
 ## Per-intent alpha selected on the tune split
