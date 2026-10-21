@@ -1,5 +1,5 @@
 import React from "react"
-import { Bot, User, Bell, CheckCircle2 } from "lucide-react"
+import { Bot, User, Bell, CheckCircle2, AlertCircle } from "lucide-react"
 import { QueryResults } from "./query-results"
 import type { ChatSendResponse } from "@/lib/api"
 
@@ -94,6 +94,55 @@ export const ChatMessage = React.memo(({ message, onShowSteps }: ChatMessageProp
                 margin: 0, lineHeight: 1.45,
               }}>
                 {resp.alert_created.name || "New alert"}
+              </p>
+            </div>
+          </div>
+        )}
+        {!isUser && resp?.alert_clarification && (
+          <div style={{
+            marginTop: "10px",
+            padding: "10px 12px",
+            background: "rgba(217, 119, 6, 0.07)",
+            border: "1px solid rgba(217, 119, 6, 0.28)",
+            borderRadius: "var(--radius-md)",
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "10px",
+          }}>
+            <div style={{
+              width: "28px", height: "28px",
+              borderRadius: "var(--radius-full)",
+              background: "rgba(217, 119, 6, 0.15)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0, marginTop: "1px",
+            }}>
+              <AlertCircle style={{ width: "14px", height: "14px", color: "#B45309" }} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#B45309" }}>
+                  Clarification needed
+                </span>
+                {resp.alert_clarification.kind && (
+                  <span style={{
+                    fontSize: "0.6875rem", color: "var(--color-text-muted)",
+                    textTransform: "capitalize",
+                  }}>
+                    {String(resp.alert_clarification.kind).replace(/_/g, " ")}
+                  </span>
+                )}
+              </div>
+              <p style={{
+                fontSize: "0.8125rem", color: "var(--color-text-muted)",
+                margin: 0, lineHeight: 1.45,
+              }}>
+                {resp.alert_clarification.message || "Please add the missing detail so I can create the alert safely."}
+              </p>
+              <p style={{
+                fontSize: "0.75rem", color: "var(--color-text-muted)",
+                margin: "5px 0 0", lineHeight: 1.4,
+              }}>
+                No alert was created.
               </p>
             </div>
           </div>

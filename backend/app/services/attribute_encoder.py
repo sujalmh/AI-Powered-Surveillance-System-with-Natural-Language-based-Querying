@@ -5,6 +5,8 @@ from typing import Dict, List, Optional
 import numpy as np
 import os
 
+from backend.app.config import settings
+
 # Avoid importing TensorFlow/Keras via Transformers when not needed
 os.environ.setdefault("TRANSFORMERS_NO_TF", "1")
 
@@ -56,12 +58,13 @@ class AttributeEncoder:
             if openvino_attrs.get("coat_jacket_confidence", 0.0) > 0.5:
                 parts.append("coat or jacket")
 
-            # Gender (soft)
-            male = openvino_attrs.get("male_confidence", 0.0)
-            if male >= 0.65:
-                parts.append("male")
-            elif male <= 0.35:
-                parts.append("female")
+            # Gender (soft; deployment switch INCLUDE_GENDER_ATTRIBUTES)
+            if getattr(settings, "INCLUDE_GENDER_ATTRIBUTES", True):
+                male = openvino_attrs.get("male_confidence", 0.0)
+                if male >= 0.65:
+                    parts.append("male")
+                elif male <= 0.35:
+                    parts.append("female")
 
         return ", ".join(parts)
 

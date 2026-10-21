@@ -6,7 +6,15 @@ from pymongo.database import Database
 
 from backend.app.config import settings
 
-client: MongoClient = MongoClient(settings.MONGODB_URI)
+# Short server-selection timeout keeps imports/offline evaluation usable when
+# the local MongoDB daemon is not running.  The previous default (20-30 s) made
+# ``import backend.app.db.mongo`` look like a hang.
+client: MongoClient = MongoClient(
+    settings.MONGODB_URI,
+    serverSelectionTimeoutMS=settings.MONGO_SERVER_SELECTION_TIMEOUT_MS,
+    connectTimeoutMS=settings.MONGO_SERVER_SELECTION_TIMEOUT_MS,
+    socketTimeoutMS=max(2000, settings.MONGO_SERVER_SELECTION_TIMEOUT_MS * 2),
+)
 db: Database = client[settings.MONGO_DB_NAME]
 
 # Collections
@@ -25,6 +33,9 @@ anomaly_events: Collection = db["anomaly_events"]  # cached daily anomaly detect
 
 
 def init_indexes() -> None:
+    # Probe once with the configured short timeout before issuing DDL.  This
+    # prevents a down database from blocking module import for 30 s.
+    client.admin.command("ping")
     # cameras
     cameras.create_index([("camera_id", ASCENDING)], unique=True)
     # zones: ROIs per camera (bbox in normalized [0,1] coords)
@@ -110,9 +121,13 @@ def get_db_info() -> Dict[str, Any]:
     }
 
 
-# Initialize indexes when module is imported
+# Initialize indexes when module is imported.  Failure is non-fatal; callers
+# that need the database will surface a normal pymongo error on first use.
 try:
     init_indexes()
 except Exception as e:
-    # Avoid crashing the app if the DB is temporarily unavailable at import time.
-    logger.opt(exception=True).warning("Failed to initialize MongoDB indexes at import time: {}", e)
+    logger.warning(
+        "MongoDB unavailable at import time ({}); starting without indexes. "
+        "Set MONGODB_URI to a reachable instance for database-backed features.",
+        type(e).__name__,
+    )

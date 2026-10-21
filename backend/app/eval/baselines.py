@@ -121,3 +121,24 @@ def random_proj_add(
     out = (w_v * v + w_t * (P @ t)).astype(np.float32)
     n = float(np.linalg.norm(out)) + 1e-6
     return (out / n).astype(np.float32)
+
+
+def random_proj_add_batch(
+    visual: np.ndarray, text: np.ndarray, seed: int = 0, w_v: float = 1.0, w_t: float = 1.0
+) -> np.ndarray:
+    """Vectorised equivalent of :func:`random_proj_add` for a whole gallery.
+
+    ``visual`` is (N, 768) and ``text`` is (N, 384).  Returns (N, 768) with
+    each row L2-normalised, using the same ``P / sqrt(384)`` scaling.
+    """
+    visual = np.asarray(visual, dtype=np.float32)
+    text = np.asarray(text, dtype=np.float32)
+    if visual.ndim != 2 or text.ndim != 2:
+        raise ValueError("expected 2-D matrices")
+    if visual.shape[0] != text.shape[0]:
+        raise ValueError("row mismatch")
+    rng = np.random.RandomState(seed)
+    P = rng.randn(visual.shape[1], text.shape[1]).astype(np.float32) / math.sqrt(text.shape[1])
+    out = w_v * visual + w_t * (text @ P.T)
+    norms = np.linalg.norm(out, axis=1, keepdims=True) + 1e-6
+    return (out / norms).astype(np.float32)

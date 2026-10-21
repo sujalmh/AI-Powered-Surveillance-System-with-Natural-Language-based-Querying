@@ -15,6 +15,7 @@ from loguru import logger
 
 from backend.app.config import settings
 from backend.app.core.logging_config import configure_logging
+from backend.app.core.security import AccessControlMiddleware
 
 configure_logging(
     log_level=os.getenv("LOG_LEVEL", "DEBUG"),
@@ -269,6 +270,11 @@ class _MediaCORSMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(_MediaCORSMiddleware)
+
+# Role/zone guard + audit trail.  Inactive unless ACCESS_CONTROL_ENABLED=true,
+# so the bundled open frontend keeps working by default.  See
+# backend/app/core/security.py for the trusted-proxy header contract.
+app.add_middleware(AccessControlMiddleware)
 
 # Routers
 app.include_router(cameras_router, prefix="/api/cameras", tags=["cameras"])

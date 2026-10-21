@@ -1,0 +1,249 @@
+{
+  "$defs": {
+    "ObjectSpec": {
+      "properties": {
+        "name": {
+          "description": "Object name, e.g., person, car",
+          "title": "Name",
+          "type": "string"
+        },
+        "attributes": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional attributes for the object",
+          "title": "Attributes"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ObjectSpec",
+      "type": "object"
+    },
+    "TimeFilter": {
+      "properties": {
+        "last_minutes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "If provided, relative window in minutes",
+          "title": "Last Minutes"
+        },
+        "from_iso": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO8601 start time inclusive",
+          "title": "From Iso"
+        },
+        "to_iso": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO8601 end time inclusive",
+          "title": "To Iso"
+        }
+      },
+      "title": "TimeFilter",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "query_type": {
+      "default": "visual",
+      "description": "Type of query: 'visual' (needs clips) or 'informational' (text only)",
+      "title": "Query Type",
+      "type": "string"
+    },
+    "camera_id": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "If specified, numeric camera id to filter",
+      "title": "Camera Id"
+    },
+    "time": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TimeFilter"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Time window filter"
+    },
+    "objects": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/ObjectSpec"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Requested objects",
+      "title": "Objects"
+    },
+    "color": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Requested dominant color if applicable (e.g., Red)",
+      "title": "Color"
+    },
+    "action": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Action being performed (running, walking, fighting, etc.)",
+      "title": "Action"
+    },
+    "zone": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Specific zone or area mentioned (entrance, exit, hallway, etc.)",
+      "title": "Zone"
+    },
+    "count_constraint": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Count constraints: {'gt': 3} for 'more than 3', {'gte': 3} for 'at least 3', {'eq': 2} for 'exactly 2'",
+      "title": "Count Constraint"
+    },
+    "result_limit": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Maximum number of results to return, e.g. 1 for 'show me the latest clip'",
+      "title": "Result Limit"
+    },
+    "ask_color": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "True if the user is asking about clothing color",
+      "title": "Ask Color"
+    },
+    "location_hint": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "If user refers to a location name in NL",
+      "title": "Location Hint"
+    },
+    "query_subtype": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional subtype for informational/system queries: 'alerts' for alert logs, 'cameras' for camera devices/status",
+      "title": "Query Subtype"
+    },
+    "semantic_query": {
+      "description": "Natural language description for semantic/CLIP search - ALWAYS provide this",
+      "title": "Semantic Query",
+      "type": "string"
+    },
+    "raw_query": {
+      "description": "Original natural language input",
+      "title": "Raw Query",
+      "type": "string"
+    }
+  },
+  "required": [
+    "semantic_query",
+    "raw_query"
+  ],
+  "title": "NLFilter",
+  "type": "object"
+}

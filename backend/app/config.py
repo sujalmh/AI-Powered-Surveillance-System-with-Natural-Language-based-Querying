@@ -25,6 +25,14 @@ class Settings:
         # IMPORTANT: Do NOT hardcode credentials in code. Provide MONGODB_URI via environment variables.
         self.MONGODB_URI: str = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
         self.MONGO_DB_NAME: str = os.getenv("MONGO_DB_NAME", "ai_surveillance")
+        # Keep imports and offline evaluation usable when MongoDB is not running.
+        # The previous driver defaults (20-30 s) made ``import backend.app.*``
+        # appear to hang.  Fail fast and fall back to environment config.
+        self.MONGO_SERVER_SELECTION_TIMEOUT_MS: int = int(
+            os.getenv("MONGO_SERVER_SELECTION_TIMEOUT_MS", "800")
+        )
+        self._llm_config_cache: dict | None = None
+        self._llm_config_checked: bool = False
 
         # Storage
         self.STORAGE_ROOT: Path = Path(os.getenv("STORAGE_ROOT", "data")).resolve()
@@ -51,6 +59,13 @@ class Settings:
         self.OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
         self.OPENROUTER_BASE_URL: str = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
         self.NL_DEFAULT_MODEL: str = os.getenv("NL_DEFAULT_MODEL", "gpt-4o-mini")
+        # Date used to ground relative expressions ("today", "yesterday").
+        # Defaults to the released archive epoch so the demo does not resolve
+        # those words against the machine clock.  Set DATA_EPOCH_DATE to a new
+        # date for a fresh capture, or to an empty value to use "now".
+        self.DATA_EPOCH_DATE: str = os.getenv(
+            "DATA_EPOCH_DATE", "2026-03-01"
+        ).strip()
 
         # Semantic VLM / Vector Search (optional; can be disabled)
         self.ENABLE_SEMANTIC: bool = os.getenv("ENABLE_SEMANTIC", "true").lower() == "true"
@@ -96,28 +111,96 @@ class Settings:
         # MMR diversity: 0 = no diversity, 1 = max diversity
         self.MMR_DIVERSITY_LAMBDA: float = float(os.getenv("MMR_DIVERSITY_LAMBDA", "0.3"))
 
+        # ------------------------------------------------------------------
+        # Retrieval routing (deployment switch)
+        # ------------------------------------------------------------------
+        # When true, person/attribute/colour queries are resolved against the
+        # 1152-d person FAISS index and the matching scene clip is used as the
+        # result unit.  If the person index is missing/empty the orchestrator
+        # falls back to the scene OpenCLIP index, so this is safe when the
+        # person index has not been built yet.
+        self.ENABLE_PERSON_ROUTING: bool = os.getenv(
+            "ENABLE_PERSON_ROUTING", "true"
+        ).lower() == "true"
+
+        # ------------------------------------------------------------------
+        # Privacy / access-control switches (all safe defaults)
+        # ------------------------------------------------------------------
+        # ACCESS_CONTROL_ENABLED=false preserves the historical open API used
+        # by the bundled frontend.  Set true only behind a trusted reverse
+        # proxy that injects/strips the role headers below.
+        self.ACCESS_CONTROL_ENABLED: bool = os.getenv(
+            "ACCESS_CONTROL_ENABLED", "false"
+        ).lower() == "true"
+        self.ACCESS_ROLE_HEADER: str = os.getenv("ACCESS_ROLE_HEADER", "X-Role")
+        self.ACCESS_ACTOR_HEADER: str = os.getenv("ACCESS_ACTOR_HEADER", "X-Actor")
+        self.ACCESS_CAMERA_HEADER: str = os.getenv(
+            "ACCESS_CAMERA_HEADER", "X-Allowed-Cameras"
+        )
+        self.ACCESS_ZONE_HEADER: str = os.getenv(
+            "ACCESS_ZONE_HEADER", "X-Allowed-Zones"
+        )
+        # Optional Mongo mirror of the JSONL audit trail.  Off by default so
+        # offline/single-node operation never waits on an unavailable Mongo.
+        self.AUDIT_MONGO_ENABLED: bool = os.getenv(
+            "AUDIT_MONGO_ENABLED", "false"
+        ).lower() == "true"
+
+        # Retention is a policy switch, not an automatic startup action.
+        # RETENTION_ENABLED=false means callers must opt in explicitly.
+        self.RETENTION_ENABLED: bool = os.getenv(
+            "RETENTION_ENABLED", "false"
+        ).lower() == "true"
+        self.RETENTION_HOURS: float = float(os.getenv("RETENTION_HOURS", "8"))
+        self.FACE_BLUR_ENABLED: bool = os.getenv(
+            "FACE_BLUR_ENABLED", "false"
+        ).lower() == "true"
+        # Gender is a soft attribute in the released detector.  Deployments
+        # that must not expose it can set INCLUDE_GENDER_ATTRIBUTES=false:
+        # captions/queries then omit it (the index itself is unchanged).
+        self.INCLUDE_GENDER_ATTRIBUTES: bool = os.getenv(
+            "INCLUDE_GENDER_ATTRIBUTES", "true"
+        ).lower() == "true"
+
     def get_active_llm_config(self) -> dict:
-        """Fetch active LLM configuration from MongoDB (overrides .env if present)."""
+        """Fetch active LLM configuration from MongoDB (overrides .env if present).
+
+        The lookup is cached so offline evaluation does not pay a Mongo
+        server-selection timeout on every parsed query.  If Mongo is down we
+        fall back to the environment configuration after one short attempt.
+        """
+        if self._llm_config_checked:
+            return dict(self._llm_config_cache or {})
+        self._llm_config_checked = True
+        fallback = {
+            "provider": self.LLM_PROVIDER,
+            "model": self.NL_DEFAULT_MODEL,
+            "api_key": self.OPENAI_API_KEY,
+        }
         try:
             from backend.app.db.mongo import app_settings
-            doc = app_settings.find_one({"key": "llm_config"}, {"_id": 0, "value": 1})
+            doc = app_settings.find_one(
+                {"key": "llm_config"},
+                {"_id": 0, "value": 1},
+                max_time_ms=self.MONGO_SERVER_SELECTION_TIMEOUT_MS,
+            )
             if doc and isinstance(doc.get("value"), dict):
                 cfg = doc["value"]
                 # If provider is openrouter but base url is not set, it should use the default
-                return {
+                self._llm_config_cache = {
                     "provider": cfg.get("provider", self.LLM_PROVIDER),
                     "model": cfg.get("model", self.NL_DEFAULT_MODEL),
-                    "api_key": cfg.get("api_key", self.OPENAI_API_KEY)
+                    "api_key": cfg.get("api_key", self.OPENAI_API_KEY),
                 }
+                return dict(self._llm_config_cache)
         except Exception as e:
-            # Fallback to env if DB not available or table doesn't exist yet
-            logger.exception(f"Failed to load llm_config from MongoDB in get_active_llm_config: {e}")
-            
-        return {
-            "provider": self.LLM_PROVIDER,
-            "model": self.NL_DEFAULT_MODEL,
-            "api_key": self.OPENAI_API_KEY
-        }
+            # Fallback to env if DB not available or table doesn't exist yet.
+            logger.warning(
+                "MongoDB unavailable for llm_config ({}); using environment configuration.",
+                type(e).__name__,
+            )
+        self._llm_config_cache = fallback
+        return dict(fallback)
 
     def ensure_storage_dirs(self) -> None:
         self.RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)

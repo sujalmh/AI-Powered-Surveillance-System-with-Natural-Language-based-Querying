@@ -113,9 +113,36 @@ graph TD
 
 ## 📊 Performance
 
+These are **full-deployment** figures from the paper's 4-camera, 312k-descriptor
+run; they are not reproduced by the released single-camera subset.
+
 *   **Detection Accuracy:** ~96.5% precision for Person class; ~91% for Gender recognition.
-*   **Retrieval Latency:** Sub-second response time (~107ms) for searching databases with up to 500,000 indexed frames.
+*   **Retrieval Latency:** ~109 ms for the FAISS retrieval step; end-to-end query
+    latency is ~6 s mean / ~12 s for Find queries because parsing, blending, MMR,
+    and clip stitching dominate. The 109 ms figure is not end-to-end latency.
 *   **NL Parsing Accuracy:** 94% success rate in converting natural language to database filters.
+
+### Released subset and reproducibility
+
+The public artifact is intentionally smaller than the deployment: `camera_0`
+only, 123 clips (640x480, 5 FPS, ~3.6 s each; ~7.2 min of selected footage
+spanning a 2 h timestamp window), 242 scene frames, and 1,778 person
+descriptors.  It is a code-path and reproducibility subset, not a reproduction
+of the 4-camera/312k results.
+
+Run the offline checks without MongoDB:
+
+```powershell
+$env:PYTHONIOENCODING='utf-8'
+python backend/scripts/check_release.py
+python backend/scripts/eval_alerts.py
+python backend/scripts/eval_retrieval.py
+python backend/scripts/eval_fusion.py
+python backend/scripts/measure_latency.py
+```
+
+See `results/README.md` for the two-track provenance policy and
+`VERIFICATION.md` for the release checklist.
 
 ---
 

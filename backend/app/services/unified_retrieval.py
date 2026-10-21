@@ -32,6 +32,62 @@ from backend.app.services.sem_search import search_unstructured
 from backend.app.services.structured_search import execute_structured_query
 
 
+_PERSON_OBJECT_ALIASES = {"person", "people", "persons", "pedestrian", "human"}
+_PERSON_TEXT_HINTS = (
+    "person",
+    "people",
+    "pedestrian",
+    "man ",
+    "woman ",
+    "wearing",
+    "jacket",
+    "shirt",
+    "clothing",
+    "coat",
+    "trousers",
+    "pants",
+    "backpack",
+    "bag",
+    "hat",
+    "uniform",
+    "male",
+    "female",
+)
+_NON_PERSON_OBJECTS = {
+    "car", "cars", "vehicle", "vehicles", "truck", "bus", "bicycle",
+    "motorcycle", "dog", "cat",
+}
+
+
+def should_route_person(parsed_filter: Dict[str, Any]) -> bool:
+    """Return True when a query belongs on the 1152-d person index.
+
+    Routing is deliberately conservative: explicit person objects, or an
+    attribute/clothing-style text with no competing object, and no action or
+    count constraint (those require the scene/structured branches).
+    """
+    if not getattr(settings, "ENABLE_PERSON_ROUTING", True):
+        return False
+    if parsed_filter.get("action") is not None:
+        return False
+    if normalize_count_constraint(parsed_filter.get("count_constraint")):
+        return False
+    if str(parsed_filter.get("query_type", "visual")).lower() != "visual":
+        return False
+
+    obj = str(parsed_filter.get("objects.object_name") or "").strip().lower()
+    if obj in _PERSON_OBJECT_ALIASES:
+        return True
+    if obj in _NON_PERSON_OBJECTS:
+        return False
+
+    text = " ".join(
+        str(parsed_filter.get(key) or "")
+        for key in ("__semantic_query", "__raw", "__embedding_text")
+    ).lower()
+    return any(hint in text for hint in _PERSON_TEXT_HINTS)
+
+
 # ======================================================================
 # Processing-step tracker (used for tracing in API responses)
 # ======================================================================
@@ -61,6 +117,7 @@ class UnifiedRetrieval:
     def __init__(self) -> None:
         self.max_gap_seconds: float = 3.0
         self.join_gap_seconds: float = 10.0
+        self._person_engine: Any = None
 
     # ------------------------------------------------------------------
     # Main entry point
@@ -123,19 +180,56 @@ class UnifiedRetrieval:
 
         # --- Step 2: Semantic FAISS search --------------------------------
         semantic_results: List[Dict[str, Any]] = []
+        retrieval_branch = "scene"
+        person_fallback: Optional[str] = None
         should_run_semantic = bool(
             settings.ENABLE_SEMANTIC
             and semantic_query
             and (not is_zero_count or has_action)
         )
         if should_run_semantic:
-            _step(steps, "Vector Search", "in-progress", "Searching embeddings...")
-            semantic_results = self._execute_semantic_query(
-                semantic_query, parsed_filter, limit,
-            )
-            steps[-1]["status"] = "complete"
-            steps[-1]["details"] = f"{len(semantic_results)} semantic matches"
-            logger.info("Semantic search returned {} results", len(semantic_results))
+            if should_route_person(parsed_filter):
+                _step(steps, "Vector Search", "in-progress", "Searching person index...")
+                person_results, person_reason = self._execute_person_query(
+                    semantic_query, parsed_filter, limit,
+                )
+                if person_results:
+                    semantic_results = person_results
+                    retrieval_branch = "person"
+                    steps[-1]["status"] = "complete"
+                    steps[-1]["details"] = (
+                        f"{len(person_results)} person-index matches "
+                        "(mapped to scene clips)"
+                    )
+                    logger.info(
+                        "Person-index search returned {} clip matches",
+                        len(person_results),
+                    )
+                else:
+                    # Documented fallback: missing/empty index or no matches.
+                    # The scene OpenCLIP branch is always available.
+                    person_fallback = person_reason or "no person-index matches"
+                    semantic_results = self._execute_semantic_query(
+                        semantic_query, parsed_filter, limit,
+                    )
+                    retrieval_branch = "scene"
+                    steps[-1]["status"] = "complete"
+                    steps[-1]["details"] = (
+                        f"{len(semantic_results)} scene matches "
+                        f"(person fallback: {person_fallback})"
+                    )
+                    logger.info(
+                        "Person routing fell back to scene index ({})",
+                        person_fallback,
+                    )
+            else:
+                _step(steps, "Vector Search", "in-progress", "Searching embeddings...")
+                semantic_results = self._execute_semantic_query(
+                    semantic_query, parsed_filter, limit,
+                )
+                steps[-1]["status"] = "complete"
+                steps[-1]["details"] = f"{len(semantic_results)} semantic matches"
+                logger.info("Semantic search returned {} results", len(semantic_results))
         else:
             _step(steps, "Vector Search", "complete", "Skipped")
 
@@ -148,6 +242,8 @@ class UnifiedRetrieval:
                 structured_count=len(structured_results),
                 requested_limit=requested_limit,
                 effective_limit=effective_limit,
+                retrieval_branch=retrieval_branch,
+                person_fallback=person_fallback,
             )
 
         # --- Step 3: Merge & rank ----------------------------------------
@@ -190,6 +286,8 @@ class UnifiedRetrieval:
             is_zero_count=is_zero_count,
             requested_limit=requested_limit,
             effective_limit=effective_limit,
+            retrieval_branch=retrieval_branch,
+            person_fallback=person_fallback,
         )
 
     # ------------------------------------------------------------------
@@ -237,13 +335,47 @@ class UnifiedRetrieval:
                 "semantic_count": 0,
                 "final_count": 0,
                 "info_data": results,
+                "retrieval_branch": "none",
             },
             "processing_steps": steps,
         }
 
     # ------------------------------------------------------------------
-    # Semantic query executor
+    # Person / semantic query executors
     # ------------------------------------------------------------------
+
+    def _execute_person_query(
+        self,
+        semantic_query: str,
+        parsed_filter: Dict[str, Any],
+        limit: int,
+    ) -> Tuple[List[Dict[str, Any]], str]:
+        """Search the person index, mapping hits to scene clips.
+
+        Returns ``(results, reason)``.  A non-empty reason on an empty result
+        means the caller should use the scene fallback; no Mongo connection is
+        required for this path.
+        """
+        try:
+            from backend.app.services.hybrid_search import HybridSearchEngine
+
+            if not HybridSearchEngine.person_index_available():
+                return [], "person index unavailable"
+            if self._person_engine is None:
+                self._person_engine = HybridSearchEngine()
+            results = self._person_engine.search_meta(
+                semantic_query,
+                top_k=max(1, int(limit)),
+                parsed_filter=parsed_filter,
+            )
+            if not results:
+                return [], "no person-index matches"
+            return results, "ok"
+        except Exception as exc:
+            logger.opt(exception=True).warning(
+                "Person-index search failed; using scene fallback"
+            )
+            return [], f"person search error ({type(exc).__name__})"
 
     def _execute_semantic_query(
         self,
@@ -434,6 +566,8 @@ class UnifiedRetrieval:
         is_zero_count: bool = False,
         requested_limit: Any = None,
         effective_limit: int = 50,
+        retrieval_branch: str = "scene",
+        person_fallback: Optional[str] = None,
     ) -> Dict[str, Any]:
         final_clips = clips if clips else []
         answer = AnswerGenerator().generate(
@@ -460,6 +594,8 @@ class UnifiedRetrieval:
                 "structured_count": structured_count,
                 "semantic_count": semantic_count,
                 "final_count": len(final_clips),
+                "retrieval_branch": retrieval_branch,
+                "person_fallback": person_fallback,
             },
             "processing_steps": steps,
         }

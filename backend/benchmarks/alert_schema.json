@@ -1,1 +1,154 @@
-{"$schema":"http://json-schema.org/draft-07/schema#","description":"C3 9-tuple alert rule (paper Eq. R=<e,O,zeta,tau,T,s,c,Sigma,kappa>)","properties":{"area":{"properties":{"zone_id":{"enum":["Zone A","Zone B","Zone C","Gate","Entrance","Parking"]}},"type":"object"},"behavior":{"type":["string","null"]},"cameras":{"items":{"type":"integer"},"type":"array"},"cooldown_sec":{"default":60,"minimum":0,"type":"integer"},"count":{"type":"object"},"event":{"enum":["crowd","loiter","fight","zone","count","time","enter"]},"objects":{"items":{"type":"object"},"type":"array"},"occupancy_pct":{"type":["number","null"]},"severity":{"default":"info","enum":["info","low","med","high","warning","critical"]},"side_effects":{"default":["store_clip","snapshot","push_ws"],"items":{"enum":["store_clip","snapshot","push_ws"]},"type":"array"},"time_of_day":{"properties":{"end":{"type":"string"},"start":{"type":"string"}},"type":"object"}},"type":"object"}
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.org/ai-surveillance/alert_schema.json",
+  "title": "C3 conversational alert rule (canonical 9-field form)",
+  "description": "Canonical 9-field alert rule from the paper: event, objects, area/zone, threshold, time_of_day, severity, cooldown_sec, side_effects, cadence_hz. The optional count object is a derived compatibility view for backend/app/routers/alerts.py AlertRuleSpec; it is not a tenth scored field. A rule returned with needs_clarification=true may be partial and is never inserted into MongoDB. The 120-utterance benchmark is author-constructed, not human-annotated.",
+  "type": "object",
+  "required": [
+    "event",
+    "objects",
+    "area",
+    "threshold",
+    "time_of_day",
+    "severity",
+    "cooldown_sec",
+    "side_effects",
+    "cadence_hz"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event": {
+      "description": "Event family e.",
+      "enum": ["crowd", "loiter", "fight", "zone", "count", "time", "enter"]
+    },
+    "objects": {
+      "description": "Detected-class subset O; each entry carries a class name.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": true,
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "attributes": {"type": "object"}
+        }
+      }
+    },
+    "area": {
+      "description": "Canonical zone zeta.",
+      "type": "object",
+      "required": ["zone_id"],
+      "additionalProperties": false,
+      "properties": {
+        "zone_id": {
+          "enum": ["Zone A", "Zone B", "Zone C", "Gate", "Entrance", "Parking"]
+        }
+      }
+    },
+    "threshold": {
+      "description": "Numeric threshold tau. Unit is persons/vehicles/objects for count thresholds and seconds for loiter duration. 'between' stores [low, high].",
+      "type": "object",
+      "required": ["op", "value", "unit"],
+      "additionalProperties": false,
+      "properties": {
+        "op": {"enum": [">", ">=", "<", "<=", "==", "between"]},
+        "value": {
+          "oneOf": [
+            {"type": "number", "minimum": 0},
+            {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {"type": "number", "minimum": 0}
+            }
+          ]
+        },
+        "unit": {"enum": ["persons", "vehicles", "objects", "seconds"]}
+      }
+    },
+    "time_of_day": {
+      "description": "Daily time window T with cross-midnight support. An empty object means no time restriction (persistent rule).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "start": {"type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"},
+        "end": {"type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"},
+        "tz": {"type": "string"}
+      },
+      "anyOf": [
+        {"maxProperties": 0},
+        {"required": ["start", "end"]}
+      ]
+    },
+    "severity": {
+      "description": "Implementation severity s; the paper maps {info, warning, high, critical} to {low, med, high}.",
+      "enum": ["info", "warning", "high", "critical"],
+      "default": "info"
+    },
+    "cooldown_sec": {
+      "description": "Cooldown c in seconds.",
+      "type": "number",
+      "minimum": 0,
+      "default": 60
+    },
+    "side_effects": {
+      "description": "Side-effect set Sigma. Default is snapshot + push_ws; store_clip is added when a clip is requested.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"enum": ["store_clip", "snapshot", "push_ws"]},
+      "default": ["snapshot", "push_ws"]
+    },
+    "cadence_hz": {
+      "description": "Evaluation cadence kappa in Hz.",
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "default": 1.0
+    },
+    "count": {
+      "description": "Derived compatibility field for AlertRuleSpec; not part of the 9-field score. A 'between' threshold is expanded to paired >= and <= operators, which alert_engine.matches_count_condition understands.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        ">": {"type": "number"},
+        ">=": {"type": "number"},
+        "<": {"type": "number"},
+        "<=": {"type": "number"},
+        "==": {"type": "number"},
+        "eq": {"type": "number"},
+        "gt": {"type": "number"},
+        "gte": {"type": "number"},
+        "lt": {"type": "number"},
+        "lte": {"type": "number"}
+      }
+    },
+    "cameras": {
+      "description": "Optional AlertRuleSpec compatibility field.",
+      "type": "array",
+      "items": {"type": "integer"}
+    },
+    "color": {
+      "description": "Optional AlertRuleSpec compatibility field.",
+      "type": ["string", "null"]
+    },
+    "behavior": {
+      "description": "Optional AlertRuleSpec compatibility field.",
+      "type": ["string", "null"]
+    },
+    "time": {
+      "description": "Optional AlertRuleSpec absolute-window compatibility field; the canonical 9-field representation uses time_of_day.",
+      "type": ["object", "null"]
+    },
+    "needs_clarification": {
+      "description": "Present on materializer output. True means the rule is partial and must not be inserted.",
+      "type": "boolean"
+    },
+    "clarification": {
+      "type": ["string", "null"]
+    },
+    "clarification_kind": {
+      "description": "Materializer classification: clean or one of the four stress kinds.",
+      "enum": ["clean", "ambiguous", "conflicting", "missing", "unsupported"]
+    }
+  }
+}

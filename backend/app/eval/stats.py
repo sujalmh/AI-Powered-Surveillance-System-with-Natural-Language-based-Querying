@@ -121,6 +121,48 @@ def holm_correction(pvals: Dict[str, float], alpha: float = 0.05) -> Dict[str, b
     return out
 
 
+def paired_grouped_bootstrap_ci(
+    a: Sequence[float],
+    b: Sequence[float],
+    groups: Sequence[str],
+    n_boot: int = 10000,
+    ci: float = 0.95,
+    seed: int = 0,
+) -> Tuple[float, float, float, float]:
+    """Cluster-paired bootstrap on per-query deltas ``a - b``.
+
+    Whole groups (video, identity, or a 5-minute bucket) are resampled with
+    replacement, preserving the pairing between the two systems.  Returns
+    ``(mean_delta, lo, hi, p_two_sided)``.
+    """
+    da = list(a)
+    db = list(b)
+    grps = list(groups)
+    assert len(da) == len(db) == len(grps) and da
+    by_group: Dict[str, List[float]] = {}
+    for x, y, g in zip(da, db, grps):
+        by_group.setdefault(g, []).append(x - y)
+    keys = list(by_group.keys())
+    g = len(keys)
+    rng = random.Random(seed)
+    means = []
+    for _ in range(n_boot):
+        pool: List[float] = []
+        for _ in range(g):
+            pool.extend(by_group[keys[rng.randrange(g)]])
+        means.append(_mean(pool))
+    means.sort()
+    alpha = 1.0 - ci
+    lo = means[int((alpha / 2) * n_boot)]
+    hi = means[int((1 - alpha / 2) * n_boot) - 1]
+    m = _mean([x - y for x, y in zip(da, db)])
+    if m >= 0:
+        p = sum(1 for x in means if x <= 0) / n_boot
+    else:
+        p = sum(1 for x in means if x >= 0) / n_boot
+    return m, lo, hi, min(1.0, 2.0 * p)
+
+
 def grouped_bootstrap_ci(
     values: Sequence[float],
     groups: Sequence[str],

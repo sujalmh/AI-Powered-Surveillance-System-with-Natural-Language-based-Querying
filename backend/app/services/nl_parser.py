@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 import re
 
@@ -137,6 +138,48 @@ def _infer_result_limit(nl: str) -> Optional[int]:
     return None
 
 
+def resolve_reference_date(
+    data_epoch: Optional[str] = None,
+    now: Optional[datetime] = None,
+) -> str:
+    """Return the ISO date used to ground relative time expressions.
+
+    Offline/released-data runs set ``DATA_EPOCH_DATE`` so "today" resolves to
+    the archive date rather than the wall-clock date.  Invalid values fall back
+    to *now* instead of silently emitting a bad prompt.
+    """
+    raw = (settings.DATA_EPOCH_DATE if data_epoch is None else data_epoch) or ""
+    raw = str(raw).strip()
+    if raw:
+        try:
+            datetime.strptime(raw, "%Y-%m-%d")
+            return raw
+        except ValueError:
+            pass
+    reference = now or datetime.now()
+    return reference.strftime("%Y-%m-%d")
+
+
+def correct_query_type_for_count(
+    query_type: str,
+    count_constraint: Optional[Dict[str, Any]],
+    query_subtype: Optional[str] = None,
+) -> str:
+    """Counts of scene objects are visual, not system-status informational.
+
+    This is a small pure helper so the post-LLM correction is unit-testable
+    without making a network call.
+    """
+    subtype = (query_subtype or "").strip().lower()
+    if (
+        str(query_type or "").strip().lower() == "informational"
+        and count_constraint
+        and subtype not in {"alerts", "cameras"}
+    ):
+        return "visual"
+    return query_type
+
+
 def _augment_count_constraint_from_query(nl: str, f: Dict[str, Any]) -> None:
     """
     Backstop heuristic for count constraints when LLM output misses them.
@@ -218,17 +261,26 @@ PROMPT_TEMPLATE = """You are an intelligent surveillance query parser. Convert t
 
 CRITICAL INSTRUCTIONS:
 
+0. REFERENCE DATE (MANDATORY FOR TIME PARSING):
+   - The surveillance archive is centered on {reference_date}.
+   - Resolve relative expressions ("today", "yesterday", "last night", "this evening") against {reference_date}.
+   - If a date is written without a year, use the year of {reference_date}.
+   - Never default a timestamp to 2023 or any other arbitrary year.
+   - Emit absolute timestamps as ISO 8601 (e.g., 2026-03-01T22:00:00).
+
 1. QUERY TYPE CLASSIFICATION (MANDATORY):
    - Set query_type = "visual" if the query is about:
      * Finding/showing objects, people, vehicles, events
      * Actions (running, walking, fighting, carrying)
      * Visual scenes or behaviors
-     * Examples: "show me people running", "find person in red shirt", "any cars entering?"
+     * Counts of objects/people in the video (e.g., "how many people were in the lobby?")
+     * Examples: "show me people running", "find person in red shirt", "any cars entering?", "how many people at 10 PM?"
    
-   - Set query_type = "informational" if the query is about:
-     * Counts, statistics, system status
+   - Set query_type = "informational" ONLY if the query is about:
+     * System/status counts (cameras, alerts, total detections), not scene content
      * Non-visual information requests
      * Examples: "how many cameras are active?", "total detections today?", "system status?"
+   - If a count_constraint is extracted for people/objects in the scene, query_type MUST be "visual".
 
 2. QUERY SUBTYPE FOR SYSTEM QUERIES (OPTIONAL):
    - Use query_subtype ONLY for informational or system/status-style questions.
@@ -359,8 +411,16 @@ def parse_nl_with_llm(nl: str) -> Dict[str, Any]:
         # Pydantic v1 fallback
         schema = NLFilter.schema()  # type: ignore
     format_instructions = parser.get_format_instructions()
+    # Ground relative dates in either the archived deployment epoch (offline
+    # reproducibility) or the current date (live operation).
+    reference_date = resolve_reference_date()
     chain = prompt | llm | parser  # type: ignore
-    result: NLFilter = chain.invoke({"query": nl, "schema": schema, "format_instructions": format_instructions})
+    result: NLFilter = chain.invoke({
+        "query": nl,
+        "schema": schema,
+        "format_instructions": format_instructions,
+        "reference_date": reference_date,
+    })
     # Convert to backend filter shape
     f: Dict[str, Any] = {}
     if result.camera_id is not None:
@@ -430,6 +490,15 @@ def parse_nl_with_llm(nl: str) -> Dict[str, Any]:
     if result.count_constraint:
         f["count_constraint"] = result.count_constraint
     _augment_count_constraint_from_query(nl, f)
+
+    # A count of people/objects in the archive is a visual query, not a
+    # status query.  The LLM prompt sometimes mislabels "how many ..." as
+    # informational; correct it after the schema is materialized.
+    f["query_type"] = correct_query_type_for_count(
+        f.get("query_type", "visual"),
+        f.get("count_constraint"),
+        f.get("__query_subtype"),
+    )
 
     # Regex backstop for camera status questions — match explicit constructs only
     status_terms = r"(online|offline|active|inactive|down|up|running|stopped|on|off|live)"

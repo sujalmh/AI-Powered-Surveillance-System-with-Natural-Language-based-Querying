@@ -42,6 +42,48 @@ def f1_at_10_paper(retrieved: Sequence, relevant: Iterable) -> float:
     return 2 * p * r / (p + r)
 
 
+def f1_at_10_standard(retrieved: Sequence, relevant: Iterable) -> float:
+    """Standard F1@10 = H-mean(P@10, R@10).
+
+    The paper's headline table uses :func:`f1_at_10_paper` (P@5, R@10).  Both
+    are reported so the revision can state which definition is used.
+    """
+    p = precision_at_k(retrieved, relevant, 10)
+    r = recall_at_k(retrieved, relevant, 10)
+    if p + r <= 0:
+        return 0.0
+    return 2 * p * r / (p + r)
+
+
+def reciprocal_rank(retrieved: Sequence, relevant: Iterable) -> float:
+    rel = set(relevant)
+    for i, doc in enumerate(retrieved, start=1):
+        if doc in rel:
+            return 1.0 / float(i)
+    return 0.0
+
+
+def rank_of_first_relevant(retrieved: Sequence, relevant: Iterable) -> int:
+    rel = set(relevant)
+    for i, doc in enumerate(retrieved, start=1):
+        if doc in rel:
+            return i
+    return 0
+
+
+def ranking_metrics(retrieved: Sequence, relevant: Iterable) -> Dict[str, float]:
+    """Convenience bundle used by both subset evaluators."""
+    return {
+        "p5": precision_at_k(retrieved, relevant, 5),
+        "p10": precision_at_k(retrieved, relevant, 10),
+        "r10": recall_at_k(retrieved, relevant, 10),
+        "f1": f1_at_10_standard(retrieved, relevant),
+        "f1_paper": f1_at_10_paper(retrieved, relevant),
+        "mrr": reciprocal_rank(retrieved, relevant),
+        "rank_first_relevant": rank_of_first_relevant(retrieved, relevant),
+    }
+
+
 def macro_mean(category_means: Dict[str, float]) -> float:
     vals = list(category_means.values())
     if not vals:

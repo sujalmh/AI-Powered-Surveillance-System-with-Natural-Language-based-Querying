@@ -1,0 +1,361 @@
+{
+  "generated_at": "2026-10-21T15:54:17.135358+00:00",
+  "command": "$env:PYTHONIOENCODING='utf-8'; python backend/scripts/eval_alerts.py",
+  "python": "3.12.4",
+  "dataset": {
+    "path": "backend/benchmarks/alert_utterances.jsonl",
+    "sha256": "c885f8b96025132f69c2b9de06311bf5fd5fd2a57c5ed1b6a28fc388da407502",
+    "rows": 120,
+    "clean": 60,
+    "stress": 60,
+    "stress_kinds": {
+      "ambiguous": 15,
+      "conflicting": 15,
+      "missing": 15,
+      "unsupported": 15
+    },
+    "splits": {
+      "dev": {
+        "clean": 30,
+        "stress": 30,
+        "stress_kinds": {
+          "ambiguous": 8,
+          "conflicting": 7,
+          "missing": 8,
+          "unsupported": 7
+        }
+      },
+      "test": {
+        "clean": 30,
+        "stress": 30,
+        "stress_kinds": {
+          "ambiguous": 7,
+          "conflicting": 8,
+          "missing": 7,
+          "unsupported": 8
+        }
+      }
+    },
+    "provenance": "author-constructed; not human-annotated; no inter-annotator agreement"
+  },
+  "methodology": {
+    "scored_fields": [
+      "event",
+      "objects",
+      "area",
+      "threshold",
+      "time_of_day",
+      "severity",
+      "cooldown_sec",
+      "side_effects",
+      "cadence_hz"
+    ],
+    "rule_correctness": "all nine fields exactly equal to the reference after documented defaults",
+    "count_compatibility": "derived from threshold; reported separately, not in the 9-field score",
+    "clarify_labels": "clean should_clarify=false; stress should_clarify=true",
+    "no_llm": true,
+    "no_mongo": true
+  },
+  "splits": {
+    "dev": {
+      "clean": {
+        "n": 30,
+        "materialized": 30,
+        "materialization_rate": 1.0,
+        "rule_correct": 30,
+        "rule_correctness": 1.0,
+        "per_field": {
+          "event": {
+            "correct": 30,
+            "accuracy": 1.0
+          },
+          "objects": {
+            "correct": 30,
+            "accuracy": 1.0
+          },
+          "area": {
+            "correct": 30,
+            "accuracy": 1.0
+          },
+          "threshold": {
+            "correct": 30,
+            "accuracy": 1.0
+          },
+          "time_of_day": {
+            "correct": 30,
+            "accuracy": 1.0
+          },
+          "severity": {
+            "correct": 30,
+            "accuracy": 1.0
+          },
+          "cooldown_sec": {
+            "correct": 30,
+            "accuracy": 1.0
+          },
+          "side_effects": {
+            "correct": 30,
+            "accuracy": 1.0
+          },
+          "cadence_hz": {
+            "correct": 30,
+            "accuracy": 1.0
+          }
+        },
+        "count_compatibility_correct": 30,
+        "count_compatibility_accuracy": 1.0,
+        "failures": []
+      },
+      "stress": {
+        "n": 30,
+        "clarified": 30,
+        "clarification_rate": 1.0,
+        "false_materializations": 0,
+        "per_kind": {
+          "ambiguous": {
+            "n": 8,
+            "clarified": 8,
+            "clarification_rate": 1.0,
+            "false_materializations": 0,
+            "kind_match": 8,
+            "kind_match_rate": 1.0
+          },
+          "conflicting": {
+            "n": 7,
+            "clarified": 7,
+            "clarification_rate": 1.0,
+            "false_materializations": 0,
+            "kind_match": 7,
+            "kind_match_rate": 1.0
+          },
+          "missing": {
+            "n": 8,
+            "clarified": 8,
+            "clarification_rate": 1.0,
+            "false_materializations": 0,
+            "kind_match": 8,
+            "kind_match_rate": 1.0
+          },
+          "unsupported": {
+            "n": 7,
+            "clarified": 7,
+            "clarification_rate": 1.0,
+            "false_materializations": 0,
+            "kind_match": 7,
+            "kind_match_rate": 1.0
+          }
+        },
+        "false_materialization_uids": []
+      },
+      "clarify": {
+        "tp": 30,
+        "fp": 0,
+        "fn": 0,
+        "tn": 30,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      }
+    },
+    "test": {
+      "clean": {
+        "n": 30,
+        "materialized": 30,
+        "materialization_rate": 1.0,
+        "rule_correct": 30,
+        "rule_correctness": 1.0,
+        "per_field": {
+          "event": {
+            "correct": 30,
+            "accuracy": 1.0
+          },
+          "objects": {
+            "correct": 30,
+            "accuracy": 1.0
+          },
+          "area": {
+            "correct": 30,
+            "accuracy": 1.0
+          },
+          "threshold": {
+            "correct": 30,
+            "accuracy": 1.0
+          },
+          "time_of_day": {
+            "correct": 30,
+            "accuracy": 1.0
+          },
+          "severity": {
+            "correct": 30,
+            "accuracy": 1.0
+          },
+          "cooldown_sec": {
+            "correct": 30,
+            "accuracy": 1.0
+          },
+          "side_effects": {
+            "correct": 30,
+            "accuracy": 1.0
+          },
+          "cadence_hz": {
+            "correct": 30,
+            "accuracy": 1.0
+          }
+        },
+        "count_compatibility_correct": 30,
+        "count_compatibility_accuracy": 1.0,
+        "failures": []
+      },
+      "stress": {
+        "n": 30,
+        "clarified": 30,
+        "clarification_rate": 1.0,
+        "false_materializations": 0,
+        "per_kind": {
+          "ambiguous": {
+            "n": 7,
+            "clarified": 7,
+            "clarification_rate": 1.0,
+            "false_materializations": 0,
+            "kind_match": 7,
+            "kind_match_rate": 1.0
+          },
+          "conflicting": {
+            "n": 8,
+            "clarified": 8,
+            "clarification_rate": 1.0,
+            "false_materializations": 0,
+            "kind_match": 8,
+            "kind_match_rate": 1.0
+          },
+          "missing": {
+            "n": 7,
+            "clarified": 7,
+            "clarification_rate": 1.0,
+            "false_materializations": 0,
+            "kind_match": 7,
+            "kind_match_rate": 1.0
+          },
+          "unsupported": {
+            "n": 8,
+            "clarified": 8,
+            "clarification_rate": 1.0,
+            "false_materializations": 0,
+            "kind_match": 8,
+            "kind_match_rate": 1.0
+          }
+        },
+        "false_materialization_uids": []
+      },
+      "clarify": {
+        "tp": 30,
+        "fp": 0,
+        "fn": 0,
+        "tn": 30,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      }
+    }
+  },
+  "overall": {
+    "clean": {
+      "n": 60,
+      "materialized": 60,
+      "materialization_rate": 1.0,
+      "rule_correct": 60,
+      "rule_correctness": 1.0,
+      "per_field": {
+        "event": {
+          "correct": 60,
+          "accuracy": 1.0
+        },
+        "objects": {
+          "correct": 60,
+          "accuracy": 1.0
+        },
+        "area": {
+          "correct": 60,
+          "accuracy": 1.0
+        },
+        "threshold": {
+          "correct": 60,
+          "accuracy": 1.0
+        },
+        "time_of_day": {
+          "correct": 60,
+          "accuracy": 1.0
+        },
+        "severity": {
+          "correct": 60,
+          "accuracy": 1.0
+        },
+        "cooldown_sec": {
+          "correct": 60,
+          "accuracy": 1.0
+        },
+        "side_effects": {
+          "correct": 60,
+          "accuracy": 1.0
+        },
+        "cadence_hz": {
+          "correct": 60,
+          "accuracy": 1.0
+        }
+      },
+      "count_compatibility_correct": 60,
+      "count_compatibility_accuracy": 1.0,
+      "failures": []
+    },
+    "stress": {
+      "n": 60,
+      "clarified": 60,
+      "clarification_rate": 1.0,
+      "false_materializations": 0,
+      "per_kind": {
+        "ambiguous": {
+          "n": 15,
+          "clarified": 15,
+          "clarification_rate": 1.0,
+          "false_materializations": 0,
+          "kind_match": 15,
+          "kind_match_rate": 1.0
+        },
+        "conflicting": {
+          "n": 15,
+          "clarified": 15,
+          "clarification_rate": 1.0,
+          "false_materializations": 0,
+          "kind_match": 15,
+          "kind_match_rate": 1.0
+        },
+        "missing": {
+          "n": 15,
+          "clarified": 15,
+          "clarification_rate": 1.0,
+          "false_materializations": 0,
+          "kind_match": 15,
+          "kind_match_rate": 1.0
+        },
+        "unsupported": {
+          "n": 15,
+          "clarified": 15,
+          "clarification_rate": 1.0,
+          "false_materializations": 0,
+          "kind_match": 15,
+          "kind_match_rate": 1.0
+        }
+      },
+      "false_materialization_uids": []
+    },
+    "clarify": {
+      "tp": 60,
+      "fp": 0,
+      "fn": 0,
+      "tn": 60,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    }
+  }
+}

@@ -27,6 +27,8 @@ from pydantic import BaseModel, Field
 from backend.app.core.async_utils import run_sync
 from backend.app.db.mongo import chat_messages as chat_col, detections as detections_col, alerts as alerts_col
 from backend.app.config import settings
+from backend.app.services.alert_materializer import materialize_alert_rule
+from backend.app.services.alert_validator import validate_rule
 from loguru import logger
 
 router = APIRouter()
@@ -102,6 +104,7 @@ class ChatSendResponse(BaseModel):
     answer: str
     metadata: Optional[Dict[str, Any]] = None
     alert_created: Optional[Dict[str, Any]] = None
+    alert_clarification: Optional[Dict[str, Any]] = None
     # Additional fields for frontend compatibility
     semantic_results: Optional[List[Dict[str, Any]]] = None
     mode: Optional[str] = None
@@ -397,118 +400,151 @@ def _summarize_alert_rule(parsed: Dict[str, Any]) -> str:
     return "\n".join(f"- {p}" for p in parts) if parts else "- General surveillance alert"
 
 
-def _maybe_create_alert_from_nl(nl: str, parsed: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+_ALERT_PUBLIC_RULE_FIELDS = (
+    "event",
+    "objects",
+    "area",
+    "count",
+    "threshold",
+    "time_of_day",
+    "severity",
+    "cooldown_sec",
+    "side_effects",
+    "cadence_hz",
+)
+
+
+def _public_alert_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the serializable rule fields (excludes clarify bookkeeping)."""
+    return {key: rule.get(key) for key in _ALERT_PUBLIC_RULE_FIELDS if key in rule}
+
+
+def _alert_clarification_payload(rule: Dict[str, Any]) -> Dict[str, Any]:
+    """Structured clarify payload returned to the chat client."""
+    return {
+        "needs_clarification": True,
+        "kind": rule.get("clarification_kind"),
+        "message": rule.get("clarification") or "Please clarify the alert rule.",
+        "partial_rule": _public_alert_rule(rule),
+    }
+
+
+def _summarize_materialized_rule(rule: Dict[str, Any]) -> str:
+    """Human-readable summary of a materialized 9-field rule."""
+    parts: List[str] = []
+    event = rule.get("event")
+    if event:
+        parts.append(f"Event: **{event}**")
+    objects = rule.get("objects") or []
+    names = [o.get("name") for o in objects if isinstance(o, dict) and o.get("name")]
+    if names:
+        parts.append(f"Objects: **{', '.join(names)}**")
+    zone = (rule.get("area") or {}).get("zone_id")
+    if zone:
+        parts.append(f"Zone: **{zone}**")
+    threshold = rule.get("threshold") or {}
+    if threshold:
+        op = threshold.get("op")
+        value = threshold.get("value")
+        unit = threshold.get("unit")
+        if op == "between" and isinstance(value, (list, tuple)) and len(value) == 2:
+            parts.append(f"Threshold: **between {value[0]} and {value[1]} {unit}**")
+        else:
+            parts.append(f"Threshold: **{op} {value} {unit}**")
+    tod = rule.get("time_of_day") or {}
+    if tod.get("start") and tod.get("end"):
+        parts.append(f"Time: **{tod['start']}–{tod['end']}**")
+    else:
+        parts.append("Time: **all day**")
+    parts.append(f"Severity: **{rule.get('severity', 'info')}**")
+    parts.append(f"Cooldown: **{rule.get('cooldown_sec', 60)} s**")
+    parts.append(f"Side effects: **{', '.join(rule.get('side_effects') or [])}**")
+    parts.append(f"Cadence: **{rule.get('cadence_hz', 1.0)} Hz**")
+    return "\n".join(f"- {part}" for part in parts)
+
+
+def _maybe_create_alert_from_nl(
+    nl: str, parsed: Optional[Dict[str, Any]] = None
+) -> Optional[Dict[str, Any]]:
+    """Compile an alert-creation utterance with the deterministic materializer.
+
+    Returns ``None`` when the message is not alert-creation intent.  For an
+    alert intent it always returns a dict; when ``needs_clarification`` is true
+    the rule is partial and **nothing is inserted into MongoDB**.
     """
-    Heuristic NL→alert creation: if the user asks to "alert"/"notify" etc., compile a basic rule and save it.
-    """
-    low = nl.lower()
     if not _is_alert_creation_intent(nl):
         return None
-    obj = parsed.get("objects.object_name") or "person"
-    color = parsed.get("objects.color")
-    cam = parsed.get("camera_id")
-    
-    # Use count_constraint from parsed if available, otherwise guess
-    count_constraint = parsed.get("count_constraint")
-    count_dict = None
-    if count_constraint:
-        temp_dict = {}
-        for k, v in count_constraint.items():
-            if k == "eq":
-                temp_dict["=="] = v
-            elif k == "gt":
-                temp_dict[">"] = v
-            elif k == "gte":
-                temp_dict[">="] = v
-            elif k == "lt":
-                temp_dict["<"] = v
-            elif k == "lte":
-                temp_dict["<="] = v
-        if temp_dict:
-            count_dict = temp_dict
-    else:
-        guessed = _guess_count_from_text(nl)
-        count = guessed if guessed is not None else 1
-        count_dict = {">=": count}
 
-    # event enter detection
-    event = None
-    if any(k in low for k in ["enter", "enters", "arrives", "comes in", "comes"]):
-        event = "enter"
-    # time-of-day: night
-    time_of_day = None
-    if any(k in low for k in ["night", "after dark", "evening"]):
-        time_of_day = {"start": "20:00", "end": "06:00"}
-    
-    behavior = parsed.get("action")
-    zone = parsed.get("zone")
-    area = {"zone_id": zone} if zone else None
-    
-    # Safely parse camera_id — may be non-numeric string from NLP
-    cam_list = None
+    parsed = parsed or {}
+    rule = materialize_alert_rule(nl, parsed)
+    if rule.get("needs_clarification"):
+        clarification = _alert_clarification_payload(rule)
+        logger.info("Alert needs clarification ({}): {}", rule.get("clarification_kind"), nl)
+        return {
+            "created": False,
+            "needs_clarification": True,
+            "clarification": clarification,
+            "rule": _public_alert_rule(rule),
+        }
+
+    ok, errors, _warnings = validate_rule(rule)
+    if not ok:
+        message = (
+            "The generated alert rule failed validation: "
+            + "; ".join(errors)
+            + ". No alert has been created; please rephrase."
+        )
+        clarification = {
+            "needs_clarification": True,
+            "kind": "invalid",
+            "message": message,
+            "partial_rule": _public_alert_rule(rule),
+        }
+        logger.warning("Materialized alert rule failed validation: {} ({})", errors, nl)
+        return {
+            "created": False,
+            "needs_clarification": True,
+            "clarification": clarification,
+            "rule": _public_alert_rule(rule),
+        }
+
+    public_rule = _public_alert_rule(rule)
+
+    # Non-grammar metadata from the query parser may enrich the stored rule.
+    cam = parsed.get("camera_id")
     if cam is not None:
         try:
-            cam_list = [int(cam)]
+            public_rule["cameras"] = [int(cam)]
         except (ValueError, TypeError):
-            cam_list = None
+            pass
+    color = parsed.get("objects.color")
+    if color:
+        public_rule["color"] = color
+    behavior = parsed.get("action")
+    if behavior:
+        public_rule["behavior"] = behavior
 
-    rule = {
-        "cameras": cam_list,
-        "objects": [{"name": obj}],
-        "color": color,
-        "count": count_dict,
-        "event": event,
-        "time_of_day": time_of_day,
-        "behavior": behavior,
-        "area": area,
-    }
-    
-    # Only incorporate time window if the user EXPLICITLY mentioned a time range
-    # (not the auto-injected default search window). Alerts should be persistent
-    # monitoring rules unless the user asks for a specific schedule.
-    if parsed.get("__time_explicit") and "timestamp" in parsed and isinstance(parsed["timestamp"], dict):
-        ts = parsed["timestamp"]
-        if "$gte" in ts and "$lte" in ts:
-            rule["time"] = {"from": ts["$gte"], "to": ts["$lte"]}
-
-    actions = ["store_clip", "snapshot", "push_ws"]
-    
-    severity = "info"
-    if any(k in low for k in ["critical", "severe", "urgent"]):
-        severity = "critical"
-    elif any(k in low for k in ["high", "important"]):
-        severity = "high"
-    elif any(k in low for k in ["warning", "warn", "moderate"]):
-        severity = "warning"
-        
-    cooldown_sec = 60.0
-    m_cd = re.search(r"\bcooldown\s+(?:of\s+)?(\d+(?:\.\d+)?)\s*(sec|s|minute|m|hour|h)\b", low)
-    if m_cd:
-        try:
-            val = float(m_cd.group(1))
-            unit = m_cd.group(2)
-            if unit.startswith("m"):
-                val *= 60.0
-            elif unit.startswith("h"):
-                val *= 3600.0
-            cooldown_sec = val
-        except Exception as e:
-            logger.opt(exception=True).debug("Failed to parse cooldown duration from {}, falling back to 60.0s: {}", m_cd.group(0), e)
-    
     doc = {
         "name": f"NL: {nl[:60]}",
         "nl": nl,
-        "rule": {k: v for k, v in rule.items() if v is not None},
+        "rule": public_rule,
         "enabled": True,
-        "actions": actions,
-        "severity": severity,
-        "cooldown_sec": cooldown_sec,
+        "actions": list(rule.get("side_effects") or []),
+        "severity": rule.get("severity", "info"),
+        "cooldown_sec": float(rule.get("cooldown_sec", 60)),
         "created_at": iso_now(),
         "updated_at": iso_now(),
     }
     try:
         ins = alerts_col.insert_one(doc)
-        return {"id": str(ins.inserted_id), "name": doc["name"], "enabled": True}
+        return {
+            "id": str(ins.inserted_id),
+            "name": doc["name"],
+            "enabled": True,
+            "created": True,
+            "needs_clarification": False,
+            "rule": public_rule,
+        }
     except Exception:
         logger.exception("Failed to insert NL alert `{}`", doc.get("name"))
         return None
@@ -725,8 +761,36 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
                 parsed["timestamp"] = {"$gte": start.isoformat(), "$lte": now.isoformat()}
                 parsed["__last_minutes"] = 1440
             if alert_info:
+                if alert_info.get("needs_clarification"):
+                    clarification = alert_info["clarification"]
+                    answer = (
+                        "I need a little more detail before creating this alert.\n\n"
+                        f"{clarification['message']}\n\n"
+                        "No alert has been created. Please rephrase with the missing detail."
+                    )
+                    metadata: Dict[str, Any] = {"query_type": "alert_clarification"}
+                    assistant_payload = {
+                        "session_id": req.session_id,
+                        "parsed_filter": parsed,
+                        "results": [],
+                        "answer": answer,
+                        "metadata": metadata,
+                        "alert_created": None,
+                        "alert_clarification": clarification,
+                    }
+                    save_message(req.session_id, "assistant", answer, assistant_payload)
+                    return ChatSendResponse(
+                        session_id=req.session_id,
+                        parsed_filter=parsed,
+                        results=[],
+                        answer=answer,
+                        metadata=metadata,
+                        alert_created=None,
+                        alert_clarification=clarification,
+                    )
+
                 logger.info("Alert created from NL: {}", alert_info)
-                rule_summary = _summarize_alert_rule(parsed)
+                rule_summary = _summarize_materialized_rule(alert_info.get("rule") or {})
                 alert_name = alert_info.get("name", "Unnamed alert")
                 answer = (
                     f"Alert created successfully!\n\n"
@@ -735,7 +799,7 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
                     f"The alert is now active and will monitor your cameras in real-time. "
                     f"You can manage it from the Alerts page."
                 )
-                metadata: Dict[str, Any] = {"query_type": "alert_creation"}
+                metadata = {"query_type": "alert_creation"}
                 assistant_payload = {
                     "session_id": req.session_id,
                     "parsed_filter": parsed,
@@ -743,6 +807,7 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
                     "answer": answer,
                     "metadata": metadata,
                     "alert_created": alert_info,
+                    "alert_clarification": None,
                 }
                 save_message(req.session_id, "assistant", answer, assistant_payload)
                 return ChatSendResponse(
@@ -752,6 +817,7 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
                     answer=answer,
                     metadata=metadata,
                     alert_created=alert_info,
+                    alert_clarification=None,
                 )
 
             # ── Execute unified hybrid retrieval ──
@@ -804,6 +870,7 @@ async def send(req: ChatSendRequest) -> ChatSendResponse:
                 "answer": answer,
                 "metadata": metadata,
                 "alert_created": None,
+                "alert_clarification": None,
                 "processing_steps": [ProcessingStep(**step) for step in processing_steps] if processing_steps else None,
             }
             

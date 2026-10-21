@@ -1,0 +1,599 @@
+{
+  "scope": {
+    "name": "released single-camera person-descriptor subset",
+    "not": "full 4-camera / 312k-descriptor identity benchmark",
+    "camera_ids": [
+      0
+    ],
+    "note": "No true identity labels or track ids are released (track_id=-1). Same-track labels are deterministic pseudo-labels formed from the shipped visual descriptors; visual-only is therefore optimistic."
+  },
+  "dataset": {
+    "person_descriptors": 1778,
+    "vector_dim": 1152,
+    "visual_dim": 768,
+    "text_dim": 384,
+    "time_start": "2026-03-01T17:01:00.052839",
+    "time_end": "2026-03-01T18:56:17.989377",
+    "tracks": {
+      "threshold": 0.9,
+      "threshold_grid": [
+        {
+          "threshold": 0.85,
+          "separation": 0.23786427017028744,
+          "within": 0.9717559770839971,
+          "between": 0.7338917069137096,
+          "coverage": 0.9408284023668639,
+          "objective": 0.22378946128447164,
+          "n_tracks": 24.0,
+          "n_multi": 14.0
+        },
+        {
+          "threshold": 0.88,
+          "separation": 0.21919946215009,
+          "within": 0.9729086156991812,
+          "between": 0.7537091535490912,
+          "coverage": 0.9349112426035503,
+          "objective": 0.20493204153677053,
+          "n_tracks": 25.0,
+          "n_multi": 14.0
+        },
+        {
+          "threshold": 0.9,
+          "separation": 0.23674861818879522,
+          "within": 0.973816811488225,
+          "between": 0.7370681932994297,
+          "coverage": 0.9349112426035503,
+          "objective": 0.22133894481556002,
+          "n_tracks": 25.0,
+          "n_multi": 14.0
+        },
+        {
+          "threshold": 0.92,
+          "separation": 0.17390330076217653,
+          "within": 0.9750842332839966,
+          "between": 0.8011809325218201,
+          "coverage": 0.9230769230769231,
+          "objective": 0.16052612378047065,
+          "n_tracks": 28.0,
+          "n_multi": 15.0
+        },
+        {
+          "threshold": 0.94,
+          "separation": 0.1657277173064775,
+          "within": 0.9763271293856881,
+          "between": 0.8105994120792106,
+          "coverage": 0.9112426035502958,
+          "objective": 0.151018156598802,
+          "n_tracks": 30.0,
+          "n_multi": 15.0
+        },
+        {
+          "threshold": 0.95,
+          "separation": 0.13194639913296446,
+          "within": 0.9782115235561277,
+          "between": 0.8462651244231633,
+          "coverage": 0.8994082840236687,
+          "objective": 0.11867368442728166,
+          "n_tracks": 34.0,
+          "n_multi": 17.0
+        },
+        {
+          "threshold": 0.96,
+          "separation": 0.11936461024468747,
+          "within": 0.979477380891498,
+          "between": 0.8601127706468106,
+          "coverage": 0.8757396449704142,
+          "objective": 0.10453232139771448,
+          "n_tracks": 38.0,
+          "n_multi": 17.0
+        },
+        {
+          "threshold": 0.97,
+          "separation": 0.09377987623214723,
+          "within": 0.9807402062416076,
+          "between": 0.8869603300094604,
+          "coverage": 0.8165680473372781,
+          "objective": 0.07657765041441608,
+          "n_tracks": 52.0,
+          "n_multi": 21.0
+        },
+        {
+          "threshold": 0.98,
+          "separation": 0.021280637252219625,
+          "within": 0.9852466539281314,
+          "between": 0.9639660166759118,
+          "coverage": 0.6094674556213018,
+          "objective": 0.012969855840110185,
+          "n_tracks": 95.0,
+          "n_multi": 29.0
+        },
+        {
+          "threshold": 0.99,
+          "separation": 0.021210129060542204,
+          "within": 0.9918158019290251,
+          "between": 0.9706056728684829,
+          "coverage": 0.11834319526627218,
+          "objective": 0.00251007444503458,
+          "n_tracks": 157.0,
+          "n_multi": 8.0
+        }
+      ],
+      "selected_rule": "strictest threshold within 5% of best calibration objective",
+      "n_tracks": 174,
+      "n_calibration_tracks": 44,
+      "n_test_tracks": 130,
+      "n_calibration_detections": 486,
+      "n_test_detections": 1292,
+      "n_tracks_ge2": 126,
+      "n_link_edges": 1604,
+      "max_gap_seconds": 3.0,
+      "max_duration_seconds": 60.0,
+      "max_track_size": 20
+    },
+    "pair_file": {
+      "total": 2016,
+      "calibration_same": 264,
+      "calibration_different": 264,
+      "test_same": 744,
+      "test_different": 744,
+      "label_rule": "same = two detections in the same deterministic visual+temporal pseudo-track at least 0.5 s apart; different = another track in the same split, sampled within 30 s when possible."
+    },
+    "retrieval_protocol": {
+      "queries": 1255,
+      "gallery": 1292,
+      "mean_gallery_per_query": 1290.9984063745019,
+      "positives": 20180,
+      "negatives": 1600023,
+      "query_filter": "test detections with >=1 same-track detection at |dt| > 0.5 s",
+      "gallery_filter": "all test detections except the query and same-track detections within 0.5 s (unjudged near-duplicates)",
+      "relevance": "same pseudo-track and |dt| > 0.5 s"
+    }
+  },
+  "methods": {
+    "visual": "cosine on the 768-d SigLIP branch",
+    "text": "cosine on the 384-d MiniLM attribute-text branch",
+    "concat": "MultimodalFusion(0.6,0.4), 1152-d, reproduces the shipped index",
+    "zero_pad": "text zero-padded to 768 then 0.6*v + 0.4*t",
+    "norm_matched": "unit-norm branches, zero-pad text, 0.6/0.4 weighted add",
+    "randproj": "Gaussian P(768x384)/sqrt(384), 0.6/0.4 add, 5 seeds",
+    "rrf": "Reciprocal Rank Fusion of visual and text rankings, k=60",
+    "learned_proj": "ridge text->visual map (384->768, lambda=1) fit on calibration tracks only, then add"
+  },
+  "test": {
+    "retrieval": {
+      "visual": {
+        "n_queries": 1255,
+        "p5": 0.48446215139442234,
+        "r10": 0.28588609530828274,
+        "f1": 0.3150517786844474,
+        "f1_paper": 0.32833889227660334,
+        "p5_ci": [
+          0.4662948207171315,
+          0.5024701195219123
+        ],
+        "p5_boot_mean": 0.48446215139442234
+      },
+      "text": {
+        "n_queries": 1255,
+        "p5": 0.0900398406374502,
+        "r10": 0.06076533073905812,
+        "f1": 0.06762238756742943,
+        "f1_paper": 0.05877089888538116,
+        "p5_ci": [
+          0.07840637450199203,
+          0.10231075697211156
+        ],
+        "p5_boot_mean": 0.0900398406374502
+      },
+      "concat": {
+        "n_queries": 1255,
+        "p5": 0.4506772908366534,
+        "r10": 0.2581284376748958,
+        "f1": 0.28846604581278706,
+        "f1_paper": 0.30030997363949447,
+        "p5_ci": [
+          0.43203187250996017,
+          0.46900398406374505
+        ],
+        "p5_boot_mean": 0.4506772908366534
+      },
+      "zero_pad": {
+        "n_queries": 1255,
+        "p5": 0.450199203187251,
+        "r10": 0.2579030235419539,
+        "f1": 0.28821265325275897,
+        "f1_paper": 0.29986990543851677,
+        "p5_ci": [
+          0.4312350597609562,
+          0.4685258964143426
+        ],
+        "p5_boot_mean": 0.450199203187251
+      },
+      "norm_matched": {
+        "n_queries": 1255,
+        "p5": 0.450199203187251,
+        "r10": 0.2579030235419539,
+        "f1": 0.28821265325275897,
+        "f1_paper": 0.29986990543851677,
+        "p5_ci": [
+          0.4312350597609562,
+          0.4685258964143426
+        ],
+        "p5_boot_mean": 0.450199203187251
+      },
+      "learned_proj": {
+        "n_queries": 1255,
+        "p5": 0.47330677290836654,
+        "r10": 0.27435189054254583,
+        "f1": 0.3062818138813045,
+        "f1_paper": 0.3190695947132797,
+        "p5_ci": [
+          0.45450199203187247,
+          0.4913147410358566
+        ],
+        "p5_boot_mean": 0.47330677290836654
+      },
+      "rrf": {
+        "n_queries": 1255,
+        "p5": 0.39458167330677296,
+        "r10": 0.2331584431176157,
+        "f1": 0.2612997733748372,
+        "f1_paper": 0.2641677768101228,
+        "p5_ci": [
+          0.3762549800796813,
+          0.4127490039840637
+        ],
+        "p5_boot_mean": 0.3945816733067729
+      },
+      "randproj": {
+        "n_queries": 1255,
+        "p5": 0.43572908366533863,
+        "p5_sd": 0.0004439326940934793,
+        "r10": 0.24128567309041077,
+        "r10_sd": 0.0004259695898212121,
+        "f1": 0.27088589115359746,
+        "f1_sd": 0.0003899939945333418,
+        "f1_paper": 0.2856274963563711,
+        "f1_paper_sd": 0.0003530125981815204,
+        "seeds": 5
+      }
+    },
+    "pairs": {
+      "visual": {
+        "calibration": {
+          "threshold": 0.923436164855957,
+          "auc": 0.8444960973370065,
+          "accuracy": 0.7954545454545454,
+          "precision": 0.7241379310344828,
+          "recall": 0.9545454545454546,
+          "f1": 0.823529411764706
+        },
+        "test": {
+          "threshold": 0.923436164855957,
+          "auc": 0.7436517227425136,
+          "accuracy": 0.6673387096774194,
+          "precision": 0.6124661246612466,
+          "recall": 0.9112903225806451,
+          "f1": 0.7325769854132901
+        }
+      },
+      "text": {
+        "calibration": {
+          "threshold": 0.9065953493118286,
+          "auc": 0.7500932621671258,
+          "accuracy": 0.7234848484848485,
+          "precision": 0.6928104575163399,
+          "recall": 0.803030303030303,
+          "f1": 0.743859649122807
+        },
+        "test": {
+          "threshold": 0.9065953493118286,
+          "auc": 0.6197004350213897,
+          "accuracy": 0.5934139784946236,
+          "precision": 0.5771365149833518,
+          "recall": 0.6989247311827957,
+          "f1": 0.6322188449848025
+        }
+      },
+      "concat": {
+        "calibration": {
+          "threshold": 0.9396281242370605,
+          "auc": 0.8283115243342516,
+          "accuracy": 0.7897727272727273,
+          "precision": 0.7843866171003717,
+          "recall": 0.7992424242424242,
+          "f1": 0.7917448405253283
+        },
+        "test": {
+          "threshold": 0.9396281242370605,
+          "auc": 0.6930244825991444,
+          "accuracy": 0.6276881720430108,
+          "precision": 0.6155717761557178,
+          "recall": 0.6801075268817204,
+          "f1": 0.6462324393358876
+        }
+      },
+      "zero_pad": {
+        "calibration": {
+          "threshold": 0.9388012886047363,
+          "auc": 0.8259727961432507,
+          "accuracy": 0.7878787878787878,
+          "precision": 0.7814814814814814,
+          "recall": 0.7992424242424242,
+          "f1": 0.7902621722846442
+        },
+        "test": {
+          "threshold": 0.9388012886047363,
+          "auc": 0.6924915452653486,
+          "accuracy": 0.6297043010752689,
+          "precision": 0.6175395858708892,
+          "recall": 0.6814516129032258,
+          "f1": 0.647923322683706
+        }
+      },
+      "norm_matched": {
+        "calibration": {
+          "threshold": 0.9388013482093811,
+          "auc": 0.8259727961432507,
+          "accuracy": 0.7878787878787878,
+          "precision": 0.7814814814814814,
+          "recall": 0.7992424242424242,
+          "f1": 0.7902621722846442
+        },
+        "test": {
+          "threshold": 0.9388013482093811,
+          "auc": 0.692490641981732,
+          "accuracy": 0.6297043010752689,
+          "precision": 0.6175395858708892,
+          "recall": 0.6814516129032258,
+          "f1": 0.647923322683706
+        }
+      },
+      "learned_proj": {
+        "calibration": {
+          "threshold": 0.9653233289718628,
+          "auc": 0.843025424701561,
+          "accuracy": 0.7973484848484849,
+          "precision": 0.7162534435261708,
+          "recall": 0.9848484848484849,
+          "f1": 0.8293460925039872
+        },
+        "test": {
+          "threshold": 0.9653233289718628,
+          "auc": 0.7183019713261649,
+          "accuracy": 0.635752688172043,
+          "precision": 0.5840266222961731,
+          "recall": 0.9435483870967742,
+          "f1": 0.7214799588900308
+        }
+      },
+      "rrf": {
+        "calibration": {
+          "threshold": 0.018045112781954885,
+          "auc": 0.8648415977961432,
+          "accuracy": 0.803030303030303,
+          "precision": 0.7836879432624113,
+          "recall": 0.8371212121212122,
+          "f1": 0.8095238095238095
+        },
+        "test": {
+          "threshold": 0.018045112781954885,
+          "auc": 0.7490732310093653,
+          "accuracy": 0.6471774193548387,
+          "precision": 0.7168316831683168,
+          "recall": 0.48655913978494625,
+          "f1": 0.5796637309847877
+        }
+      },
+      "randproj": {
+        "seeds": 5,
+        "calibration": {
+          "auc": 0.7941833103764921,
+          "accuracy": 0.7477272727272728,
+          "precision": 0.7283773921102455,
+          "recall": 0.7909090909090908,
+          "f1": 0.7581699981045619
+        },
+        "test": {
+          "auc": 0.6640532865071107,
+          "accuracy": 0.6026881720430107,
+          "precision": 0.5892919507227459,
+          "recall": 0.6776881720430107,
+          "f1": 0.6303428719648757
+        },
+        "test_sd": {
+          "auc": 0.0010592261883562647,
+          "accuracy": 0.002667934575440767,
+          "precision": 0.001377576362244269,
+          "recall": 0.013796373570275662,
+          "f1": 0.006213090415515987
+        },
+        "threshold_mean": 0.9340741515159607
+      }
+    }
+  },
+  "significance_vs_concat": {
+    "retrieval": {
+      "visual": {
+        "delta_p5": 0.03378486055776892,
+        "p5_lo": 0.02247011952191235,
+        "p5_hi": 0.045737051792828685,
+        "p5_p": 0.0,
+        "delta_f1": 0.02658573287166031,
+        "f1_lo": 0.01978987423769646,
+        "f1_hi": 0.03341947460972107,
+        "f1_p": 0.0,
+        "holm_adjusted_p": 0.0,
+        "holm_reject": true
+      },
+      "text": {
+        "delta_p5": -0.3606374501992032,
+        "p5_lo": -0.37896414342629486,
+        "p5_hi": -0.34055776892430284,
+        "p5_p": 0.0,
+        "delta_f1": -0.22084365824535762,
+        "f1_lo": -0.23292176541615695,
+        "f1_hi": -0.20867393814421833,
+        "f1_p": 0.0,
+        "holm_adjusted_p": 0.0,
+        "holm_reject": true
+      },
+      "zero_pad": {
+        "delta_p5": -0.00047808764940239035,
+        "p5_lo": -0.002231075697211155,
+        "p5_hi": 0.0012749003984063745,
+        "p5_p": 0.62,
+        "delta_f1": -0.0002533925600280869,
+        "f1_lo": -0.0011326342141014488,
+        "f1_hi": 0.0006073708794585724,
+        "f1_p": 0.5526666666666666,
+        "holm_adjusted_p": 1.0,
+        "holm_reject": false
+      },
+      "norm_matched": {
+        "delta_p5": -0.00047808764940239035,
+        "p5_lo": -0.002231075697211155,
+        "p5_hi": 0.0012749003984063745,
+        "p5_p": 0.62,
+        "delta_f1": -0.0002533925600280869,
+        "f1_lo": -0.0011326342141014488,
+        "f1_hi": 0.0006073708794585724,
+        "f1_p": 0.5526666666666666,
+        "holm_adjusted_p": 1.0,
+        "holm_reject": false
+      },
+      "learned_proj": {
+        "delta_p5": 0.02262948207171315,
+        "p5_lo": 0.015139442231075698,
+        "p5_hi": 0.029960159362549803,
+        "p5_p": 0.0,
+        "delta_f1": 0.017815768068517403,
+        "f1_lo": 0.01267101625542593,
+        "f1_hi": 0.02301756173676978,
+        "f1_p": 0.0,
+        "holm_adjusted_p": 0.0,
+        "holm_reject": true
+      },
+      "rrf": {
+        "delta_p5": -0.05609561752988048,
+        "p5_lo": -0.06868525896414343,
+        "p5_hi": -0.04366533864541833,
+        "p5_p": 0.0,
+        "delta_f1": -0.027166272437949866,
+        "f1_lo": -0.0338493890290534,
+        "f1_hi": -0.020770384767793505,
+        "f1_p": 0.0,
+        "holm_adjusted_p": 0.0,
+        "holm_reject": true
+      },
+      "randproj": {
+        "delta_p5": -0.014948207171314737,
+        "p5_lo": -0.0199840637450199,
+        "p5_hi": -0.010039840637450195,
+        "p5_p": 0.0,
+        "delta_f1": -0.01758015465918959,
+        "f1_lo": -0.021350931879147786,
+        "f1_hi": -0.014115044599119669,
+        "f1_p": 0.0,
+        "note": "per-query metrics averaged over seeds before pairing",
+        "holm_adjusted_p": 0.0,
+        "holm_reject": true
+      }
+    },
+    "pairs": {
+      "visual": {
+        "delta_auc": 0.05062724014336917,
+        "lo": 0.03302224245577523,
+        "hi": 0.06822681812926346,
+        "p": 0.0,
+        "holm_adjusted_p": 0.0,
+        "holm_reject": true
+      },
+      "text": {
+        "delta_auc": -0.07332404757775468,
+        "lo": -0.08893188518903927,
+        "hi": -0.05726276159093535,
+        "p": 0.0,
+        "holm_adjusted_p": 0.0,
+        "holm_reject": true
+      },
+      "zero_pad": {
+        "delta_auc": -0.0005329373337957799,
+        "lo": -0.0014181552780668794,
+        "hi": 0.00031976240027753455,
+        "p": 0.23533333333333334,
+        "holm_adjusted_p": 0.4706666666666667,
+        "holm_reject": false
+      },
+      "norm_matched": {
+        "delta_auc": -0.0005338406174123511,
+        "lo": -0.0014235749797664177,
+        "hi": 0.00031976240027742353,
+        "p": 0.23533333333333334,
+        "holm_adjusted_p": 0.4706666666666667,
+        "holm_reject": false
+      },
+      "learned_proj": {
+        "delta_auc": 0.025277488727020514,
+        "lo": 0.012978379003352969,
+        "hi": 0.03768499248468038,
+        "p": 0.0,
+        "holm_adjusted_p": 0.0,
+        "holm_reject": true
+      },
+      "rrf": {
+        "delta_auc": 0.056048748410220894,
+        "lo": 0.039478010463637414,
+        "hi": 0.07262761590935374,
+        "p": 0.0,
+        "holm_adjusted_p": 0.0,
+        "holm_reject": true
+      },
+      "randproj": {
+        "delta_auc": -0.02819148167418195,
+        "lo": -0.035013079546768355,
+        "hi": -0.02144395305815705,
+        "p": 0.0,
+        "note": "AUC of per-pair scores averaged over seeds (approximation).",
+        "holm_adjusted_p": 0.0,
+        "holm_reject": true
+      }
+    }
+  },
+  "grouped_bootstrap_by_track": {
+    "concat": {
+      "p5": 0.4506772908366534,
+      "lo": 0.40048899755501227,
+      "hi": 0.4974848222029489
+    },
+    "visual": {
+      "p5": 0.48446215139442234,
+      "lo": 0.43654159869494297,
+      "hi": 0.529051094890511
+    },
+    "text": {
+      "p5": 0.0900398406374502,
+      "lo": 0.05261410788381743,
+      "hi": 0.13474320241691842
+    },
+    "rrf": {
+      "p5": 0.3945816733067729,
+      "lo": 0.34232475598935225,
+      "hi": 0.44571865443425074
+    },
+    "learned_proj": {
+      "p5": 0.47330677290836654,
+      "lo": 0.42267536704730835,
+      "hi": 0.5194160583941606
+    }
+  },
+  "limitations": [
+    "Single camera (camera_0); cross-camera identity and generalisation are untestable.",
+    "Pseudo-track labels, not human identity annotations; no IAA.",
+    "Tracks were formed with visual-only cosine, so visual-only retrieval is optimistically biased.",
+    "Track threshold is selected on a small calibration block (169 detections) with a self-supervised objective, not identity labels.",
+    "Pair thresholds are tuned on calibration pairs; test pairs are track-disjoint but come from the same two-hour window.",
+    "The paper's 312k-descriptor / 4-camera 0.785->0.807 fusion result is not reproduced and is not replaced by these numbers.",
+    "The learned projection is a linear ridge baseline, not a jointly trained Re-ID model."
+  ]
+}

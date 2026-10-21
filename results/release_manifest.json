@@ -1,0 +1,333 @@
+{
+  "generated_at_utc": "2026-10-21T15:55:02.893353+00:00",
+  "git_commit": "a8de8d84e74e59035f9389ab985b57a8811c8591",
+  "platform": {
+    "python": "3.12.4",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "machine": "AMD64"
+  },
+  "packages": {
+    "torch": "2.10.0+cpu",
+    "open-clip-torch": "3.2.0",
+    "sentence-transformers": "5.0.0",
+    "faiss-cpu": "1.12.0",
+    "numpy": "1.26.4",
+    "pymongo": "4.12.1",
+    "fastapi": "0.115.12"
+  },
+  "subset": {
+    "camera_ids": [
+      0
+    ],
+    "clips": {
+      "count": 123,
+      "format": {
+        "width": 640,
+        "height": 480,
+        "r_frame_rate": "5/1",
+        "nb_frames": "18"
+      },
+      "ffprobe_durations_s": [
+        3.6,
+        3.6,
+        3.8,
+        3.4,
+        4.0,
+        2.6,
+        2.2,
+        2.0,
+        2.4,
+        2.0,
+        1.8,
+        1.0,
+        2.6,
+        1.6,
+        2.2,
+        1.4,
+        1.6,
+        1.6,
+        3.8,
+        4.4,
+        4.0,
+        5.0,
+        4.0,
+        4.2,
+        5.2,
+        4.8,
+        3.6,
+        3.6,
+        4.4,
+        4.0,
+        3.8,
+        3.6,
+        4.6,
+        4.6,
+        4.8,
+        5.2,
+        5.0,
+        5.2,
+        4.8,
+        4.8,
+        5.4,
+        5.0,
+        4.8,
+        5.4,
+        4.6,
+        3.8,
+        4.0,
+        1.2,
+        3.4,
+        4.0,
+        4.0,
+        4.0,
+        4.2,
+        4.6,
+        3.8,
+        4.0,
+        4.2,
+        4.4,
+        4.6,
+        3.8,
+        4.6,
+        4.6,
+        4.8,
+        4.6,
+        4.6,
+        4.8,
+        3.0,
+        3.6,
+        4.8,
+        4.6,
+        4.4,
+        4.4,
+        4.4,
+        4.8,
+        4.8,
+        4.4,
+        4.6,
+        4.8,
+        4.6,
+        4.6,
+        4.6,
+        4.6,
+        4.8,
+        4.0,
+        3.4,
+        2.8,
+        2.8,
+        2.6,
+        2.8,
+        2.8,
+        2.8,
+        2.2,
+        2.2,
+        2.8,
+        2.6,
+        2.8,
+        2.8,
+        3.0,
+        3.2,
+        3.0,
+        3.0,
+        3.2,
+        3.0,
+        2.0,
+        1.2,
+        1.2,
+        2.0,
+        1.6,
+        1.6,
+        1.8,
+        2.8,
+        2.4,
+        3.8,
+        4.0,
+        3.8,
+        4.0,
+        3.8,
+        3.0,
+        0.4,
+        3.0,
+        2.4
+      ],
+      "total_duration_s": 430.4,
+      "first": "2026-03-01T17-01-00-052839__to__2026-03-01T17-01-15-394232.mp4",
+      "last": "2026-03-01T18-56-01-940526__to__2026-03-01T18-56-17-989377.mp4"
+    },
+    "snapshots": {
+      "count": 2071,
+      "first": "2026-03-01T17-01-00-052839.jpg",
+      "last": "2026-03-01T18-56-28-051872.jpg"
+    },
+    "recordings": {
+      "count": 11,
+      "total_duration_s": 2039.7,
+      "unreadable": [
+        "2026-03-01T17-21-48-031867+00-00.mp4"
+      ]
+    },
+    "scene_index_meta": {
+      "n": 242,
+      "timestamp_min": "2026-03-01T17:01:00.052839",
+      "timestamp_max": "2026-03-01T18:56:01.940526",
+      "unique_captions": 136,
+      "person_count_distribution": {
+        "1": 14,
+        "2": 4,
+        "3": 15,
+        "4": 16,
+        "5": 100,
+        "6": 12,
+        "7": 10,
+        "8": 15,
+        "9": 12,
+        "10": 12
+      },
+      "caption_action_labels": {
+        "smoke": 10,
+        "fighting": 5,
+        "security": 1
+      },
+      "color_mentions": {
+        "Olive": 140,
+        "Red": 51,
+        "Brown": 69
+      }
+    },
+    "person_index_meta": {
+      "n": 1778,
+      "timestamp_min": "2026-03-01T17:01:00.052839",
+      "timestamp_max": "2026-03-01T18:56:17.989377",
+      "unique_timestamps": 1465,
+      "track_ids": [
+        -1
+      ],
+      "colors": {
+        "Olive": 980,
+        "Red": 484,
+        "Brown": 314
+      },
+      "unique_attribute_texts": 58,
+      "attribute_texts": {
+        "person, wearing olive clothing, long pants, coat or jacket": 294,
+        "person, wearing red clothing": 251,
+        "person, wearing olive clothing": 221,
+        "person, wearing brown clothing": 160,
+        "person, wearing olive clothing, long sleeves, long pants, coat or jacket": 134,
+        "person, wearing red clothing, carrying bag, long pants, coat or jacket": 96,
+        "person, wearing olive clothing, carrying bag, long sleeves, long pants, coat or jacket, female": 85,
+        "person, wearing brown clothing, carrying bag, long sleeves, long pants, coat or jacket, female": 64,
+        "person, wearing olive clothing, carrying bag, long sleeves, coat or jacket, female": 59,
+        "person, wearing olive clothing, coat or jacket": 54
+      }
+    }
+  },
+  "indices": {
+    "scene": {
+      "index_path": "data\\index\\faiss\\index.bin",
+      "meta_path": "data\\index\\faiss\\meta.json",
+      "exists": true,
+      "index_sha256": "d637fd05c07063f0a6254cac202cf0b7b12cfe27d872e5ad99b507c8209d0296",
+      "meta_sha256": "6b8e62714fe9a29ff005f7f9328c9378856d410766dbe8f1c7e6be1868314135",
+      "n_meta": 242,
+      "n_index": 242,
+      "dim": 512,
+      "index_type": "IndexFlatIP",
+      "metric": "inner_product"
+    },
+    "person": {
+      "index_path": "data\\index\\faiss_person\\index.bin",
+      "meta_path": "data\\index\\faiss_person\\meta.json",
+      "exists": true,
+      "index_sha256": "4201077e7fb09d8e529dceb18f33fd8d083383156be642a4466602daf9464ff5",
+      "meta_sha256": "fedfd49a2efb91faaa76fa6ae88ba0e8bf013afc09e2e66c106426ca9d03819d",
+      "n_meta": 1778,
+      "n_index": 1778,
+      "dim": 1152,
+      "index_type": "IndexFlatIP",
+      "metric": "inner_product"
+    }
+  },
+  "benchmarks": {
+    "retrieval_queries": {
+      "path": "backend\\benchmarks\\queries.jsonl",
+      "exists": true,
+      "format": "jsonl",
+      "sha256": "90d3b0b12300adc2fd6b0d6e36c26a6c342b913255551d481091195d07daa350",
+      "rows": 150,
+      "unique_texts": 150,
+      "sample": [
+        "how many people were visible around 17:01:00?",
+        "count the people in the scene at 17:01:30.",
+        "how many persons are on camera 0 at 17:02:48?"
+      ]
+    },
+    "retrieval_queries_control": {
+      "path": "backend\\benchmarks\\queries_control.jsonl",
+      "exists": true,
+      "format": "jsonl",
+      "sha256": "48f86d3108096c684149dcd808980ff87cd419d1757fe47b2006c6527a84abd4",
+      "rows": 150,
+      "unique_texts": 126,
+      "sample": [
+        "show clips with exactly 3 people between 17:01 and 17:02",
+        "show clips with exactly 4 people between 17:01 and 17:03",
+        "show clips with exactly 3 people between 17:01 and 17:04"
+      ]
+    },
+    "alert_utterances": {
+      "path": "backend\\benchmarks\\alert_utterances.jsonl",
+      "exists": true,
+      "format": "jsonl",
+      "sha256": "c885f8b96025132f69c2b9de06311bf5fd5fd2a57c5ed1b6a28fc388da407502",
+      "rows": 120,
+      "unique_texts": 120,
+      "sample": [
+        "alert me when more than five people gather in Zone A after 10 PM",
+        "notify me if at least ten people crowd into Zone B between 9 and 11 PM",
+        "warn me when a group of eight or more people gathers in Zone C"
+      ]
+    },
+    "person_pairs": {
+      "path": "backend\\benchmarks\\person_pairs.jsonl",
+      "exists": true,
+      "format": "jsonl",
+      "sha256": "c6b3605840b649d74bfa4f33f7c021bbd2bb36df3ea1af72b1b847b19e84e960",
+      "rows": 2016,
+      "unique_texts": null,
+      "sample": null
+    },
+    "splits": {
+      "path": "backend\\benchmarks\\splits.json",
+      "exists": true,
+      "format": "json_object",
+      "sha256": "c01f23c5b5579ce0d0a43bb350de239cce30ce918cbf9ffb3a14b1ef005077b5",
+      "keys": [
+        "seed",
+        "tune",
+        "test",
+        "n_tune",
+        "n_test",
+        "stratified_by",
+        "note"
+      ]
+    },
+    "splits_control": {
+      "path": "backend\\benchmarks\\splits_control.json",
+      "exists": true,
+      "format": "json_object",
+      "sha256": "1244bb33138a0e33c98951387a3c4d0b3fc0535c626513b4cb158bde110cb925",
+      "keys": [
+        "n_tune",
+        "n_test",
+        "total",
+        "seed",
+        "source",
+        "tune",
+        "test",
+        "note",
+        "categories"
+      ]
+    }
+  }
+}
