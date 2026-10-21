@@ -80,7 +80,17 @@ numbers.
   (median absolute error, overlap rate with and without a tolerance), the
   camera-id and intent agreement on the queries that state them, the parse
   latency, the parse failures and the queries with at least one
-  disagreement.  The parses are cached under `backend/benchmarks/parser_cache/`.
+  disagreement.  The parses are cached under
+  `backend/benchmarks/parsed_cache/` (shared with the end-to-end track, so
+  both measure the same parses on the same protocol) and are not shipped:
+  they are regenerable build artefacts.
+- `end_to_end_oracle_results.json` / `end_to_end_oracle_tables.md`: the
+  **harness-equivalence control** for the end-to-end track, produced by
+  `backend/scripts/eval_end_to_end.py --parse-source oracle`.  The benchmark's
+  reference filter drives the structured branch instead of the parser's answer.
+  It reproduces the control track's macro P@5 (0.538) exactly, which is what
+  makes the two tracks comparable: the difference between 0.538 and the
+  end-to-end 0.450 is the filter's origin, not the harness.
 - `fusion_results.json` / `fusion_tables.md` / `fusion_queries.csv`:
   person-pair/track fusion baselines on the subset.
 - `alert_results.json` / `alert_results.md`: alert-authoring test split and
