@@ -52,6 +52,8 @@ Status of every item after the revision is recorded in the last column.
 | The contradicting raw-benchmark ordering is disclosed, not only the favourable control | ✅ the raw released benchmark (adaptive 0.486 vs best fixed 0.568, action best at alpha=1.0) is named in the paper next to the post-hoc control |
 | The end-to-end track (the parser's own filter, not the metadata reference) is reported with the oracle gap attributed | ✅ `results/end_to_end_results.json`: macro P@5 0.450 vs the control's 0.538, gap attributed to the label-side attribute list and the reference time window |
 | The NL parser runs without a hosted key | ✅ `LLM_PROVIDER=opencode` with `opencode-go/beam-free`; 150/150 released queries parsed (mean 3.0 s, p95 5.0 s) |
+| No released table prints a p-value as a bare `0.0000` or a dispersion as `± 0.000` | ✅ `stats.format_p` / `stats.format_sd` render a resolution-limited p-value as `< 0.0002` (10 000 resamples) / `< 0.0007` (3 000) and a sub-0.0005 dispersion as `< 0.001`; the JSON keeps the raw numbers; the convention is documented in `results/README.md` |
+| The paper names the model that produced each reported measurement | ✅ GPT-4o-mini for the deployment study, `opencode-go/beam-free` for the released end-to-end track; the `--model` override now reaches the backend (`Settings.set_opencode_model`), so a run can no longer record a model that did not answer |
 
 ## LaTeX
 
