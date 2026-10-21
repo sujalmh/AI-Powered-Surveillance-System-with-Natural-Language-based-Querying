@@ -1,0 +1,402 @@
+{
+  "generated_at": "2026-10-21T16:34:54.787755+00:00",
+  "scope": {
+    "benchmark": "backend/benchmarks/queries_control.jsonl (protocol-matched control)",
+    "note": "Released single-camera subset; not the paper's 4-camera / 312k deployment benchmark. Full-deployment numbers are reported separately.",
+    "n_queries": 150,
+    "splits": {
+      "tune": 50,
+      "test": 100
+    }
+  },
+  "reference_methods": {
+    "fixed_0.0": {
+      "test_macro_p5": 0.048,
+      "test_per_category": {
+        "count": 0.01,
+        "find": 0.07,
+        "track": 0.02,
+        "action": 0.09,
+        "filter": 0.05
+      }
+    },
+    "fixed_0.3": {
+      "test_macro_p5": 0.38,
+      "test_per_category": {
+        "count": 0.27,
+        "find": 0.63,
+        "track": 0.55,
+        "action": 0.09,
+        "filter": 0.36
+      }
+    },
+    "fixed_0.5": {
+      "test_macro_p5": 0.534,
+      "test_per_category": {
+        "count": 0.39,
+        "find": 0.9099999999999999,
+        "track": 0.8099999999999999,
+        "action": 0.09,
+        "filter": 0.47000000000000003
+      }
+    },
+    "fixed_0.7": {
+      "test_macro_p5": 0.538,
+      "test_per_category": {
+        "count": 0.39,
+        "find": 0.9199999999999999,
+        "track": 0.8099999999999999,
+        "action": 0.09,
+        "filter": 0.48
+      }
+    },
+    "fixed_1.0": {
+      "test_macro_p5": 0.5199999999999999,
+      "test_per_category": {
+        "count": 0.39,
+        "find": 0.9199999999999999,
+        "track": 0.8099999999999999,
+        "action": 0.0,
+        "filter": 0.48
+      }
+    },
+    "adaptive_default": {
+      "test_macro_p5": 0.538,
+      "test_per_category": {
+        "count": 0.39,
+        "find": 0.9199999999999999,
+        "track": 0.8099999999999999,
+        "action": 0.09,
+        "filter": 0.48
+      }
+    },
+    "paper_lookup": {
+      "test_macro_p5": 0.42800000000000005,
+      "test_per_category": {
+        "count": 0.39,
+        "find": 0.63,
+        "track": 0.55,
+        "action": 0.09,
+        "filter": 0.48
+      }
+    }
+  },
+  "soft_weight_sensitivity": {
+    "grid": [
+      {
+        "w_intent": 0.2,
+        "w_complexity": 0.3,
+        "w_source": 0.5,
+        "tune_macro_p5": 0.58,
+        "test_macro_p5": 0.538,
+        "test_per_category": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        }
+      },
+      {
+        "w_intent": 0.2,
+        "w_complexity": 0.4,
+        "w_source": 0.4,
+        "tune_macro_p5": 0.58,
+        "test_macro_p5": 0.538,
+        "test_per_category": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        }
+      },
+      {
+        "w_intent": 0.2,
+        "w_complexity": 0.5,
+        "w_source": 0.3,
+        "tune_macro_p5": 0.58,
+        "test_macro_p5": 0.538,
+        "test_per_category": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        }
+      },
+      {
+        "w_intent": 0.4,
+        "w_complexity": 0.1,
+        "w_source": 0.5,
+        "tune_macro_p5": 0.576,
+        "test_macro_p5": 0.538,
+        "test_per_category": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        }
+      },
+      {
+        "w_intent": 0.4,
+        "w_complexity": 0.2,
+        "w_source": 0.4,
+        "tune_macro_p5": 0.58,
+        "test_macro_p5": 0.538,
+        "test_per_category": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        }
+      },
+      {
+        "w_intent": 0.4,
+        "w_complexity": 0.3,
+        "w_source": 0.3,
+        "tune_macro_p5": 0.58,
+        "test_macro_p5": 0.538,
+        "test_per_category": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        }
+      },
+      {
+        "w_intent": 0.4,
+        "w_complexity": 0.4,
+        "w_source": 0.2,
+        "tune_macro_p5": 0.58,
+        "test_macro_p5": 0.538,
+        "test_per_category": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        }
+      },
+      {
+        "w_intent": 0.4,
+        "w_complexity": 0.5,
+        "w_source": 0.1,
+        "tune_macro_p5": 0.58,
+        "test_macro_p5": 0.538,
+        "test_per_category": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        }
+      },
+      {
+        "w_intent": 0.6,
+        "w_complexity": 0.0,
+        "w_source": 0.4,
+        "tune_macro_p5": 0.58,
+        "test_macro_p5": 0.538,
+        "test_per_category": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        }
+      },
+      {
+        "w_intent": 0.6,
+        "w_complexity": 0.1,
+        "w_source": 0.3,
+        "tune_macro_p5": 0.58,
+        "test_macro_p5": 0.538,
+        "test_per_category": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        }
+      },
+      {
+        "w_intent": 0.6,
+        "w_complexity": 0.2,
+        "w_source": 0.2,
+        "tune_macro_p5": 0.58,
+        "test_macro_p5": 0.538,
+        "test_per_category": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        }
+      },
+      {
+        "w_intent": 0.6,
+        "w_complexity": 0.3,
+        "w_source": 0.1,
+        "tune_macro_p5": 0.58,
+        "test_macro_p5": 0.538,
+        "test_per_category": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        }
+      },
+      {
+        "w_intent": 0.6,
+        "w_complexity": 0.4,
+        "w_source": 0.0,
+        "tune_macro_p5": 0.58,
+        "test_macro_p5": 0.538,
+        "test_per_category": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        }
+      },
+      {
+        "w_intent": 0.8,
+        "w_complexity": 0.0,
+        "w_source": 0.2,
+        "tune_macro_p5": 0.58,
+        "test_macro_p5": 0.538,
+        "test_per_category": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        }
+      },
+      {
+        "w_intent": 0.8,
+        "w_complexity": 0.1,
+        "w_source": 0.1,
+        "tune_macro_p5": 0.58,
+        "test_macro_p5": 0.538,
+        "test_per_category": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        }
+      },
+      {
+        "w_intent": 0.8,
+        "w_complexity": 0.2,
+        "w_source": 0.0,
+        "tune_macro_p5": 0.58,
+        "test_macro_p5": 0.538,
+        "test_per_category": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        }
+      }
+    ],
+    "n_combinations": 16,
+    "default": {
+      "w_intent": 0.6,
+      "w_complexity": 0.2,
+      "w_source": 0.2,
+      "tune_macro_p5": 0.58,
+      "test_macro_p5": 0.538,
+      "test_per_category": {
+        "count": 0.39,
+        "find": 0.9199999999999999,
+        "track": 0.8099999999999999,
+        "action": 0.09,
+        "filter": 0.48
+      }
+    },
+    "best_on_tune": {
+      "w_intent": 0.6,
+      "w_complexity": 0.0,
+      "w_source": 0.4,
+      "tune_macro_p5": 0.58,
+      "test_macro_p5": 0.538,
+      "test_per_category": {
+        "count": 0.39,
+        "find": 0.9199999999999999,
+        "track": 0.8099999999999999,
+        "action": 0.09,
+        "filter": 0.48
+      }
+    },
+    "test_spread": {
+      "min": 0.538,
+      "max": 0.538,
+      "median": 0.538,
+      "p90": 0.538
+    },
+    "overrides_plus_intent_prior_only": {
+      "test_macro_p5": 0.538,
+      "test_per_category": {
+        "count": 0.39,
+        "find": 0.9199999999999999,
+        "track": 0.8099999999999999,
+        "action": 0.09,
+        "filter": 0.48
+      }
+    },
+    "soft_term_contribution_vs_prior_only": 0.0
+  },
+  "learned_alpha_competitor": {
+    "model": "multinomial logistic regression on [intent one-hot, n_s, n_v, |F|, count, action]",
+    "n_train": 50,
+    "n_test": 100,
+    "train_label_balance": {
+      "2": 49,
+      "3": 1
+    },
+    "test_macro_p5": 0.534,
+    "test_per_category": {
+      "count": 0.39,
+      "find": 0.9099999999999999,
+      "track": 0.8099999999999999,
+      "action": 0.09,
+      "filter": 0.47000000000000003
+    },
+    "test_fraction_predicting_oracle_best_alpha": 0.98,
+    "predicted_alpha_histogram": {
+      "0.5": 100
+    }
+  },
+  "count_accuracy": {
+    "n_queries": 30,
+    "caption_estimate": {
+      "em": 0.1,
+      "mae": 2.2
+    },
+    "label_noise_ceiling": {
+      "em_ceiling": 1.0,
+      "mae_floor": 0.0,
+      "mean_window_count_spread": 4.466666666666667
+    },
+    "caption_count_spread_within_clip": {
+      "n_clips": 67,
+      "mean_spread": 0.6268656716417911,
+      "max_spread": 2
+    },
+    "note": "Ground truth is the VLM caption count of the anchor frame, the only count label released. The released person sidecar stores detection instances (one row per person sample at ~2 FPS) rather than per-frame counts, so a detection-derived count is not comparable with the caption labels. The ceiling/floor figures bound what any window-based count predictor can achieve on this benchmark."
+  },
+  "limitations": [
+    "The released subset is single-camera with metadata-derived labels.",
+    "The learned-alpha model is trained on 50 tune queries; the class distribution of the oracle-best alpha label is reported with it.",
+    "The count ground truth is the released VLM caption count; the frame-level caption/detection disagreement bounds any count accuracy."
+  ]
+}

@@ -32,6 +32,10 @@ numbers.
   action override suppresses).  The control removes both, so it is the number
   quoted in the paper as the released-subset check.  It is post-hoc and
   metadata-derived, not human-annotated.
+- `alpha_competitors.json` / `alpha_competitors.md`: the C1 robustness study
+  on the same control - a learned (logistic) per-query alpha competitor, a
+  14-point soft-weight sensitivity sweep searched on the tune split, and the
+  counting accuracy together with the label-noise ceiling that bounds it.
 - `fusion_results.json` / `fusion_tables.md` / `fusion_queries.csv`:
   person-pair/track fusion baselines on the subset.
 - `alert_results.json` / `alert_results.md`: alert-authoring test split and

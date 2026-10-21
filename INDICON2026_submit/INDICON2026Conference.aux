@@ -94,15 +94,14 @@
 \newlabel{tab:alpha_baseline_ci}{{VII}{6}{Per-category P@5 with 95\% bootstrap CIs (10{,}000 resamples, $n{=}30$ per category, $n{=}150$ overall). $\Delta $ is the per-query mean of (adaptive $-$ per-category best-fixed-$\alpha $); $p$ is two-sided paired bootstrap. The bottom row compares the best single fixed-$\alpha $ macro-mean ($\alpha {=}0.3$) against adaptive-$\alpha $}{table.7}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VIII-C}}C1 -- adaptive-$\alpha $ vs.\ fixed-$\alpha $}{6}{subsection.8.3}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{\numberline {\mbox  {VIII-C}0a}Released-subset check (C1).}{6}{paragraph.8.3.0.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VIII-D}}C2 -- fusion ablation}{6}{subsection.8.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{\numberline {\mbox  {VIII-C}0b}Competitors and robustness (C1).}{6}{paragraph.8.3.0.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VIII-D}}C2 -- fusion ablation}{7}{subsection.8.4}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VIII-E}}C3 — alert authoring}{7}{subsection.8.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{\numberline {\mbox  {VIII-E}0a}Released alert benchmark.}{7}{paragraph.8.5.0.1}\protected@file@percent }
 \@writefile{lot}{\contentsline {table}{\numberline {VIII}{\ignorespaces Conversational alert authoring on a held-out 60-utterance set. ``Field-level'' = per-field exact match, ``Rule-correctness'' = all 9 fields correct.}}{7}{table.8}\protected@file@percent }
 \newlabel{tab:alert_authoring}{{VIII}{7}{Conversational alert authoring on a held-out 60-utterance set. ``Field-level'' = per-field exact match, ``Rule-correctness'' = all 9 fields correct}{table.8}{}}
 \@writefile{lot}{\contentsline {table}{\numberline {IX}{\ignorespaces Substrate metrics (YOLOv11m-seg detection, BoT-SORT+OSNet tracking mean over 4 cameras, PAR macro, color naming on 1{,}568 ROIs, Z-score anomaly).}}{7}{table.9}\protected@file@percent }
 \newlabel{tab:substrate}{{IX}{7}{Substrate metrics (YOLOv11m-seg detection, BoT-SORT+OSNet tracking mean over 4 cameras, PAR macro, color naming on 1{,}568 ROIs, Z-score anomaly)}{table.9}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {X}{\ignorespaces End-to-end query latency by category. ``Sem.\ only'' isolates the FAISS lookup (scene-index mean $108.6$ms); ``Total'' includes LLM parsing, hybrid blending, MMR, and clip stitching. Person index has $N{=}312{,}544$ descriptors with $109$ms median; scene and person numbers are not interchangeable. Total mean is $6.0$s (Find $12.0$s, parse outlier $6.4$s on Find); FAISS is not the bottleneck.}}{7}{table.10}\protected@file@percent }
-\newlabel{tab:query_performance}{{X}{7}{End-to-end query latency by category. ``Sem.\ only'' isolates the FAISS lookup (scene-index mean $108.6$ms); ``Total'' includes LLM parsing, hybrid blending, MMR, and clip stitching. Person index has $N{=}312{,}544$ descriptors with $109$ms median; scene and person numbers are not interchangeable. Total mean is $6.0$s (Find $12.0$s, parse outlier $6.4$s on Find); FAISS is not the bottleneck}{table.10}{}}
+\@writefile{toc}{\contentsline {paragraph}{\numberline {\mbox  {VIII-E}0a}Released alert benchmark.}{7}{paragraph.8.5.0.1}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VIII-F}}Supporting numbers}{7}{subsection.8.6}\protected@file@percent }
 \bibstyle{IEEEtran}
 \bibdata{References}
@@ -121,6 +120,8 @@
 \bibcite{b22}{13}
 \bibcite{b18b}{14}
 \bibcite{b23}{15}
+\@writefile{lot}{\contentsline {table}{\numberline {X}{\ignorespaces End-to-end query latency by category. ``Sem.\ only'' isolates the FAISS lookup (scene-index mean $108.6$ms); ``Total'' includes LLM parsing, hybrid blending, MMR, and clip stitching. Person index has $N{=}312{,}544$ descriptors with $109$ms median; scene and person numbers are not interchangeable. Total mean is $6.0$s (Find $12.0$s, parse outlier $6.4$s on Find); FAISS is not the bottleneck.}}{8}{table.10}\protected@file@percent }
+\newlabel{tab:query_performance}{{X}{8}{End-to-end query latency by category. ``Sem.\ only'' isolates the FAISS lookup (scene-index mean $108.6$ms); ``Total'' includes LLM parsing, hybrid blending, MMR, and clip stitching. Person index has $N{=}312{,}544$ descriptors with $109$ms median; scene and person numbers are not interchangeable. Total mean is $6.0$s (Find $12.0$s, parse outlier $6.4$s on Find); FAISS is not the bottleneck}{table.10}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {IX}Discussion and Conclusion}{8}{section.9}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{References}{8}{section*.2}\protected@file@percent }
 \gdef \@abspage@last{8}

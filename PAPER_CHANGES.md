@@ -271,6 +271,22 @@ no undefined citation (`pdflatex` -> `bibtex` -> `pdflatex` x2).
 | Released latency | `results/latency_results.json` | scene core 37.4/37.4/39.7 ms (mean/p50/p95); person core 17.2/18.5/20.4 ms; 26.5-39.5 q/s at 1-8 workers, p95 39.6-265.4 ms |
 | Released privacy | `results/privacy_notes.md` | opt-in access control + audit, 8 h retention prune, face-blur utility, gender-off filter (all default off) |
 
+### C1 strengthening (added in the final pass)
+
+`backend/scripts/eval_alpha_competitors.py` (new) closes the three C1 items
+that the deployment benchmark cannot re-run, measured on the protocol-matched
+control:
+
+| Comparison | Result |
+|---|---|
+| Learned per-query alpha (multinomial logistic on intent, `n_s`, `n_v`, `|F|`, fitted on the 50 tune queries) | test macro P@5 `0.534` vs `0.538` for the training-free rule; its oracle-best-alpha label is `0.5` on 49/50 tune queries, so the fitted model collapses to a constant and loses the override cases |
+| Soft-weight sensitivity (16 triples of `w_I`, `w_cplx`, `w_src` summing to 1, searched on the tune split) | test macro P@5 `0.538` for **every** triple; soft-term contribution `+0.000` on the subset vs `+0.006` on the deployment |
+| Counting accuracy | window-mode caption estimate EM `0.100` / MAE `2.20`; the label-noise ceiling is EM `1.000` with a mean window count spread of `4.47` persons, and the release contains no per-frame detector count to validate against |
+
+Paper edits: new "Competitors and robustness (C1)" paragraph in §C1; the
+Setup, C2 subset, C3 subset and Limitations paragraphs were tightened to keep
+the PDF at 8 pages with a clean log.
+
 ### Deliberately not claimed
 
 - The released subset does not reproduce the 4-camera/312k results.

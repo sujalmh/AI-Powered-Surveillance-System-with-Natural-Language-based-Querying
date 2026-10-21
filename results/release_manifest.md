@@ -1,7 +1,7 @@
 # Release manifest
 
-Generated: `2026-10-21T15:55:02.893353+00:00`
-Git: `a8de8d84e74e59035f9389ab985b57a8811c8591`
+Generated: `2026-10-21T16:36:10.060418+00:00`
+Git: `464301492e133d317203a19dd3e12897a9674727`
 
 ## Subset
 
@@ -31,6 +31,7 @@ python backend/benchmarks/build_subset.py
 python backend/benchmarks/build_subset_control.py
 python backend/scripts/eval_retrieval.py
 python backend/scripts/eval_retrieval_control.py
+python backend/scripts/eval_alpha_competitors.py
 python backend/scripts/eval_fusion.py
 python backend/scripts/eval_alerts.py
 python backend/scripts/measure_latency.py

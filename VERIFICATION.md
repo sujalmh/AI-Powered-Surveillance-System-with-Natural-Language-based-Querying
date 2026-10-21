@@ -14,6 +14,7 @@ Status of every item after the revision is recorded in the last column.
 | `python backend/scripts/eval_alerts.py` writes `results/alert_results.json` / `.md` and reports dev and test separately | ✅ test clean 30/30, stress 30/30 clarified, 0 false materializations |
 | `python backend/scripts/eval_retrieval.py` writes `results/retrieval_results.json`, `retrieval_tables.md`, `retrieval_per_query.csv`; no synthetic Gaussian scores, no paper-table fixture | ✅ raw released benchmark; 3,000 resamples, grouped bootstrap, Holm |
 | `python backend/scripts/eval_retrieval_control.py` writes the protocol-matched control outputs | ✅ adaptive 0.538 = best fixed 0.538 (Δ 0.000, p 1.0) |
+| `python backend/scripts/eval_alpha_competitors.py` writes `results/alpha_competitors.json` / `.md` | ✅ learned-alpha competitor 0.534 < 0.538; 16-point soft-weight sweep all 0.538; count EM 0.100 / MAE 2.20 with the label-noise ceiling |
 | `python backend/scripts/eval_fusion.py` writes `results/fusion_results.json`, `fusion_tables.md`, `fusion_per_query.csv`; pair split is track/identity-disjoint | ✅ 174 pseudo-tracks, 528 calibration / 1,488 test pairs, thresholds from calibration only |
 | `python backend/scripts/measure_latency.py` writes `results/latency_results.json` / `.md`; no simulated lognormal values | ✅ real component timings, p50/p95, 1/2/4/8 workers |
 | `python backend/scripts/measure_latency.py --live-llm 3` (optional) | ⚠️ not run; LLM parse latency is excluded and labelled as excluded |

@@ -84,6 +84,7 @@ measurements in the paper.
 $env:PYTHONIOENCODING='utf-8'
 python backend/scripts/eval_retrieval.py          # raw released benchmark
 python backend/scripts/eval_retrieval_control.py  # protocol-matched control
+python backend/scripts/eval_alpha_competitors.py  # C1 competitors + robustness
 python backend/scripts/eval_fusion.py             # person-pair fusion
 python backend/scripts/eval_alerts.py             # alert authoring
 python backend/scripts/measure_latency.py         # component latency
