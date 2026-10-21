@@ -12,6 +12,10 @@ venv/
 .coverage
 intel/
 
+# LLM parse caches: regenerable build artefacts, never committed
+benchmarks/parsed_cache/*.json
+benchmarks/parser_cache/*.json
+
 # logs
 *.log
 *.log.*

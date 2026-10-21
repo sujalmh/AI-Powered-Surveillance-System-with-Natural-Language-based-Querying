@@ -50,45 +50,75 @@ class Settings:
 
         # LLM / NLP (optional; wire later)
         # Providers: "opencode" (local opencode runtime, default), "openai" /
-        # "openai_compat" (any OpenAI-compatible endpoint), "openrouter",
-        # "ollama".  The opencode provider speaks the OpenAI chat-completions
-        # contract and falls back to the opencode session API and CLI.
+        # "openai_compatible" (alias "openai_compat": any OpenAI-compatible
+        # endpoint), "openrouter", "ollama".  The opencode provider speaks the
+        # OpenAI chat-completions contract and falls back to the opencode
+        # session API and CLI.
+        #
+        # LLM_PROVIDER selects the transport; NL_DEFAULT_MODEL is the model
+        # id of the opencode runtime only - the hosted providers have their
+        # own defaults (see ``default_model_for``) so an opencode model id
+        # can never be sent to the OpenAI API.
         self.LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "opencode").strip().lower()
         self.OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
         # Base URL of any OpenAI-compatible endpoint (opencode serve, vLLM,
         # LM Studio, Ollama /v1, DeepSeek, ...).  Used by the openai_compat
-        # provider and by the opencode HTTP transport.
-        self.OPENAI_BASE_URL: str = os.getenv(
-            "OPENAI_BASE_URL", "https://api.openai.com/v1"
-        ).strip()
+        # provider and by the opencode HTTP transport.  Empty by default:
+        # the opencode provider talks to OPENCODE_BASE_URL instead and the
+        # hosted OpenAI endpoint is only used when it is configured.
+        self.OPENAI_BASE_URL: str = os.getenv("OPENAI_BASE_URL", "").strip()
         # opencode runtime: server URL and model id.  The default model is the
         # free DeepSeek V4.1 Flash served by the local opencode runtime.
         self.OPENCODE_BASE_URL: str = os.getenv(
             "OPENCODE_BASE_URL", "http://127.0.0.1:4096"
         ).strip()
+        # True when OPENCODE_BASE_URL was really configured (not the
+        # built-in default).  The CLI is only pointed at a server that was
+        # asked for explicitly.
+        self.OPENCODE_BASE_URL_EXPLICIT: bool = bool(
+            os.getenv("OPENCODE_BASE_URL", "").strip()
+        )
         self.OPENCODE_MODEL: str = os.getenv(
-            "OPENCODE_MODEL", "opencode/deepseek-v4.1-flash-free"
+            "OPENCODE_MODEL", "opencode-go/beam-free"
         ).strip()
         # Tried in order when the primary model is unavailable (e.g. the free
-        # tier's usage limit is exhausted).
+        # tier's usage limit is exhausted).  Only free models by default; a
+        # paid model has to be added explicitly.
         self.OPENCODE_MODEL_FALLBACKS: str = os.getenv(
-            "OPENCODE_MODEL_FALLBACKS", "opencode-go/deepseek-v4.1-flash"
+            "OPENCODE_MODEL_FALLBACKS", "opencode-go/minimax-m3.1-flash-free"
         ).strip()
-        # auto | http | session | cli  (transport order for the opencode provider)
+        # auto | http | session | cli  (transport order for the opencode
+        # provider).  "auto" expands to http -> session -> cli, so the CLI -
+        # the transport that is known to work with the local runtime - stays
+        # the last resort.
         self.OPENCODE_TRANSPORT: str = os.getenv("OPENCODE_TRANSPORT", "auto").strip().lower()
+        # How long a transport that answered "route not available" is skipped
+        # before it is probed again (seconds).
+        self.OPENCODE_TRANSPORT_RETRY_SECONDS: int = int(
+            os.getenv("OPENCODE_TRANSPORT_RETRY_SECONDS", "120")
+        )
         self.OPENCODE_CLI: str = os.getenv("OPENCODE_CLI", "").strip()
+        # Pass "--server <url>" to the opencode CLI.  Default off: the CLI
+        # only talks to a runtime server when one was configured explicitly
+        # (OPENCODE_BASE_URL in the environment) or this switch is on.
+        self.OPENCODE_CLI_USE_SERVER: bool = os.getenv(
+            "OPENCODE_CLI_USE_SERVER", "false"
+        ).strip().lower() in ("1", "true", "yes", "on")
         self.OPENCODE_SERVER_PASSWORD: str = os.getenv("OPENCODE_SERVER_PASSWORD", "").strip()
         self.NL_MAX_TOKENS: int = int(os.getenv("NL_MAX_TOKENS", "1400"))
+        # NL_TIMEOUT_SECONDS is the budget of one parse (all models and all
+        # transports together); LLM_TIMEOUT overrides it.
         self.NL_TIMEOUT_SECONDS: int = int(os.getenv("NL_TIMEOUT_SECONDS", "300"))
-        self.LLM_TIMEOUT: int = self.NL_TIMEOUT_SECONDS
+        self.LLM_TIMEOUT: int = int(os.getenv("LLM_TIMEOUT", str(self.NL_TIMEOUT_SECONDS)))
 
-        # Auto-detect OpenRouter if key starts with sk-or- and provider is not set
-        if self.OPENAI_API_KEY.startswith("sk-or-") and not self.LLM_PROVIDER:
+        # Auto-detect OpenRouter when the key starts with sk-or- and the
+        # provider was not explicitly set to something else.
+        if self.OPENAI_API_KEY.startswith("sk-or-") and self.LLM_PROVIDER in ("", "openai"):
             self.LLM_PROVIDER = "openrouter"
 
         self.OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
         self.OPENROUTER_BASE_URL: str = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-        self.NL_DEFAULT_MODEL: str = os.getenv("NL_DEFAULT_MODEL", "gpt-4o-mini")
+        self.NL_DEFAULT_MODEL: str = os.getenv("NL_DEFAULT_MODEL", "opencode-go/beam-free")
         # Date used to ground relative expressions ("today", "yesterday").
         # Defaults to the released archive epoch so the demo does not resolve
         # those words against the machine clock.  Set DATA_EPOCH_DATE to a new
@@ -192,6 +222,33 @@ class Settings:
             "INCLUDE_GENDER_ATTRIBUTES", "true"
         ).lower() == "true"
 
+    def default_model_for(self, provider: str) -> str:
+        """Return the model id that belongs to *provider*.
+
+        Every provider has its own default so an opencode model id can never
+        be sent to the hosted APIs:
+
+        * ``opencode``          -> ``OPENCODE_MODEL`` (``NL_DEFAULT_MODEL``
+          is the generic fallback for the opencode runtime)
+        * ``openai``            -> ``gpt-4o-mini``
+        * ``openrouter``        -> ``openai/gpt-4o-mini``
+        * ``ollama``            -> ``llama3.1``
+        * OpenAI-compatible    -> "" (the model id has to be configured)
+
+        An empty string means "the provider decides", which lets the
+        LangChain path fall back to its own per-provider default.
+        """
+        name = (provider or "").strip().lower()
+        if name == "opencode":
+            return self.OPENCODE_MODEL or self.NL_DEFAULT_MODEL
+        if name == "openai":
+            return os.getenv("NL_OPENAI_MODEL", "gpt-4o-mini")
+        if name == "openrouter":
+            return os.getenv("NL_OPENROUTER_MODEL", "openai/gpt-4o-mini")
+        if name == "ollama":
+            return os.getenv("NL_OLLAMA_MODEL", "llama3.1")
+        return ""
+
     def get_active_llm_config(self) -> dict:
         """Fetch active LLM configuration from MongoDB (overrides .env if present).
 
@@ -204,7 +261,7 @@ class Settings:
         self._llm_config_checked = True
         fallback = {
             "provider": self.LLM_PROVIDER,
-            "model": self.NL_DEFAULT_MODEL,
+            "model": self.default_model_for(self.LLM_PROVIDER),
             "api_key": self.OPENAI_API_KEY,
         }
         try:
@@ -216,10 +273,11 @@ class Settings:
             )
             if doc and isinstance(doc.get("value"), dict):
                 cfg = doc["value"]
+                provider = cfg.get("provider") or self.LLM_PROVIDER
                 # If provider is openrouter but base url is not set, it should use the default
                 self._llm_config_cache = {
-                    "provider": cfg.get("provider", self.LLM_PROVIDER),
-                    "model": cfg.get("model", self.NL_DEFAULT_MODEL),
+                    "provider": provider,
+                    "model": cfg.get("model") or self.default_model_for(provider),
                     "api_key": cfg.get("api_key", self.OPENAI_API_KEY),
                 }
                 return dict(self._llm_config_cache)
