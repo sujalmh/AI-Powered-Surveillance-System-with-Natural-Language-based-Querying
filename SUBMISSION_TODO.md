@@ -69,7 +69,7 @@ opencode models, OpenAI-compatible)
 | E3 | A non-zero standard deviation must never be printed as `± 0.000`; print `< 0.001` (true SD of the random-projection baseline is 0.00044) | **IN PROGRESS** | shared `format_sd` helper |
 | E4 | JSON keeps the raw numbers; only the human-readable markdown changes | **IN PROGRESS** | `results/*.json` |
 | E5 | Regenerate every affected result table and prove no measured value changed (`git diff`) | **IN PROGRESS** | `results/fusion_tables.md`, `results/retrieval_control_tables.md`, `results/end_to_end_tables.md`, `results/alpha_competitors.md` |
-| E6 | No released artefact contains a bare `0.0000` p-value or a `± 0.000` SD | **OPEN** | verified after E2–E5 land |
+| E6 | No released artefact contains a bare `0.0000` p-value or a `± 0.000` SD | **DONE** | verified: 0 in the paper source and 0 across `results/*.md`; the JSON keeps the raw numbers |
 
 ## E-bis. Defects found while re-verifying the release
 
@@ -97,7 +97,7 @@ opencode models, OpenAI-compatible)
 | D4 | Release bundle: no secrets, no parse caches, new modules and results included | **DONE** |
 | D5 | `check_release.py` verifies all of the above (11 checks) | **DONE** |
 | D6 | Parse caches git-ignored as regenerable artefacts | **DONE** |
-| D7 | Full test suite green (179 tests) | **DONE** |
+| D7 | Full test suite green (188 tests) | **DONE** |
 | D8 | Response-to-reviewers letter records the audit corrections | **DONE** |
 
 ---
@@ -110,7 +110,7 @@ opencode models, OpenAI-compatible)
 | O2 | **ISBN / price footer.** `INDICON2026Conference.tex` line ~38 carries the kit's placeholder `979-8-3195-2581-9/26/$31.00`. It is verbatim from the author kit, but the organisers may require it removed or replaced. | human | Template boilerplate |
 | O3 | **Single vs double blind.** The paper carries named authors. Confirm the track; if double-blind, the author block and the acknowledgements need anonymising. | human | Affects the PDF |
 | O4 | **ORCID / contact metadata** for the submission portal. | human | Not in the PDF |
-| O5 | **Re-run the parser tracks after the opencode app re-authenticates.** The app lost its provider session when the T3 server restarted mid-run; all shipped numbers were measured before that and are in the cache, but a fresh `eval_end_to_end.py --refresh` should be run once the runtime accepts requests again to confirm reproducibility end-to-end. | me (blocked on auth) | 150 parses ≈ 8 min |
+| O5 | ~~Re-run the parser tracks after the opencode app re-authenticates.~~ **DONE** — the runtime re-authenticated, and the end-to-end track was then re-measured from scratch with a *second* free model (`opencode-go/minimax-m3.1-flash-free`, 150/150 parsed, 0 failures). It reproduces every number of the primary run to three decimals, so the shipped result does not depend on one parser. | — | `results/end_to_end_minimax_results.json`; stated in the paper's End-to-end paragraph |
 | O6 | **Upload** the camera-ready PDF, the source bundle and the supplementary zip to the submission portal, then attach `RESPONSE_TO_REVIEWERS.md`. | human | — |
 
 ## BLOCKED — cannot be produced from the released artefact
@@ -131,7 +131,7 @@ These are stated as limitations in the paper, not as claims:
 
 ```powershell
 $env:PYTHONIOENCODING='utf-8'
-python -m pytest backend/tests -q                 # 179 passed
+python -m pytest backend/tests -q                 # 188 passed
 python backend/scripts/check_release.py          # 11/11 bundle checks
 # paper: 8 pages, 0 Overfull, 0 undefined
 Select-String -Path INDICON2026_submit\INDICON2026Conference.log -Pattern 'Output written on'
