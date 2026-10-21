@@ -249,6 +249,25 @@ class Settings:
             return os.getenv("NL_OLLAMA_MODEL", "llama3.1")
         return ""
 
+    def set_opencode_model(self, model: str) -> None:
+        """Make *model* the primary model of the opencode runtime.
+
+        The evaluation scripts use this for their ``--model`` override.  It
+        has to set ``OPENCODE_MODEL`` and not only ``NL_DEFAULT_MODEL``:
+        ``default_model_for("opencode")`` prefers the opencode-specific name,
+        so setting only the generic one left the backend on the configured
+        primary while the result file claimed a different model.  The cached
+        MongoDB lookup is invalidated as well, because that lookup is what
+        ``build_backend`` reads.
+        """
+        value = str(model or "").strip()
+        if not value:
+            return
+        self.OPENCODE_MODEL = value
+        self.NL_DEFAULT_MODEL = value
+        self._llm_config_checked = False
+        self._llm_config_cache = None
+
     def get_active_llm_config(self) -> dict:
         """Fetch active LLM configuration from MongoDB (overrides .env if present).
 

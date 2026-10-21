@@ -113,3 +113,20 @@ numbers.
 4. Files that depend on an LLM parse record the provider and the model that
    produced them in their `scope` block.  A provider quota or a model change
    affects that track only; it never changes a deployment number.
+5. **A p-value is never printed as `0.0000` and a dispersion is never printed
+   as `± 0.000`.**  The bootstrap p-value is estimated from a finite number
+   of resamples, so it can only take the values `0, 2/n, 4/n, ...`; a `0`
+   therefore means *below the resolution floor* `2/n` (0.0002 for 10 000
+   resamples, 0.0007 for 3 000), not "exactly zero".  Such a p-value is
+   printed as `< 0.0002`, and a standard deviation that would round to
+   `0.000` is printed as `< 0.001`.  The JSON files always keep the raw
+   numbers; only the human-readable tables are rounded this way.
+5. The markdown tables never print a p-value as a bare `0.0000` and never
+   print a standard deviation as `± 0.000`.  The bootstrap p-value is
+   `2 * P(boot_mean <= 0)` estimated from `n_boot` resamples, so its
+   smallest representable non-zero value is `2 / n_boot` (the *resolution
+   floor*: 0.0002 at 10 000 resamples, 0.0007 at 3 000).  A p-value of
+   exactly zero therefore means "below the floor", not "impossible", and is
+   written `< 0.0002`; a dispersion that rounds to zero is written
+   `< 0.001`.  The JSON files keep the raw numbers, so a machine reads the
+   same values the tables show.

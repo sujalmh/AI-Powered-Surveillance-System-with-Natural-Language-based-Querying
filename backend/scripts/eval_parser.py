@@ -1500,8 +1500,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.provider:
         settings.LLM_PROVIDER = args.provider
     if args.model:
-        settings.NL_DEFAULT_MODEL = args.model
-        settings.OPENCODE_MODEL = args.model
+        settings.set_opencode_model(args.model)
     if args.model or args.provider:
         # Force the configuration used by the parser so the requested model is
         # honoured even when a MongoDB llm_config override exists.

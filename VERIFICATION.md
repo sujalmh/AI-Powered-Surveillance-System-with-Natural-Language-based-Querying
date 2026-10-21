@@ -19,7 +19,8 @@ Status of every item after the revision is recorded in the last column.
 | `python backend/scripts/measure_latency.py` writes `results/latency_results.json` / `.md`; no simulated lognormal values | ✅ real component timings, p50/p95, 1/2/4/8 workers |
 | `python backend/scripts/measure_latency.py --live-llm 3` (optional) | ⚠️ not run; LLM parse latency is excluded and labelled as excluded |
 | `python backend/scripts/check_release.py` writes the release manifest | ✅ `results/release_manifest.json` / `.md` |
-| `python backend/scripts/eval_end_to_end.py` writes `results/end_to_end_results.json` / `end_to_end_tables.md` from the released scene index and the deployed parser | ⚠️ script implemented (real LLM parse, production adaptive alpha, protocol-matched control queries, 50 tune / 100 test split); the run in this checkout is incomplete — the parse cache under `backend/benchmarks/parsed_cache/` holds a partial run — so the two result files are not present yet |
+| `python backend/scripts/eval_end_to_end.py` writes `results/end_to_end_results.json` / `end_to_end_tables.md` from the released scene index and the deployed parser | ✅ real LLM parse of the 150 protocol-matched control queries (150/150, mean 3.0 s, p95 5.0 s); macro P@5 0.450 vs the control's 0.538; Δ vs the tune-selected best fixed-α is +0.002 (paired bootstrap p 0.80, n.s.) |
+| `python backend/scripts/eval_end_to_end.py --parse-source oracle` writes `results/end_to_end_oracle_results.json` | ✅ the same harness driven by the reference filter reproduces the control's 0.538 exactly, which localises the 0.088 gap to the parse rather than to the harness |
 | `python backend/benchmarks/build_subset.py` and `build_subset_control.py` regenerate the benchmarks deterministically | ✅ seed 20260301; re-running reproduces the same numbers |
 
 ## NL parser (provider-agnostic LLM layer)

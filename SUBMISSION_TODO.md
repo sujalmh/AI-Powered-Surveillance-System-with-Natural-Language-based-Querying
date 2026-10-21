@@ -71,6 +71,17 @@ opencode models, OpenAI-compatible)
 | E5 | Regenerate every affected result table and prove no measured value changed (`git diff`) | **IN PROGRESS** | `results/fusion_tables.md`, `results/retrieval_control_tables.md`, `results/end_to_end_tables.md`, `results/alpha_competitors.md` |
 | E6 | No released artefact contains a bare `0.0000` p-value or a `± 0.000` SD | **OPEN** | verified after E2–E5 land |
 
+## E-bis. Defects found while re-verifying the release
+
+| # | Item | Status | Where |
+|---|---|---|---|
+| E7 | **The paper mis-attributed the parser model.** It said GPT-4o-mini produced "the measurements reported here", but the released end-to-end track was produced by `opencode-go/beam-free`. The sentence now names GPT-4o-mini for the deployment study and `opencode-go/beam-free` for the released track, and the End-to-end paragraph names the model explicitly. | **DONE** | `INDICON2026Conference.tex` (§III and the Released-subset paragraph) |
+| E8 | **`--model` never reached the backend.** `eval_end_to_end.py` set only `NL_DEFAULT_MODEL`, but `build_backend()` reads the active configuration, which prefers `OPENCODE_MODEL`. A run with `--model X` therefore parsed with the configured primary while recording `X` in the result file. New `Settings.set_opencode_model()` sets both names and invalidates the cached MongoDB lookup; a regression test pins it. | **DONE** | `backend/app/config.py`, `backend/scripts/eval_end_to_end.py`, `backend/tests/test_llm_client.py` |
+| E9 | The two poisoned parse caches (`..._minimax-m3.1-flash-free.json`, `..._deepseek-v4.1-flash-free.json`) written by the mislabelled run were deleted; only the beam-free cache remains. | **DONE** | `backend/benchmarks/parsed_cache/` |
+| E10 | The opencode free DeepSeek tier is quota-blocked (`Free usage limit reached`); `opencode-go/deepseek-v4.1-flash` (paid) and the two free models work. Recorded so no paper number depends on it. | **DONE** | `backend/.env`, `results/README.md` |
+| E11 | A cross-model replication of the released end-to-end track with a second free model (`opencode-go/minimax-m3.1-flash-free`) | **IN PROGRESS** | `results/end_to_end_minimax_results.json` |
+
+
 ## D. Release integrity
 
 | # | Item | Status |

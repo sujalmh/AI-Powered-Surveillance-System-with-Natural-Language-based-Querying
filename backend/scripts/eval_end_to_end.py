@@ -69,6 +69,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from backend.app.eval import subset  # noqa: E402
+from backend.app.eval.stats import format_p  # noqa: E402
 from backend.app.services import llm_client, nl_parser  # noqa: E402
 from backend.scripts import eval_retrieval_control as erc  # noqa: E402
 
@@ -280,7 +281,11 @@ def main() -> None:
     if args.provider:
         settings.LLM_PROVIDER = args.provider
     if args.model:
-        settings.NL_DEFAULT_MODEL = args.model
+        # The override has to reach the *backend*, not only the settings
+        # object: ``build_backend`` reads the active configuration, which
+        # prefers the opencode-specific model id.  Without this the run would
+        # parse with one model and record another.
+        settings.set_opencode_model(args.model)
     cfg = settings.get_active_llm_config()
     model = args.model or cfg.get("model") or settings.OPENCODE_MODEL
     queries_path = Path(args.queries)
@@ -598,9 +603,15 @@ def main() -> None:
     lines += [
         "",
         f"Adaptive vs {best_fixed} (tune-selected): delta P@5 = {sig['delta_p5']:+.3f} "
-        f"[{sig['lo']:+.3f}, {sig['hi']:+.3f}], p = {sig['p']:.4f}; grouped "
-        f"[{sig['grouped_lo']:+.3f}, {sig['grouped_hi']:+.3f}], p = {sig['grouped_p']:.4f} "
+        f"[{sig['lo']:+.3f}, {sig['hi']:+.3f}], p = {format_p(sig['p'], N_BOOT)}; grouped "
+        f"[{sig['grouped_lo']:+.3f}, {sig['grouped_hi']:+.3f}], "
+        f"p = {format_p(sig['grouped_p'], N_BOOT)} "
         f"({N_BOOT} resamples, seed {BOOT_SEED}).",
+        "",
+        f"P-values are two-sided paired bootstrap; `< {2.0 / N_BOOT:.4f}` is the "
+        f"resolution floor (2/{N_BOOT}): no resample fell on the null side, so the "
+        "p-value is below the floor and not exactly zero. The raw p-values are in "
+        f"`{args.out_prefix}_results.json`.",
         "",
         "## Per category (test split, vs the best tune-selected fixed alpha)",
         "",
@@ -613,8 +624,8 @@ def main() -> None:
             continue
         lines.append(
             f"| {cat} | {c['n']} | {c['adaptive']:.3f} | {c['best_fixed']:.3f} | "
-            f"{c['delta']:+.3f} | [{c['lo']:+.3f}, {c['hi']:+.3f}] | {c['p']:.4f} | "
-            f"{c['p_holm']:.4f} |"
+            f"{c['delta']:+.3f} | [{c['lo']:+.3f}, {c['hi']:+.3f}] | "
+            f"{format_p(c['p'], N_BOOT)} | {format_p(c['p_holm'], N_BOOT)} |"
         )
     lines += [
         "",
@@ -672,7 +683,7 @@ def main() -> None:
     print(f"parse ok: {parse_ok}/{len(rows)}  mean {np.mean(parse_times):.1f}s")
     for m in systems:
         print(f"  {m:18s} macro P@5 = {summary[m]['macro']:.3f}")
-    print(f"  adaptive vs {best_fixed}: {sig['delta_p5']:+.3f} p={sig['p']:.4f}")
+    print(f"  adaptive vs {best_fixed}: {sig['delta_p5']:+.3f} p={format_p(sig['p'], N_BOOT)}")
     print(f"wrote {RESULTS / (args.out_prefix + '_results.json')}")
     print(f"wrote {RESULTS / (args.out_prefix + '_tables.md')}")
 

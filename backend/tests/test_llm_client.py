@@ -408,6 +408,61 @@ def test_every_provider_has_its_own_default_model(monkeypatch):
     assert opencode_backend.model == "opencode-go/beam-free"
 
 
+def test_set_opencode_model_reaches_the_backend(monkeypatch):
+    """The evaluation scripts' ``--model`` override must reach the backend.
+
+    Regression test: ``build_backend`` reads the *active* configuration,
+    which prefers the opencode-specific model id, so setting only the
+    generic ``NL_DEFAULT_MODEL`` left the backend on the configured primary
+    while the result file claimed a different model.
+    """
+    from backend.app.config import settings
+
+    monkeypatch.setattr(settings, "OPENCODE_MODEL", "opencode-go/beam-free")
+    monkeypatch.setattr(settings, "NL_DEFAULT_MODEL", "opencode-go/beam-free")
+    monkeypatch.setattr(
+        settings, "OPENCODE_MODEL_FALLBACKS",
+        "opencode-go/minimax-m3.1-flash-free,opencode-go/deepseek-v4.1-flash",
+    )
+
+    settings.set_opencode_model("opencode-go/minimax-m3.1-flash-free")
+    backend = llm_client.build_backend({
+        "provider": "opencode", "model": settings.NL_DEFAULT_MODEL, "api_key": "",
+    })
+    assert backend.model == "opencode-go/minimax-m3.1-flash-free"
+    # The model that is now primary must not also be a fallback.
+    assert "opencode-go/minimax-m3.1-flash-free" not in backend.fallbacks
+    assert "opencode-go/deepseek-v4.1-flash" in backend.fallbacks
+
+
+def test_the_model_override_reaches_the_opencode_backend(monkeypatch):
+    """``--model`` must change the model the parser actually uses.
+
+    The evaluation scripts set the override and then record the model id in
+    the result file.  When the override only reached the generic
+    ``NL_DEFAULT_MODEL`` the backend stayed on the configured primary, so the
+    run parsed with one model and reported another.
+    """
+    from backend.app.config import settings
+
+    monkeypatch.setattr(settings, "OPENCODE_MODEL", "opencode-go/beam-free")
+    monkeypatch.setattr(settings, "NL_DEFAULT_MODEL", "opencode-go/beam-free")
+    monkeypatch.setattr(settings, "_llm_config_checked", False)
+    monkeypatch.setattr(settings, "_llm_config_cache", None)
+
+    settings.set_opencode_model("opencode-go/minimax-m3.1-flash-free")
+    try:
+        backend = llm_client.build_backend()
+        assert backend.model == "opencode-go/minimax-m3.1-flash-free"
+        # The chosen model must not also be a fallback.
+        assert "opencode-go/minimax-m3.1-flash-free" not in backend.fallbacks
+    finally:
+        settings.OPENCODE_MODEL = "opencode-go/beam-free"
+        settings.NL_DEFAULT_MODEL = "opencode-go/beam-free"
+        settings._llm_config_checked = False
+        settings._llm_config_cache = None
+
+
 # ---------------------------------------------------------------------------
 # Repository layout
 # ---------------------------------------------------------------------------
