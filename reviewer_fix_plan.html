@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>INDICON 2026 — Reviewer Fix Plan: Before → After</title>
+<style>
+:root{--bg:#0f172a;--card:#ffffff;--muted:#64748b;--line:#e2e8f0;--ok:#15803d;--part:#b45309;--no:#b91c1c;--blue:#1d4ed8}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:#f1f5f9;color:#0f172a}
+header{background:var(--bg);color:#fff;padding:28px 24px}header h1{margin:0 0 6px;font-size:22px}header p{margin:4px 0;color:#cbd5e1;font-size:14px}
+.wrap{max-width:1180px;margin:0 auto;padding:20px 16px 60px}.legend{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+.pill{font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;color:#fff}.ok{background:var(--ok)}.part{background:var(--part)}.no{background:var(--no)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:14px 0;overflow:hidden}
+.card>div.head{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.card h2{font-size:15px;margin:0}.card h2 span.id{background:#0f172a;color:#fff;border-radius:6px;padding:2px 8px;margin-right:8px;font-size:12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:0}@media(max-width:860px){.grid{grid-template-columns:1fr}}
+.before,.after{padding:14px 16px;font-size:13.5px;line-height:1.55}.before{background:#fef2f2;border-right:1px solid var(--line)}.after{background:#f0fdf4}
+.before h3,.after h3{margin:0 0 8px;font-size:12px;letter-spacing:.06em;text-transform:uppercase}.before h3{color:var(--no)}.after h3{color:var(--ok)}
+code.q{background:#0f172a;color:#e2e8f0;padding:1px 5px;border-radius:4px;font-size:12px}pre{background:#0f172a;color:#e2e8f0;padding:10px;border-radius:8px;overflow:auto;font-size:12px}
+.meta{padding:10px 16px;background:#f8fafc;border-top:1px solid var(--line);font-size:12.5px;color:#334155}.meta b{color:#0f172a}
+footer{color:var(--muted);font-size:12px;margin-top:18px}a{color:var(--blue)}
+table.plan{width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+table.plan th,table.plan td{border-bottom:1px solid var(--line);padding:10px;text-align:left;vertical-align:top}table.plan th{background:#0f172a;color:#fff}
+</style>
+</head>
+<body>
+<header>
+<h1>INDICON 2026 — Reviewer Fix: Before → After [APPLIED]</h1>
+<p>Edits applied to <code>INDICON2026_submit/INDICON2026Conference.tex</code> on 2026-10-21 — compiles to 7 pages, 437KB. Novelty preserved: C1 adaptive-α, C2 heterogeneous concat, C3 alert grammar + numbers 0.67→0.83 / +10.7pp / +2.2pp / 91% unchanged.</p>
+<p>Source audited: <code>INDICON2026_submit/INDICON2026Conference.tex</code> (524 lines, 18-Oct-2026) · Prior draft: <code>research_paper_6pages.tex</code></p>
+<p>Method: every “after” is a concrete .tex edit + experiment/script to run. “Disclosure-only” (e.g. adding <i>not released / unablated / without correction</i>) is marked as <b>not a fix</b>.</p>
+<div class="legend"><span class="pill ok">FIXED in updated draft</span><span class="pill part">PARTIAL — clarified, not resolved</span><span class="pill no">NOT FIXED — needs work</span></div>
+</header>
+<div class="wrap">
+
+<h2>0. Execution order (7 workstreams, smallest-first)</h2>
+<table class="plan">
+<tr><th>Order</th><th>Workstream</th><th>Covers</th><th>Why first</th></tr>
+<tr><td><b>WS-1</b></td><td>Math + wording downgrades</td><td>R1-3, R1-6, R1-16, R1-20</td><td>Text-only, 1 hour, unblocks all tables</td></tr>
+<tr><td><b>WS-2</b></td><td>Score norm + metric definitions</td><td>R1-4, R1-5, R2-2</td><td>Defines what every number means before re-running</td></tr>
+<tr><td><b>WS-3</b></td><td>Benchmark docs + release</td><td>R1-1, R1-8, R1-14, R1-19</td><td>Required for any claim of independence</td></tr>
+<tr><td><b>WS-4</b></td><td>Stats rigor</td><td>R1-9</td><td>Re-analysis script on existing 150-query CSV</td></tr>
+<tr><td><b>WS-5</b></td><td>Alpha sensitivity + extra baselines</td><td>R1-2, R2-1</td><td>Needs WS-3 split (tune/test) to be valid</td></tr>
+<tr><td><b>WS-6</b></td><td>Fusion baselines + cost</td><td>R1-7, R1-17</td><td>Needs 50-pair split fix + multi-seed runs</td></tr>
+<tr><td><b>WS-7</b></td><td>Alerts + systems + privacy</td><td>R1-10,11,12,13,15,18, R2-3,4</td><td>Needs new utterances + latency + 2nd location</td></tr>
+</table>
+
+<!-- 1 -->
+<div class="card"><div class="head"><h2><span class="id">R1-1</span>Benchmark reproducibility (150 queries / 60 utterances)</h2><span class="pill no">NOT FIXED</span></div>
+<div class="grid"><div class="before"><h3>Before (L411)</h3><pre>single annotator, no agreement reported;
+tuning and test share the same 150 queries
+Benchmarks and eval scripts are not released.</pre><p>Counts restated (30/cat) but no construction, relevance rule, agreement, or release.</p></div>
+<div class="after"><h3>After — do this</h3><p><b>1.</b> Split <code>150 → 50 tune / 100 test</code> (stratified by category). <b>2.</b> 2 annotators label test; report Cohen’s κ + adjudication rule. <b>3.</b> Publish <code>benchmarks/queries.jsonl + relevance.json + eval.py + alert_utterances.jsonl</code> and link repo (remove “upon acceptance”). Add §Eval table: source cameras, clip length, relevance definition per category.</p><pre>Annotators A,B (κ=__.; disagreements adjudicated by C).
+Tune=50, Test=100 disjoint. Release: DOI link.</pre></div></div>
+<div class="meta"><b>Effort:</b> 2–3 days (re-annotate 100 queries). <b>Blocks:</b> R1-8, R1-9, R1-14, R2-2.</div></div>
+
+<!-- 2 -->
+<div class="card"><div class="head"><h2><span class="id">R1-2</span>Adaptive weights (0.6/0.2/0.2, priors, overrides)</h2><span class="pill part">PARTIAL</span></div>
+<div class="grid"><div class="before"><h3>Before (L229-232, L416)</h3><pre>α_soft = 0.6 α_ι + 0.2 ρ_cplx + 0.2 ρ_src
+α_ι ∈ {0.9,0.5,0.7}; overrides 1.00 / 0.10
+soft terms (… 0.6/0.2/0.2 unablated) +0.006</pre><p>Sweep Table added, but weights unjustified, no sensitivity, no learned adaptive competitor.</p></div>
+<div class="after"><h3>After — do this</h3><p>Grid-search <code>w_ι,w_cplx,w_src</code> on <b>tune split only</b>; plot ΔP@5 vs weight (±0.2). Add 2 competitors: (a) logistic per-query α from <code>[ι,n_s,n_v,|F|]</code>, (b) per-intent lookup. Report all on <b>test only</b>. If soft gain stays ~+0.006, say overrides carry the gain.</p><pre>Fig: sensitivity curves; Table row: learned-α, lookup-α, ours.</pre></div></div>
+<div class="meta"><b>Effort:</b> 1 day scripting + rerun. <b>File:</b> §C1 + new Fig.</div></div>
+
+<!-- 3 -->
+<div class="card"><div class="head"><h2><span class="id">R1-3</span>Mathematical validity (concavity / Proposition)</h2><span class="pill part">PARTIAL</span></div>
+<div class="grid"><div class="before"><h3>Before → Updated (L235-238, L517)</h3><pre>\begin{observation}[Override gap, empirical]
+No single fixed α attains count+action optima…
+by construction on our 150-query benchmark.</pre><p>Old Proposition/concavity removed — good — but no proof or bound replaces it.</p></div>
+<div class="after"><h3>After — keep as is + reword</h3><p>Keep <code>Observation (empirical)</code>. Delete any “lower bound / cannot match in general”. Add one sentence: <i>“This is a dataset observation at α∈{0,0.3,0.5,0.7,1.0}, not a theorem; concavity is not assumed.”</i> No new proof needed.</p></div></div>
+<div class="meta"><b>Effort:</b> 15 min text edit.</div></div>
+
+<!-- 4 -->
+<div class="card"><div class="head"><h2><span class="id">R1-4</span>Score normalization</h2><span class="pill part">PARTIAL</span></div>
+<div class="grid"><div class="before"><h3>Before (L178)</h3><pre>S_struct ∈[0,1] (duration max-scaled per query);
+S_sem ∈[0,1] (per-query min-max, score_norm)</pre><p>Scales now documented; no calibration check.</p></div>
+<div class="after"><h3>After — do this</h3><p>Add 3-line calibration note + histogram: per-query score distributions overlap? Compare vs z-score fusion baseline in Table. State MinMax is per-query (no cross-query leakage into ranking).</p></div></div>
+<div class="meta"><b>Effort:</b> 0.5 day.</div></div>
+
+<!-- 5 -->
+<div class="card"><div class="head"><h2><span class="id">R1-5</span>Counting evaluation</h2><span class="pill no">NOT FIXED</span></div>
+<div class="grid"><div class="before"><h3>Before (L186)</h3><pre>For counting, top-5 are supporting clips;
+relevant if it contains the true count → P@5=0.94</pre></div>
+<div class="after"><h3>After — do this</h3><p>Keep P@5 <b>plus</b> add <code>Exact-Match accuracy</code> and <code>MAE</code> on predicted count for the 30 count queries. New 2-column sub-table. Without this reviewers will keep rejecting.</p><pre>Count-test (n=20): EM=__, MAE=__, P@5=0.94</pre></div></div>
+<div class="meta"><b>Effort:</b> 0.5 day (parser already outputs count).</div></div>
+
+<!-- 6-7 -->
+<div class="card"><div class="head"><h2><span class="id">R1-6 + R1-7</span>Fusion novelty + baselines</h2><span class="pill part">PARTIAL</span></div>
+<div class="grid"><div class="before"><h3>Before (L287, L303)</h3><pre>Add (proj.) single-seed random Gaussian (illustrative)
+(0.5,0.5)=0.785 tie should be re-verified
+zero-pad/norm-matched would be fairer…</pre><p>RRF + unimodal added, but projection baseline admitted weak; no learned/norm-matched/tuned variant.</p></div>
+<div class="after"><h3>After — do this</h3><p><b>1.</b> Replace/add: zero-pad+norm-matched add, learned linear projection (50-pair), tuned RRF(k=60 sweep). <b>2.</b> 5-seed mean±SD for every stochastic baseline. <b>3.</b> Reframe C2 in Related Work: “application (single FAISS index from frozen heterogeneous encoders, 50-pair calibration) not operation.”</p></div></div>
+<div class="meta"><b>Effort:</b> 1–2 days (FAISS reruns). <b>Table:</b> expand Tab. fusion_ablation with mean±SD + seeds.</div></div>
+
+<!-- 8 -->
+<div class="card"><div class="head"><h2><span class="id">R1-8</span>Calibration/test independence</h2><span class="pill no">NOT FIXED</span></div>
+<div class="grid"><div class="before"><h3>Before (L275, L411)</h3><pre>held-out 50-pair split (no CV;
+disjointness from eval galleries not logged)</pre></div>
+<div class="after"><h3>After — do this</h3><p>Freeze disjoint splits by <code>identity+camera+time</code>: Calib 50 / Test 200 pairs with table (#IDs, #cams, pos/neg). Log gallery IDs to prove no overlap. k-fold or 3-seed for (αv,βt).</p></div></div>
+<div class="meta"><b>Effort:</b> 1 day relabel + rerun.</div></div>
+
+<!-- 9 -->
+<div class="card"><div class="head"><h2><span class="id">R1-9</span>Statistics (grouped resampling + multiplicity)</h2><span class="pill no">NOT FIXED</span></div>
+<div class="grid"><div class="before"><h3>Before (L413, L416)</h3><pre>10,000 query-level resamples; p&lt;0.05
+without multiple-testing correction
+find p=0.04 / track p=0.07 marginal</pre></div>
+<div class="after"><h3>After — do this</h3><p>Add <code>grouped bootstrap by video/identity</code> + Holm correction for 5 categories. Report both CIs; if find/track lose significance, say so (“gains concentrate on cross-category averaging, not per-category”). One Python script, no new data.</p></div></div>
+<div class="meta"><b>Effort:</b> 0.5 day.</div></div>
+
+<!-- 10 -->
+<div class="card"><div class="head"><h2><span class="id">R1-10</span>Alert reliability</h2><span class="pill no">NOT FIXED</span></div>
+<div class="grid"><div class="before"><h3>Before (L443-444)</h3><pre>60 held-out utterances; 0.91 rule-correctness
+9% need zone/threshold correction</pre><p>No ambiguous/conflicting/missing/unsupported test; no reject/validate logic.</p></div>
+<div class="after"><h3>After — do this</h3><p>Extend to <code>120 utterances: 60 clean + 60 stress</code> (ambiguous zone, conflict, missing τ/time, unsupported e.g. “follow him home”). Report per-slice accuracy + <code>abstain/clarify rate</code>. Add validator: schema check + unknown-zone/τ guard → “ask user” path. Document in §C3.</p></div></div>
+<div class="meta"><b>Effort:</b> 2 days (author + label stress set).</div></div>
+
+<!-- 11 -->
+<div class="card"><div class="head"><h2><span class="id">R1-11 + R2-3</span>Real-time: 2 FPS vs 6s/12s</h2><span class="pill part">PARTIAL</span></div>
+<div class="grid"><div class="before"><h3>Before (L491, L511)</h3><pre>2.0 FPS per stream; Total mean 6.0s (Find 12s)
+108.6ms FAISS mean; interactive-only</pre><p>Throughput vs latency now separated; means only, no percentiles/concurrency.</p></div>
+<div class="after"><h3>After — do this</h3><p>Change latency Table to <code>p50/p95 + N</code> per category; add 1/4/8 concurrent-query row. Rename “real-time pipeline” → “real-time ingest (2 FPS/stream), interactive query (s-scale)”. State VLM excluded from FPS budget (already done — keep).</p></div></div>
+<div class="meta"><b>Effort:</b> 0.5 day measurement.</div></div>
+
+<!-- 12-13 -->
+<div class="card"><div class="head"><h2><span class="id">R1-12 + R1-13</span>Generalizability + privacy</h2><span class="pill no">NOT FIXED</span> <span class="pill part">PARTIAL</span></div>
+<div class="grid"><div class="before"><h3>Before (L515, L517)</h3><pre>schema-decoupled (assertion only)
+PAR skewed daylight; gender soft cue + switch;
+8h retention cap</pre></div>
+<div class="after"><h3>After — do this</h3><p><b>Gen.:</b> test on 2nd location or held-out night/rain slice; report ΔP@5. <b>Privacy:</b> add access-control (role-gated zones), retention table per data type, face-blur option, gender-ablation (ΔF1 without gender). No new hardware needed.</p></div></div>
+<div class="meta"><b>Effort:</b> 2–3 days (2nd capture or slice).</div></div>
+
+<div class="card"><div class="head"><h2><span class="id">R1-14 + R1-19 + R2-2</span>Reproducibility + repeats + protocol</h2><span class="pill no">NOT FIXED</span></div>
+<div class="grid"><div class="before"><h3>Before (L84, L411)</h3><pre>Code to be released upon acceptance.
+Benchmarks and eval scripts are not released.
+tuning and test share same 150 queries.</pre></div>
+<div class="after"><h3>After — do this</h3><p>Release repo now (even private-for-review link) with <code>eval.py + requirements + fusion params + alert schema</code>. Define macro-mean explicitly (mean of 5 cat-means), F1@10=H-mean(P@5,R@10), and link every threshold (τ_det=0.5, fight 0.03+24px, τ_Z) to selection method. Report multi-seed mean±SD instead of single run.</p></div></div>
+<div class="meta"><b>Effort:</b> 1 day packaging.</div></div>
+
+<div class="card"><div class="head"><h2><span class="id">R1-15,16,17,20 + R1-18 + R2-1,4</span>Figures, notation, storage, examples</h2><span class="pill ok">MOSTLY FIXED</span></div>
+<div class="grid"><div class="before"><h3>Before</h3><p><code>15</code> TikZ overview with C1-C3 <b>done</b> (L147-173). <code>16</code> person vs scene disambiguated <b>done</b> (L275,395,400). <code>17</code> O(Nd), 109ms, GB/VRAM <b>done</b> — add exact <code>312k×1152×4B≈1.4GB</code>. <code>20</code> terminology consistent. <code>R2-1</code> consolidated tables <b>done</b> (alpha + fusion). <code>18</code> <b>missing</b>: no success/failure + intent-error table. <code>R2-4</code> partial: crowded/occlusion/domain-shift unnamed.</p></div>
+<div class="after"><h3>After — do this</h3><p>Add <b>1 figure + 1 table</b>: (a) 4-row qualitative table (2 wins, 2 fails incl. intent misclass e.g. count→find), (b) Limitations paragraph naming crowded scenes, occlusion, camera shift, ambiguous actions, incorrect specs with observed effect. Compute storage line. That closes R1-18 and R2-4.</p></div></div>
+<div class="meta"><b>Effort:</b> 0.5 day.</div></div>
+
+<footer>Priority for rebuttal: do WS-1→WS-4 + counting EM/MAE + alert-stress + latency percentiles first — these are text/script-only and remove the most “major revision” objections without new capture. Second capture (generalization) and full re-annotation can be listed as underway with date.</footer>
+</div>
+</body>
+</html>
