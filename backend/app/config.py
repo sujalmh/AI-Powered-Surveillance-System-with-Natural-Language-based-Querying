@@ -49,13 +49,43 @@ class Settings:
         )
 
         # LLM / NLP (optional; wire later)
-        self.LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "").strip().lower()  # e.g., "openai", "ollama", "openrouter"
+        # Providers: "opencode" (local opencode runtime, default), "openai" /
+        # "openai_compat" (any OpenAI-compatible endpoint), "openrouter",
+        # "ollama".  The opencode provider speaks the OpenAI chat-completions
+        # contract and falls back to the opencode session API and CLI.
+        self.LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "opencode").strip().lower()
         self.OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
-        
+        # Base URL of any OpenAI-compatible endpoint (opencode serve, vLLM,
+        # LM Studio, Ollama /v1, DeepSeek, ...).  Used by the openai_compat
+        # provider and by the opencode HTTP transport.
+        self.OPENAI_BASE_URL: str = os.getenv(
+            "OPENAI_BASE_URL", "https://api.openai.com/v1"
+        ).strip()
+        # opencode runtime: server URL and model id.  The default model is the
+        # free DeepSeek V4.1 Flash served by the local opencode runtime.
+        self.OPENCODE_BASE_URL: str = os.getenv(
+            "OPENCODE_BASE_URL", "http://127.0.0.1:4096"
+        ).strip()
+        self.OPENCODE_MODEL: str = os.getenv(
+            "OPENCODE_MODEL", "opencode/deepseek-v4.1-flash-free"
+        ).strip()
+        # Tried in order when the primary model is unavailable (e.g. the free
+        # tier's usage limit is exhausted).
+        self.OPENCODE_MODEL_FALLBACKS: str = os.getenv(
+            "OPENCODE_MODEL_FALLBACKS", "opencode-go/deepseek-v4.1-flash"
+        ).strip()
+        # auto | http | session | cli  (transport order for the opencode provider)
+        self.OPENCODE_TRANSPORT: str = os.getenv("OPENCODE_TRANSPORT", "auto").strip().lower()
+        self.OPENCODE_CLI: str = os.getenv("OPENCODE_CLI", "").strip()
+        self.OPENCODE_SERVER_PASSWORD: str = os.getenv("OPENCODE_SERVER_PASSWORD", "").strip()
+        self.NL_MAX_TOKENS: int = int(os.getenv("NL_MAX_TOKENS", "1400"))
+        self.NL_TIMEOUT_SECONDS: int = int(os.getenv("NL_TIMEOUT_SECONDS", "300"))
+        self.LLM_TIMEOUT: int = self.NL_TIMEOUT_SECONDS
+
         # Auto-detect OpenRouter if key starts with sk-or- and provider is not set
         if self.OPENAI_API_KEY.startswith("sk-or-") and not self.LLM_PROVIDER:
             self.LLM_PROVIDER = "openrouter"
-            
+
         self.OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
         self.OPENROUTER_BASE_URL: str = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
         self.NL_DEFAULT_MODEL: str = os.getenv("NL_DEFAULT_MODEL", "gpt-4o-mini")

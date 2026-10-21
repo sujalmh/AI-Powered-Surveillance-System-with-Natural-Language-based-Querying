@@ -40,6 +40,12 @@ numbers.
   on the same control - a learned (logistic) per-query alpha competitor, a
   16-point soft-weight sensitivity sweep searched on the tune split, and the
   counting accuracy together with the label-noise ceiling that bounds it.
+- `end_to_end_results.json` / `end_to_end_tables.md`: the **end-to-end**
+  released-subset track - the natural-language query is parsed by the deployed
+  LLM backend (opencode + DeepSeek V4.1 Flash by default), the parsed filter
+  drives the structured branch, and the production adaptive-alpha rule merges
+  the branches.  Parses are cached under
+  `backend/benchmarks/parsed_cache/` so the run is reproducible.
 - `fusion_results.json` / `fusion_tables.md` / `fusion_queries.csv`:
   person-pair/track fusion baselines on the subset.
 - `alert_results.json` / `alert_results.md`: alert-authoring test split and

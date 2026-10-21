@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 import re
@@ -344,7 +345,16 @@ def _get_lc_components():
     provider = llm_cfg["provider"].strip().lower()
     model = llm_cfg["model"]
     api_key = llm_cfg["api_key"]
-    
+
+    # The opencode runtime and any OpenAI-compatible endpoint are handled by
+    # backend.app.services.llm_client, which speaks the OpenAI
+    # chat-completions contract and falls back to the opencode session API
+    # and CLI.  It is used without LangChain so the backend keeps working
+    # when LangChain is not installed.
+    if provider in {"opencode", "openai_compatible", "openai_compat", "vllm",
+                    "lmstudio", "llamacpp", "tgi"}:
+        return None, None, None
+
     llm = None
     if provider == "openai":
         try:
@@ -402,6 +412,153 @@ def _get_lc_components():
     return llm, parser, prompt
 
 
+def _coerce_time(raw: Any) -> Optional[Dict[str, Any]]:
+    """Accept the several time shapes a model may emit.
+
+    ``{"from_iso", "to_iso"}`` is the schema, but models also answer with
+    ``{"start", "end"}`` or ``{"gte", "lte"}``.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        return {"from_iso": raw, "to_iso": raw}
+    if not isinstance(raw, dict):
+        return None
+    out: Dict[str, Any] = {}
+    for src_key, dst_key in (
+        ("from_iso", "from_iso"), ("to_iso", "to_iso"),
+        ("start", "from_iso"), ("end", "to_iso"),
+        ("from", "from_iso"), ("to", "to_iso"),
+        ("gte", "from_iso"), ("lte", "to_iso"),
+    ):
+        val = raw.get(src_key)
+        if val:
+            out[dst_key] = str(val)
+    lm = raw.get("last_minutes")
+    if lm is not None:
+        try:
+            out["last_minutes"] = int(lm)
+        except (TypeError, ValueError):
+            pass
+    return out or None
+
+
+def _coerce_count_constraint(raw: Any) -> Optional[Dict[str, Any]]:
+    """Accept ``3``, ``{"eq": 3}`` or ``{"gte": 3}``."""
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)):
+        return {"eq": int(raw)}
+    if isinstance(raw, str):
+        digits = re.sub(r"[^0-9-]", "", raw)
+        try:
+            return {"eq": int(digits)} if digits else None
+        except ValueError:
+            return None
+    if isinstance(raw, dict):
+        out: Dict[str, Any] = {}
+        for key in ("eq", "gte", "lte", "gt", "lt"):
+            val = raw.get(key)
+            if val is None:
+                continue
+            try:
+                out[key] = int(val)
+            except (TypeError, ValueError):
+                continue
+        return out or None
+    return None
+
+
+def _coerce_objects(raw: Any) -> List[Dict[str, Any]]:
+    """Accept ``["person"]``, ``[{"name": "person"}]`` or a single string."""
+    if raw is None:
+        return []
+    items = raw if isinstance(raw, list) else [raw]
+    out: List[Dict[str, Any]] = []
+    for item in items:
+        if isinstance(item, str):
+            out.append({"name": item})
+        elif isinstance(item, dict):
+            name = item.get("name") or item.get("object_name") or item.get("class")
+            if name:
+                out.append({"name": str(name)})
+    return out
+
+
+def coerce_to_nlfilter(data: Dict[str, Any]) -> "NLFilter":
+    """Normalise a raw model JSON object into the ``NLFilter`` schema.
+
+    Small models answer with the right *content* but a slightly different
+    *shape* (``time.start`` instead of ``time.from_iso``, ``count_constraint``
+    as a bare integer, ``objects`` as plain strings).  Rejecting those replies
+    throws away correct parses, so the shape is normalised here and the values
+    are then validated by Pydantic.  Fields that still fail validation are
+    dropped rather than failing the whole parse.
+    """
+    payload: Dict[str, Any] = {}
+    for key in (
+        "query_type", "query_subtype", "color", "action", "zone",
+        "camera_id", "result_limit", "location_hint", "ask_color",
+        "semantic_query",
+    ):
+        if key in data and data[key] is not None:
+            payload[key] = data[key]
+    objects = _coerce_objects(data.get("objects"))
+    if objects:
+        payload["objects"] = objects
+    time_filter = _coerce_time(data.get("time"))
+    if time_filter:
+        payload["time"] = time_filter
+    count_constraint = _coerce_count_constraint(data.get("count_constraint"))
+    if count_constraint:
+        payload["count_constraint"] = count_constraint
+    # NLFilter requires these two; a model may omit them.
+    payload.setdefault("semantic_query", data.get("semantic_query") or data.get("query") or "")
+    payload.setdefault("raw_query", data.get("raw_query") or payload.get("semantic_query", ""))
+    try:
+        return NLFilter.model_validate(payload)
+    except Exception:
+        for key in ("query_subtype", "result_limit", "location_hint", "semantic_query",
+                    "action", "zone", "color", "time", "count_constraint", "objects"):
+            payload.pop(key, None)
+        return NLFilter.model_validate(payload)
+
+
+def _llm_client_parse(
+    nl: str,
+    schema: Dict[str, Any],
+    reference_date: str,
+) -> "Any":
+    """Parse with the opencode runtime / any OpenAI-compatible endpoint.
+
+    Used when the configured provider is served by
+    ``backend.app.services.llm_client`` instead of LangChain.  The reply is
+    decoded with the tolerant JSON extractor (small models fence their JSON
+    and add remarks) and validated against the same ``NLFilter`` model, so the
+    downstream filter construction is identical to the LangChain path.
+    """
+    from backend.app.services import llm_client
+
+    format_instructions = (
+        "Respond with ONE JSON object and nothing else. "
+        "Do not wrap it in markdown fences and do not add explanations. "
+        "It must validate against this JSON schema:\n"
+        + json.dumps(schema, ensure_ascii=False)
+    )
+    prompt = (
+        PROMPT_TEMPLATE
+        .replace("{query}", nl)
+        .replace("{schema}", json.dumps(schema, ensure_ascii=False))
+        .replace("{format_instructions}", format_instructions)
+        .replace("{reference_date}", reference_date)
+    )
+    backend = llm_client.build_backend()
+    data = llm_client.chat_json(prompt, backend=backend)
+    return NLFilter.model_validate(data)
+
+
 def parse_nl_with_llm(nl: str) -> Dict[str, Any]:
     llm, parser, prompt = _get_lc_components()
     # Use model schema and format instructions for robust structured output
@@ -410,17 +567,21 @@ def parse_nl_with_llm(nl: str) -> Dict[str, Any]:
     except Exception:
         # Pydantic v1 fallback
         schema = NLFilter.schema()  # type: ignore
-    format_instructions = parser.get_format_instructions()
+    format_instructions = parser.get_format_instructions() if parser is not None else ""
     # Ground relative dates in either the archived deployment epoch (offline
     # reproducibility) or the current date (live operation).
     reference_date = resolve_reference_date()
-    chain = prompt | llm | parser  # type: ignore
-    result: NLFilter = chain.invoke({
-        "query": nl,
-        "schema": schema,
-        "format_instructions": format_instructions,
-        "reference_date": reference_date,
-    })
+    if llm is None:
+        # opencode / OpenAI-compatible transport (no LangChain dependency).
+        result: NLFilter = _llm_client_parse(nl, schema, reference_date)
+    else:
+        chain = prompt | llm | parser  # type: ignore
+        result = chain.invoke({
+            "query": nl,
+            "schema": schema,
+            "format_instructions": format_instructions,
+            "reference_date": reference_date,
+        })
     # Convert to backend filter shape
     f: Dict[str, Any] = {}
     if result.camera_id is not None:

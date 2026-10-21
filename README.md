@@ -160,6 +160,37 @@ target count and its action queries carry explicit time windows, so it is not
 protocol-matched to the deployment study.  The script prints this note itself;
 use `eval_retrieval_control.py` for the number that appears in the paper.
 
+### NL parser: opencode + DeepSeek V4.1 Flash by default
+
+The natural-language parser no longer depends on a hosted OpenAI key.  The
+default provider is **`opencode`**, which drives the local opencode runtime with
+the free **DeepSeek V4.1 Flash** model
+(`opencode/deepseek-v4.1-flash-free`); the previous `gpt-4o-mini` path still
+works by setting `LLM_PROVIDER=openai`.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `LLM_PROVIDER` | `opencode` | `opencode`, `openai`, `openai_compatible`, `openrouter`, `ollama` |
+| `NL_DEFAULT_MODEL` | `opencode/deepseek-v4.1-flash-free` | model id passed to the backend |
+| `OPENCODE_BASE_URL` | `http://127.0.0.1:4096` | local opencode server |
+| `OPENCODE_MODEL` | `opencode/deepseek-v4.1-flash-free` | model used by the opencode provider |
+| `OPENCODE_TRANSPORT` | `auto` | `http` (OpenAI-compatible endpoint) -> `session` (opencode session API) -> `cli` |
+| `OPENAI_BASE_URL` | *(empty)* | any OpenAI-compatible endpoint (vLLM, LM Studio, Ollama `/v1`, DeepSeek, OpenRouter) |
+
+`backend/app/services/llm_client.py` implements the transports and a tolerant
+JSON decoder: small models fence their JSON, add remarks after it, and emit
+slightly different shapes (`time.start` instead of `time.from_iso`,
+`count_constraint` as a bare integer, `objects` as plain strings), so
+`nl_parser.coerce_to_nlfilter` normalises the shape before Pydantic validation.
+The parser prompt is always rendered with its four placeholders
+(`{query}`, `{schema}`, `{format_instructions}`, `{reference_date}`) so that
+relative dates resolve against the archive epoch rather than the session date.
+
+```powershell
+$env:PYTHONIOENCODING='utf-8'
+python -c "from backend.app.services.nl_parser import parse_nl_with_llm; print(parse_nl_with_llm('show me a person wearing olive clothing between 17:01 and 17:03 on camera 0'))"
+```
+
 See `results/README.md` for the two-track provenance policy and
 `VERIFICATION.md` for the release checklist.
 
