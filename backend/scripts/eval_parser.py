@@ -11,7 +11,8 @@ itself, so the claim can be defended with a number instead of an assertion.
 
 What is measured
 ----------------
-Every query of ``backend/benchmarks/queries.jsonl`` is parsed through the
+Every query of the benchmark file (the protocol-matched control queries
+by default) is parsed through the
 *production* path (``backend.app.services.nl_parser.parse_nl_with_llm``) and
 the resulting filter is compared field by field against the reference parse
 stored in the same file.
@@ -55,8 +56,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 RESULTS_DIR = ROOT / "results"
-CACHE_DIR = ROOT / "backend" / "benchmarks" / "parser_cache"
-DEFAULT_QUERIES = ROOT / "backend" / "benchmarks" / "queries.jsonl"
+# The parser track shares the end-to-end track's cache and query file: the
+# same parses are then measured twice (fidelity here, retrieval there) and
+# the run is reproducible from the cache without calling the model again.
+CACHE_DIR = ROOT / "backend" / "benchmarks" / "parsed_cache"
+DEFAULT_QUERIES = ROOT / "backend" / "benchmarks" / "queries_control.jsonl"
 
 #: Fields compared between the parser output and the reference parse.
 FIELDS: Tuple[str, ...] = (
@@ -160,6 +164,29 @@ def _safe_name(model: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", model)
 
 
+def git_state() -> Dict[str, Any]:
+    """Best-effort record of the code the report was produced with."""
+    import subprocess
+
+    state: Dict[str, Any] = {"commit": None, "dirty": None}
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=str(ROOT), capture_output=True, text=True, timeout=15,
+        )
+        if commit.returncode == 0:
+            state["commit"] = commit.stdout.strip() or None
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(ROOT), capture_output=True, text=True, timeout=15,
+        )
+        if status.returncode == 0:
+            state["dirty"] = bool(status.stdout.strip())
+    except Exception:  # noqa: BLE001 - the metadata is optional
+        pass
+    return state
+
+
 def _round(value: Optional[float], digits: int) -> Optional[float]:
     if value is None:
         return None
@@ -219,8 +246,13 @@ def extract_window(parsed: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]
     return (str(start) if start else None, str(end) if end else None)
 
 
-def parsed_field(name: str, parsed: Dict[str, Any]) -> Any:
-    """Read one field out of the filter produced by the parser."""
+def parsed_field(name: str, parsed: Dict[str, Any], query_text: str = "") -> Any:
+    """Read one field out of the filter produced by the parser.
+
+    ``query_text`` is needed for the intent: the intent is the parser's
+    deterministic routing rule, not a model output, and the cached filter
+    does not carry the internal ``__intent`` key.
+    """
     if name == "camera_id":
         return parsed.get("camera_id")
     if name == "time_window":
@@ -236,7 +268,9 @@ def parsed_field(name: str, parsed: Dict[str, Any]) -> Any:
     if name == "count_constraint":
         return parsed.get("count_constraint")
     if name == "intent":
-        return parsed.get("__intent")
+        from backend.app.services.nl_parser import infer_intent
+
+        return parsed.get("__intent") or infer_intent(str(query_text or ""))
     raise KeyError(f"unknown field {name!r}")
 
 
@@ -633,7 +667,7 @@ def evaluate_query(query: Dict[str, Any], parsed: Dict[str, Any]) -> Dict[str, A
     fields: Dict[str, Dict[str, Any]] = {}
     for name in FIELDS:
         reference = reference_field(name, ref_parsed, category)
-        produced = parsed_field(name, parsed)
+        produced = parsed_field(name, parsed, str(query.get("text", "")))
         fields[name] = compare_field(name, reference, produced)
     return {
         "qid": query.get("qid"),
@@ -768,7 +802,12 @@ def parse_queries(
 
     for i, query in enumerate(queries, 1):
         qid = str(query.get("qid"))
-        entry = None if refresh else cache.get(qid)
+        # Same content-addressed key as the end-to-end track, so a parse is
+        # never reused for a different query text or a different model.
+        from backend.scripts.eval_end_to_end import cache_key
+
+        key = cache_key(qid, str(query.get("text", "")), model)
+        entry = None if refresh else cache.get(key)
         if entry is None:
             n_called += 1
             with _BackendCapture() as capture:
@@ -790,7 +829,7 @@ def parse_queries(
                 "seconds": round(elapsed, 3),
                 "model": used_model,
             }
-            cache.put(qid, entry)
+            cache.put(key, entry)
             cache.save()  # keep the run resumable
         else:
             n_cached += 1
@@ -803,8 +842,12 @@ def parse_queries(
             flush=True,
         )
     cache.save()
+    try:
+        cache_rel = str(cache_path.relative_to(ROOT)).replace("\\", "/")
+    except ValueError:
+        cache_rel = str(cache_path)
     meta = {
-        "cache_path": str(cache_path.relative_to(ROOT)).replace("\\", "/"),
+        "cache_path": cache_rel,
         "n_calls": n_called,
         "n_from_cache": n_cached,
         "models_used": models_used,
@@ -929,6 +972,8 @@ def build_report(
         }
 
     overall_fields = aggregate_fields(records)
+    camera_explicit = camera_explicit_stats(records)
+    intent_explicit = intent_explicit_stats(records)
 
     # Facts used by the limitation text (all computed, never hard-coded).
     facts = {
@@ -954,6 +999,30 @@ def build_report(
         ),
     }
 
+    # Interpretation counters: they separate "the reference is odd" from
+    # "the parse is wrong".  Every number is computed from the records.
+    intent_mismatch_action_filter = sum(
+        1 for r in records
+        if r["category"] in {"action", "filter"}
+        and r["fields"]["intent"]["status"] == "mismatch"
+    )
+    interpretation = {
+        "camera_id_dropped_but_not_expressible": overall_fields["camera_id"]["n_missing_in_parse"],
+        "camera_id_agreement_when_named": camera_explicit["agreement_rate"],
+        "object_name_dropped": overall_fields["object_name"]["n_missing_in_parse"],
+        "object_name_spurious": overall_fields["object_name"]["n_spurious_in_parse"],
+        "action_dropped": overall_fields["action"]["n_missing_in_parse"],
+        "action_conflicting": overall_fields["action"]["n_mismatch"],
+        "action_reference_motion_energy": facts["n_reference_action_motion_energy"],
+        "action_reference_natural_language": (
+            facts["n_reference_with_action"] - facts["n_reference_action_motion_energy"]
+        ),
+        "intent_mismatch_in_action_and_filter": intent_mismatch_action_filter,
+        "intent_mismatch_with_explicit_reference": (
+            intent_explicit["n_reference_with_intent"] - intent_explicit["n_agree"]
+        ),
+    }
+
     report: Dict[str, Any] = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "script": "backend/scripts/eval_parser.py",
@@ -964,6 +1033,7 @@ def build_report(
             "models_actually_used": meta.get("models_used", {}),
             "reference_date": reference_date,
             "queries_file": str(queries_path.relative_to(ROOT)).replace("\\", "/"),
+            "repo": git_state(),
             "note": (
                 "Single-camera released subset (camera 0); the paper's "
                 "4-camera deployment benchmark is not represented here."
@@ -980,7 +1050,7 @@ def build_report(
             },
         },
         "reference": {
-            "source": "the 'parsed' field of backend/benchmarks/queries.jsonl",
+            "source": "the 'parsed' field of the query file used for the run",
             "provenance": "metadata-derived (archive metadata), NOT human-annotated",
             "warning": (
                 "The reference is an approximation of the true query intent; a "
@@ -1002,20 +1072,25 @@ def build_report(
             category: by_category[category]["fields"] for category in categories
         },
         "time_window": window_stats(records),
-        "camera_id_explicit_text": camera_explicit_stats(records),
-        "intent_explicit_reference": intent_explicit_stats(records),
+        "camera_id_explicit_text": camera_explicit,
+        "intent_explicit_reference": intent_explicit,
+        "interpretation": interpretation,
         "latency": latency_stats(seconds),
         "latency_by_category": {
             category: by_category[category]["latency"] for category in categories
         },
         "failed_queries": failed,
         "failed_query_ids": [f["qid"] for f in failed],
+        "n_failed_queries": len(failed),
         "ambiguous_queries": ambiguous,
         "ambiguous_query_ids": [a["qid"] for a in ambiguous],
+        "n_ambiguous_queries": len(ambiguous),
         "conflict_queries": conflicts,
         "conflict_query_ids": [c["qid"] for c in conflicts],
+        "n_conflict_queries": len(conflicts),
         "dropped_field_queries": dropped,
         "dropped_field_query_ids": [d["qid"] for d in dropped],
+        "n_dropped_field_queries": len(dropped),
         "dropped_field_breakdown": {
             name: sum(1 for d in dropped if name in d["dropped_fields"])
             for name in FIELDS
@@ -1108,6 +1183,7 @@ def write_markdown_report(report: Dict[str, Any], path: Path) -> Path:
     overall = report["field_agreement_overall"]
     window = report["time_window"]
     latency = report["latency"]
+    interp = report.get("interpretation") or {}
 
     lines += [
         "# NL parser evaluation (agreement with the metadata-derived reference)",
@@ -1119,6 +1195,8 @@ def write_markdown_report(report: Dict[str, Any], path: Path) -> Path:
             f"`{k}` x{v}" for k, v in sorted(scope.get("models_actually_used", {}).items())
         ),
         f"- Generated at: {report['generated_at']}",
+        f"- Repo commit: `{scope.get('repo', {}).get('commit')}` "
+        f"(working tree dirty: {scope.get('repo', {}).get('dirty')})",
         f"- Queries: {report['dataset']['n_queries_evaluated']} of "
         f"{report['dataset']['n_queries_in_file']} in "
         f"`{report['dataset']['queries_file']}` "
@@ -1301,7 +1379,35 @@ def write_markdown_report(report: Dict[str, Any], path: Path) -> Path:
     lines += [
         "",
         f"Queries with at least one disagreement of any kind: "
-        f"{len(report['ambiguous_queries'])}.",
+        f"{report['n_ambiguous_queries']}.",
+        "",
+        "## Reading the disagreements",
+        "",
+        "The counters below separate the cases where the *reference* is the "
+        "odd one from the cases where the *parse* is the odd one. They are "
+        "computed from the same records as the tables above.",
+        "",
+        f"- `camera_id`: {interp['camera_id_dropped_but_not_expressible']} queries state no "
+        f"camera because their text does not name one; on the queries that do "
+        f"name a camera the agreement is "
+        f"{_fmt_pct(interp['camera_id_agreement_when_named'])}.",
+        f"- `object_name`: {interp['object_name_dropped']} queries state no object "
+        f"(the text names clothing or a track, not a person), while "
+        f"{interp['object_name_spurious']} queries state an object the reference "
+        f"does not (the parser says 'person' for the count queries, whose "
+        f"reference states no object at all) - the parse is more specific there, "
+        f"not wrong.",
+        f"- `action`: {interp['action_reference_natural_language']} reference action "
+        f"values are natural-language labels and "
+        f"{interp['action_reference_motion_energy']} are the internal token "
+        f"'motion_energy'; the parser dropped the field on "
+        f"{interp['action_dropped']} queries and produced a conflicting value on "
+        f"{interp['action_conflicting']}.",
+        f"- `intent`: {interp['intent_mismatch_in_action_and_filter']} mismatches "
+        f"come from the action and filter categories, whose reference falls back "
+        f"to the category name (a value the parser's intent vocabulary does not "
+        f"contain); {interp['intent_mismatch_with_explicit_reference']} mismatches "
+        f"remain for the queries whose reference states an explicit intent.",
         "",
         "## Known limitations",
         "",

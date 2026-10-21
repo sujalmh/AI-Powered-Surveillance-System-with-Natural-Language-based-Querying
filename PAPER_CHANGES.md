@@ -298,6 +298,9 @@ the PDF at 8 pages with a clean log.
   it.
 - The released fusion track does not reproduce the deployment ordering; the
   pseudo-track construction biases visual-only and is stated in the paper.
+- The end-to-end released-subset track is release evidence for the deployed
+  query path; it is single-camera and does not reproduce the 4-camera/312k
+  deployment numbers.
 
 ### Final submission package (INDICON 2026 template)
 
@@ -328,3 +331,23 @@ Deliverables (built by `backend/scripts/package_submission.py`):
 | `INDICON2026_submit/INDICON2026_850_source.zip` | `.tex` + `References.bib` + the kit's `IEEEtran.cls` + compile README; verified to compile standalone to the identical 8-page PDF |
 | `INDICON2026_submit.zip` | folder package with the PDF, the source bundle, the `.tex` and the `.bib` |
 | `dist/indicon2026_supplementary.zip` | code, benchmarks, results and paper source (`--with-data` adds clips and indices) |
+
+## 2026-10-22 - parser backend migration and end-to-end released-subset track
+
+| Change | Detail |
+|---|---|
+| NL parser backend | Migrated from the hosted `gpt-4o-mini` path to a provider-agnostic LLM layer (`backend/app/services/llm_client.py`).  The default provider is the local opencode runtime (`LLM_PROVIDER=opencode`, `OPENCODE_MODEL=opencode-go/beam-free`, fallback `opencode-go/minimax-m3.1-flash-free`; further models can be appended to the chain).  Any OpenAI-compatible endpoint is supported with `LLM_PROVIDER=openai_compatible` (alias `openai_compat`).  The hosted route stays reachable with `LLM_PROVIDER=openai`, whose model defaults to `gpt-4o-mini`. |
+| Transports, prompt and decoding | The opencode provider tries three transports in order (`http` -> `session` -> `cli`) and remembers a transport that the runtime does not expose.  The parser prompt is always rendered with `{query}`, `{schema}`, `{format_instructions}` and `{reference_date}`, so relative dates resolve against the archive epoch (`DATA_EPOCH_DATE=2026-03-01`) instead of the session date; a prompt with a leftover placeholder is refused.  On the CLI path the prompt is attached as a temporary file (`--file`) because it exceeds the Windows command-line length limit.  `extract_json_object` decodes fenced JSON, trailing prose, stray escapes and unquoted keys, and `nl_parser.coerce_to_nlfilter` normalises the answer shape before the Pydantic validation. |
+| New track | `backend/scripts/eval_end_to_end.py` -> `results/end_to_end_results.json` / `results/end_to_end_tables.md`: the natural-language query is parsed by the deployed LLM backend, the parsed filter (colour, zone, action, count constraint and the time window when the parser produced one) drives the structured branch, the semantic branch runs over the released OpenCLIP/FAISS scene index, and the production adaptive-alpha rule merges them.  The default query file is `backend/benchmarks/queries_control.jsonl`, the protocol-matched control, so this track and the control track differ only in where the filter comes from.  Parses are cached under `backend/benchmarks/parsed_cache/<model>.json`, so the run is reproducible and resumable.  Split: the standard 50 tune / 100 test partition, alpha selected on tune and reported on test. |
+| Parser-quality track | `backend/scripts/eval_parser.py` -> `results/parser_results.json` / `results/parser_results.md`: the production parser is run over every released query and compared field by field with the metadata-derived reference parse stored with the query.  The numbers are **agreement rates, not accuracy** (the reference is not human-annotated), so this track is release evidence, not a paper claim. |
+| Paper numbers | UNCHANGED.  The deployment headline numbers remain 0.666 -> 0.828 (C1), 0.785 -> 0.807 (C2), 91% (C3) and 6.0 s / 12.0 s (latency).  No paper number is taken from the new track. |
+
+The end-to-end track is released-subset evidence for the deployed query path.
+It is single-camera (123 clips, `camera_0`, 242 scene frames, 1,778 person
+descriptors) and does not reproduce the 4-camera/312k deployment numbers, so
+it is reported next to the deployment results and never merged with them.
+
+The provider free-tier quota is an environment constraint, not a paper
+dependency: the free tier of `opencode/deepseek-v4.1-flash-free` is
+quota-limited, which is why the default model is `opencode-go/beam-free` and
+the quota-limited id is not part of the default fallback chain.

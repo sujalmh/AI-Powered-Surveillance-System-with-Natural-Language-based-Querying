@@ -869,6 +869,31 @@ def _llm_client_parse(
     return coerce_to_nlfilter(data, raw_query=nl)
 
 
+def infer_intent(nl: str) -> str:
+    """Routing intent of a query: ``count``, ``track`` or ``find``.
+
+    This is a deterministic rule over the query text, not a model output: it
+    decides which branch the retrieval pipeline routes the query to, so it
+    must be reproducible without calling the model.  The evaluation harness
+    uses the same helper so that "what intent would the production path have
+    routed this query to?" is answered by the production rule and not by the
+    model.
+
+    A query that asks for a number of people or objects is a counting query
+    even when it does not use the word "count" ("show clips with exactly 3
+    people"); the numeric target is what selects the count branch, so it is
+    part of the rule.
+    """
+    low = (nl or "").lower()
+    if "count" in low or "how many" in low:
+        return "count"
+    if re.search(r"\b\d+\s+(?:people|persons|person|cars|vehicles|objects|visitors)\b", low):
+        return "count"
+    if "track" in low or "where" in low or "went" in low:
+        return "track"
+    return "find"
+
+
 def parse_nl_with_llm(nl: str) -> Dict[str, Any]:
     llm, parser, prompt = _get_lc_components()
     # Use model schema and format instructions for robust structured output
@@ -936,14 +961,8 @@ def parse_nl_with_llm(nl: str) -> Dict[str, Any]:
     # Query type classification (visual vs informational)
     f["query_type"] = result.query_type
     
-    # Intent: find | track | count (heuristic)
-    nl_low = nl.lower()
-    intent = "find"
-    if "count" in nl_low or "how many" in nl_low:
-        intent = "count"
-    elif "track" in nl_low or "where" in nl_low or "went" in nl_low:
-        intent = "track"
-    f["__intent"] = intent
+    # Intent: find | track | count (heuristic, shared with the evaluation)
+    f["__intent"] = infer_intent(nl)
 
     # Optional query subtype for system/status queries (alerts, cameras, etc.)
     subtype_raw = getattr(result, "query_subtype", None)
@@ -975,6 +994,7 @@ def parse_nl_with_llm(nl: str) -> Dict[str, Any]:
     )
 
     # Regex backstop for camera status questions — match explicit constructs only
+    nl_low = nl.lower()
     status_terms = r"(online|offline|active|inactive|down|up|running|stopped|on|off|live)"
     camera_status_pattern = rf"\b(?:status\s+of\s+(?:the\s+)?(?:camera|cameras)\s*(?:is|are)?\s+{status_terms}|(?:camera|cameras)\s*(?:'s|is|are)\s+{status_terms})\b"
     if re.search(camera_status_pattern, nl_low):

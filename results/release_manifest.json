@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-10-21T18:02:15.720114+00:00",
-  "git_commit": "fcf0f3701d4da1b5c86cc9deb740c08f74df79bb",
+  "generated_at_utc": "2026-10-21T20:58:42.857022+00:00",
+  "git_commit": "430bede639d10526c9e234c2ef992f6b4f25eef8",
   "platform": {
     "python": "3.12.4",
     "platform": "Windows-11-10.0.26300-SP0",
@@ -329,5 +329,69 @@
         "categories"
       ]
     }
+  },
+  "release_bundle": {
+    "archive": "S:\\college\\ai-surveillance\\dist\\indicon2026_supplementary.zip",
+    "checks": [
+      {
+        "name": "release archive present",
+        "status": "pass",
+        "detail": "indicon2026_supplementary.zip (1.41 MB, sha256 343d7fbb0b5e18d1)"
+      },
+      {
+        "name": "release archive contents",
+        "status": "pass",
+        "detail": "6 required entries present (llm_client.py, eval_end_to_end.py, test_llm_client.py, ...)"
+      },
+      {
+        "name": "no secrets in the release",
+        "status": "pass",
+        "detail": "no *.env/*.key/*.pem/credentials*/secrets* entries"
+      },
+      {
+        "name": "no parse caches in the release",
+        "status": "pass",
+        "detail": "no parsed_cache/parser_cache entries"
+      },
+      {
+        "name": "measured results shipped",
+        "status": "pass",
+        "detail": "all measured results present"
+      },
+      {
+        "name": "camera-ready PDF",
+        "status": "pass",
+        "detail": "8 pages (0.44 MB, sha256 ebdb99460925379c)"
+      },
+      {
+        "name": "source bundle",
+        "status": "pass",
+        "detail": "4 entries (INDICON2026Conference.tex, References.bib, IEEEtran.cls, README.txt)"
+      },
+      {
+        "name": "source bundle carries the current paper",
+        "status": "pass",
+        "detail": "INDICON2026Conference.tex is byte-identical to INDICON2026Conference.tex"
+      },
+      {
+        "name": "LaTeX log clean",
+        "status": "pass",
+        "detail": "no errors, 8 pages reported"
+      },
+      {
+        "name": "folder package",
+        "status": "pass",
+        "detail": "INDICON2026_submit.zip carries the PDF, the source bundle and the sources (0.56 MB)"
+      },
+      {
+        "name": "source bundle compiles standalone",
+        "status": "pass",
+        "detail": "rebuilt from INDICON2026_850_source.zip into a clean 8-page PDF (scratch: C:\\Users\\sujal\\AppData\\Local\\Temp\\opencode\\check_release)"
+      }
+    ],
+    "failed": 0,
+    "skipped": 0,
+    "passed": 11,
+    "ok": true
   }
 }

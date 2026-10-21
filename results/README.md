@@ -16,7 +16,8 @@ numbers.
   `camera_0` only, 242 scene frames, 1,778 person descriptors.  Every number here is produced
   by a script in this repository from the shipped metadata/index.  It is a
   reproducibility and code-path check, not a reproduction of the 4-camera
-  deployment.
+  deployment.  Every file below belongs to this second track; none of them
+  replaces a deployment number.
 
 ## Files
 
@@ -41,11 +42,45 @@ numbers.
   16-point soft-weight sensitivity sweep searched on the tune split, and the
   counting accuracy together with the label-noise ceiling that bounds it.
 - `end_to_end_results.json` / `end_to_end_tables.md`: the **end-to-end**
-  released-subset track - the natural-language query is parsed by the deployed
-  LLM backend (opencode + DeepSeek V4.1 Flash by default), the parsed filter
-  drives the structured branch, and the production adaptive-alpha rule merges
-  the branches.  Parses are cached under
-  `backend/benchmarks/parsed_cache/` so the run is reproducible.
+  released-subset track, produced by `backend/scripts/eval_end_to_end.py`.
+  The natural-language query is parsed by the deployed LLM backend (the local
+  opencode runtime by default, `opencode-go/beam-free`; any OpenAI-compatible
+  endpoint is supported), the parsed filter drives the structured branch
+  (colour, zone, action, count constraint and the time window when the parser
+  produced one), the semantic branch searches the released OpenCLIP/FAISS
+  scene index, and the production adaptive-alpha rule
+  (`result_merger.compute_adaptive_alpha`) merges the two branches.
+  The default query file is `backend/benchmarks/queries_control.jsonl`, the
+  protocol-matched control of `eval_retrieval_control.py` (same 150 queries,
+  same 50 tune / 100 test split, same relevance labels and same per-category
+  wording), so the two tracks differ only in where the filter comes from; the
+  raw released benchmark (`queries.jsonl`) can be run with `--queries`, but its
+  numbers are not protocol-matched with the control track.
+  Reported: test macro P@5 and per-category P@5 for five fixed alphas,
+  `adaptive`, `per_intent_tuned` and `paper_lookup`, plus count EM/MAE, the
+  per-category paired bootstrap with Holm correction and the grouped
+  bootstrap of `adaptive` against the tune-selected best fixed alpha.  The
+  alphas are selected on the tune split and the numbers are reported on the
+  test split.  Parses are cached under `backend/benchmarks/parsed_cache/` (see
+  `backend/benchmarks/parsed_cache/README.md`), so the run is reproducible and
+  resumable without the model.  A query the model cannot answer is scored
+  with a deterministic heuristic filter and flagged with `parse_ok: false`.
+  This track is released-subset evidence for the deployed query path; it is
+  single-camera and does **not** reproduce the 4-camera/312k deployment
+  numbers.
+- `parser_results.json` / `parser_results.md`: the **parser-quality** track,
+  produced by `backend/scripts/eval_parser.py`.  Every query of the released
+  benchmark is parsed through the production path
+  (`nl_parser.parse_nl_with_llm`) and the resulting filter is compared field
+  by field with the reference parse stored next to the query.  The reported
+  numbers are **agreement rates, not accuracy**: the reference is
+  reconstructed from the archive metadata and not annotated by a human, so a
+  disagreement can be a wrong reference rather than a wrong parse.  Reported:
+  per-field agreement overall and per category, the time-window error
+  (median absolute error, overlap rate with and without a tolerance), the
+  camera-id and intent agreement on the queries that state them, the parse
+  latency, the parse failures and the queries with at least one
+  disagreement.  The parses are cached under `backend/benchmarks/parser_cache/`.
 - `fusion_results.json` / `fusion_tables.md` / `fusion_queries.csv`:
   person-pair/track fusion baselines on the subset.
 - `alert_results.json` / `alert_results.md`: alert-authoring test split and
@@ -65,3 +100,6 @@ numbers.
 3. The subset is single-camera and author/metadata-labelled; it does not
    provide human IAA, cross-camera Re-ID, cross-site generalization, or
    full-deployment latency percentiles.
+4. Files that depend on an LLM parse record the provider and the model that
+   produced them in their `scope` block.  A provider quota or a model change
+   affects that track only; it never changes a deployment number.

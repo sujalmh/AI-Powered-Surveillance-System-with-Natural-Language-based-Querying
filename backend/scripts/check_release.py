@@ -5,25 +5,94 @@ released single-camera subset, the two FAISS indices, the benchmark files, and
 the installed package versions, then writes a machine-readable manifest under
 ``results/``.
 
+It also *verifies* the two delivery bundles:
+
+* the supplementary release (``dist/indicon2026_supplementary.zip``) must
+  contain the provider-agnostic LLM client, the end-to-end evaluation script
+  and the matching tests, must not contain a secret or a regenerable parse
+  cache, and must carry the measured results that exist on disk;
+* the submission bundle (``INDICON2026_submit/INDICON2026_850.pdf`` and
+  ``INDICON2026_850_source.zip``) must be an 8-page camera-ready with a clean
+  LaTeX log, and the source bundle must compile standalone into the same
+  8-page PDF.
+
+The standalone compile happens in a scratch directory below the system
+temporary directory -- never inside the repository.
+
 Run:
     python backend/scripts/check_release.py
+    python backend/scripts/check_release.py --strict     # missing artefacts fail too
 """
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import platform
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
+import zipfile
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "data"
 RESULTS = ROOT / "results"
+SUBMIT = ROOT / "INDICON2026_submit"
+DIST = ROOT / "dist"
+BUNDLE = DIST / "indicon2026_supplementary.zip"
+
+# The LaTeX helpers live next to this script and are shared with the
+# packaging script so that both apply exactly the same rules.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from package_submission import (  # noqa: E402
+    CLASS_NAME,
+    EXPECTED_PAGES,
+    PAPER_BIB,
+    PAPER_TEX,
+    README_NAME,
+    check_latex_log,
+    compile_paper,
+    find_tool,
+    pdf_page_count,
+)
+
+# Files the release bundle has to carry.
+BUNDLE_REQUIRED = [
+    "backend/app/services/llm_client.py",
+    "backend/app/services/nl_parser.py",
+    "backend/scripts/eval_end_to_end.py",
+    "backend/tests/test_llm_client.py",
+    "backend/requirements.txt",
+    "MANIFEST.txt",
+]
+
+# Measured results: shipped when they exist on disk.
+BUNDLE_OPTIONAL_RESULTS = [
+    "results/end_to_end_results.json",
+    "results/end_to_end_tables.md",
+    "results/parser_results.json",
+    "results/parser_results.md",
+]
+
+# Never ship these.
+BUNDLE_FORBIDDEN_PARTS = {"parsed_cache", "parser_cache", "__pycache__", ".pytest_cache"}
+BUNDLE_FORBIDDEN_SUFFIXES = {".env", ".key", ".pem", ".pfx", ".p12", ".jks", ".keystore"}
+BUNDLE_FORBIDDEN_NAMES = {
+    ".env",
+    "id_rsa",
+    "id_ed25519",
+    "credentials",
+    "credentials.json",
+    "secrets.json",
+    "secret.txt",
+}
+BUNDLE_FORBIDDEN_PREFIXES = ("secret", "secrets", "credential", "credentials", ".env")
 
 
 def sha256(path: Path) -> str:
@@ -170,8 +239,381 @@ def benchmark_info(path: Path, text_field: str = "text") -> Dict[str, Any]:
     }
 
 
-def main() -> int:
-    RESULTS.mkdir(exist_ok=True)
+# ---------------------------------------------------------------------------
+# bundle verification
+# ---------------------------------------------------------------------------
+
+
+def _check(name: str, status: str, detail: str) -> Dict[str, str]:
+    return {"name": name, "status": status, "detail": detail}
+
+
+def verify_release_bundle(bundle: Path) -> List[Dict[str, str]]:
+    """Check the supplementary release archive."""
+    checks: List[Dict[str, str]] = []
+    if not bundle.is_file():
+        checks.append(
+            _check(
+                "release archive present",
+                "skip",
+                f"{bundle} not built yet (run backend/scripts/package_release.py)",
+            )
+        )
+        return checks
+
+    checks.append(
+        _check(
+            "release archive present",
+            "pass",
+            f"{bundle.name} ({bundle.stat().st_size/1e6:.2f} MB, sha256 {sha256(bundle)[:16]})",
+        )
+    )
+    with zipfile.ZipFile(bundle) as z:
+        names = set(z.namelist())
+
+    missing = [rel for rel in BUNDLE_REQUIRED if rel not in names]
+    if missing:
+        checks.append(
+            _check(
+                "release archive contents",
+                "fail",
+                "missing: " + ", ".join(missing),
+            )
+        )
+    else:
+        checks.append(
+            _check(
+                "release archive contents",
+                "pass",
+                f"{len(BUNDLE_REQUIRED)} required entries present (llm_client.py, eval_end_to_end.py, test_llm_client.py, ...)",
+            )
+        )
+
+    # secrets
+    offenders: List[str] = []
+    for name in sorted(names):
+        base = name.rsplit("/", 1)[-1]
+        lowered = base.lower()
+        if lowered.endswith(tuple(BUNDLE_FORBIDDEN_SUFFIXES)):
+            offenders.append(name)
+        elif lowered in BUNDLE_FORBIDDEN_NAMES:
+            offenders.append(name)
+        elif lowered.startswith(BUNDLE_FORBIDDEN_PREFIXES):
+            offenders.append(name)
+        elif "backend/.env" in name:
+            offenders.append(name)
+    if offenders:
+        checks.append(
+            _check(
+                "no secrets in the release",
+                "fail",
+                "secret-like entries: " + ", ".join(offenders),
+            )
+        )
+    else:
+        checks.append(
+            _check(
+                "no secrets in the release",
+                "pass",
+                "no *.env/*.key/*.pem/credentials*/secrets* entries",
+            )
+        )
+
+    # regenerable caches
+    cached = [name for name in sorted(names) if set(name.split("/")) & BUNDLE_FORBIDDEN_PARTS]
+    if cached:
+        checks.append(
+            _check(
+                "no parse caches in the release",
+                "fail",
+                "regenerable cache entries: " + ", ".join(cached[:10]),
+            )
+        )
+    else:
+        checks.append(
+            _check(
+                "no parse caches in the release",
+                "pass",
+                "no parsed_cache/parser_cache entries",
+            )
+        )
+
+    # measured results
+    missing_results: List[str] = []
+    absent_results: List[str] = []
+    for rel in BUNDLE_OPTIONAL_RESULTS:
+        if not (ROOT / rel).is_file():
+            absent_results.append(rel)
+        elif rel not in names:
+            missing_results.append(rel)
+    if missing_results:
+        checks.append(
+            _check(
+                "measured results shipped",
+                "fail",
+                "present on disk but absent from the archive: " + ", ".join(missing_results),
+            )
+        )
+    else:
+        detail = "all measured results present"
+        if absent_results:
+            detail += "; not produced yet: " + ", ".join(absent_results)
+        checks.append(_check("measured results shipped", "pass", detail))
+
+    return checks
+
+
+def verify_submission_bundle(
+    submit_dir: Path, folder_zip: Path, work_dir: Path, compile_source: bool
+) -> List[Dict[str, str]]:
+    """Check the camera-ready PDF and the source bundle."""
+    checks: List[Dict[str, str]] = []
+
+    pdf = submit_dir / "INDICON2026_850.pdf"
+    source_zip = submit_dir / "INDICON2026_850_source.zip"
+
+    # 1. the camera-ready PDF is 8 pages
+    if not pdf.is_file():
+        checks.append(_check("camera-ready PDF", "skip", f"{pdf.name} not built yet"))
+    else:
+        pages = pdf_page_count(pdf)
+        if pages is None:
+            checks.append(_check("camera-ready PDF", "fail", "the page count could not be determined"))
+        elif pages != EXPECTED_PAGES:
+            checks.append(
+                _check("camera-ready PDF", "fail", f"{pages} pages, expected {EXPECTED_PAGES}")
+            )
+        else:
+            checks.append(
+                _check(
+                    "camera-ready PDF",
+                    "pass",
+                    f"{pages} pages ({pdf.stat().st_size/1e6:.2f} MB, sha256 {sha256(pdf)[:16]})",
+                )
+            )
+
+    # 2. the source bundle carries the current sources
+    if not source_zip.is_file():
+        checks.append(_check("source bundle", "skip", f"{source_zip.name} not built yet"))
+        return checks
+    with zipfile.ZipFile(source_zip) as z:
+        entries = set(z.namelist())
+        wanted = {PAPER_TEX, PAPER_BIB, CLASS_NAME, README_NAME}
+        absent = sorted(wanted - entries)
+        if absent:
+            checks.append(
+                _check("source bundle", "fail", "missing entries: " + ", ".join(absent))
+            )
+        else:
+            checks.append(
+                _check(
+                    "source bundle",
+                    "pass",
+                    f"{len(entries)} entries ({PAPER_TEX}, {PAPER_BIB}, {CLASS_NAME}, {README_NAME})",
+                )
+            )
+        tex_in_zip = z.read(PAPER_TEX)
+    reference = submit_dir / PAPER_TEX
+    if not reference.is_file():
+        reference = SUBMIT / PAPER_TEX
+    if not reference.is_file():
+        checks.append(
+            _check(
+                "source bundle carries the current paper",
+                "skip",
+                f"{PAPER_TEX} is not available to compare against",
+            )
+        )
+    else:
+        current_tex = reference.read_bytes()
+        if tex_in_zip != current_tex:
+            checks.append(
+                _check(
+                    "source bundle carries the current paper",
+                    "fail",
+                    f"{PAPER_TEX} inside {source_zip.name} differs from {reference}",
+                )
+            )
+        else:
+            checks.append(
+                _check(
+                    "source bundle carries the current paper",
+                    "pass",
+                    f"{PAPER_TEX} is byte-identical to {reference.name}",
+                )
+            )
+
+    # 3. the repository log, when it is around, is clean
+    log = submit_dir / "INDICON2026Conference.log"
+    if not log.is_file():
+        checks.append(
+            _check(
+                "LaTeX log clean",
+                "skip",
+                "INDICON2026_submit/INDICON2026Conference.log not present "
+                "(it is git-ignored; the standalone compile below checks the same rules)",
+            )
+        )
+    else:
+        errors, _warnings, pages = check_latex_log(log.read_text(encoding="utf-8", errors="replace"))
+        if errors:
+            checks.append(_check("LaTeX log clean", "fail", "; ".join(errors[:5])))
+        else:
+            checks.append(_check("LaTeX log clean", "pass", f"no errors, {pages} pages reported"))
+
+    # 4. the folder-level package
+    if not folder_zip.is_file():
+        checks.append(_check("folder package", "skip", "INDICON2026_submit.zip not built yet"))
+    else:
+        with zipfile.ZipFile(folder_zip) as z:
+            entries = set(z.namelist())
+        wanted = {
+            f"INDICON2026_submit/{pdf.name}",
+            f"INDICON2026_submit/{source_zip.name}",
+            f"INDICON2026_submit/{PAPER_TEX}",
+            f"INDICON2026_submit/{PAPER_BIB}",
+        }
+        absent = sorted(wanted - entries)
+        if absent:
+            checks.append(
+                _check("folder package", "fail", "missing entries: " + ", ".join(absent))
+            )
+        else:
+            checks.append(
+                _check(
+                    "folder package",
+                    "pass",
+                    f"INDICON2026_submit.zip carries the PDF, the source bundle and the sources "
+                    f"({folder_zip.stat().st_size/1e6:.2f} MB)",
+                )
+            )
+
+    # 5. the source bundle compiles standalone
+    if not compile_source:
+        checks.append(_check("source bundle compiles standalone", "skip", "--no-compile was given"))
+        return checks
+
+    root_resolved = ROOT.resolve()
+    if work_dir.resolve() == root_resolved or root_resolved in work_dir.resolve().parents:
+        raise SystemExit(
+            f"error: the scratch directory {work_dir} is inside the repository; "
+            f"pick a directory outside it"
+        )
+    src = work_dir / "src"
+    if src.exists():
+        shutil.rmtree(src)
+    src.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(source_zip) as z:
+        z.extractall(src)
+
+    try:
+        pdflatex = find_tool("pdflatex")
+        bibtex = find_tool("bibtex")
+        built_pdf, built_log, _transcript = compile_paper(src, pdflatex, bibtex)
+    except SystemExit as exc:
+        checks.append(
+            _check("source bundle compiles standalone", "fail", f"the LaTeX build failed: {exc}")
+        )
+        return checks
+
+    errors, _warnings, pages = check_latex_log(
+        built_log.read_text(encoding="utf-8", errors="replace")
+    )
+    actual = pdf_page_count(built_pdf)
+    if actual is None:
+        errors.append("the compiled PDF has no readable page count")
+    elif actual != EXPECTED_PAGES:
+        errors.append(f"the compiled PDF has {actual} pages, expected {EXPECTED_PAGES}")
+    if errors:
+        checks.append(
+            _check("source bundle compiles standalone", "fail", "; ".join(errors[:5]))
+        )
+    else:
+        checks.append(
+            _check(
+                "source bundle compiles standalone",
+                "pass",
+                f"rebuilt from {source_zip.name} into a clean {actual}-page PDF (scratch: {work_dir})",
+            )
+        )
+    return checks
+
+
+def print_checks(checks: List[Dict[str, str]]) -> None:
+    print("bundle checks:")
+    for check in checks:
+        mark = {"pass": "ok  ", "fail": "FAIL", "skip": "skip"}[check["status"]]
+        print(f"  [{mark}] {check['name']}: {check['detail']}")
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    ap = argparse.ArgumentParser(
+        description="Inventory the released subset and verify the two INDICON 2026 delivery bundles.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    ap.add_argument(
+        "--bundle",
+        default=str(BUNDLE),
+        help="supplementary release archive to verify (default: dist/indicon2026_supplementary.zip)",
+    )
+    ap.add_argument(
+        "--submit-dir",
+        default=str(SUBMIT),
+        help="folder holding the camera-ready PDF and the source bundle (default: INDICON2026_submit)",
+    )
+    ap.add_argument(
+        "--folder-zip",
+        default=str(ROOT / "INDICON2026_submit.zip"),
+        help="folder-level submission package (default: INDICON2026_submit.zip in the repository root)",
+    )
+    ap.add_argument(
+        "--manifest-dir",
+        default=str(RESULTS),
+        help="directory the release manifest is written to (default: results)",
+    )
+    ap.add_argument(
+        "--work-dir",
+        default=str(Path(tempfile.gettempdir()) / "opencode" / "check_release"),
+        help="scratch directory for the standalone LaTeX build; must be outside the repository "
+        "(default: <temp>/opencode/check_release)",
+    )
+    ap.add_argument(
+        "--no-compile",
+        action="store_true",
+        help="do not rebuild the source bundle (skips the standalone compile check)",
+    )
+    ap.add_argument(
+        "--no-bundle-check",
+        action="store_true",
+        help="only write the inventory manifest, do not verify the bundles",
+    )
+    ap.add_argument(
+        "--strict",
+        action="store_true",
+        help="treat skipped checks (missing artefacts) as failures",
+    )
+    ap.add_argument(
+        "--keep-work",
+        action="store_true",
+        help="keep the scratch directory after the standalone compile",
+    )
+    args = ap.parse_args(argv)
+
+    manifest_dir = Path(args.manifest_dir).expanduser()
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    work_dir = Path(args.work_dir).expanduser()
+
+    checks: List[Dict[str, str]] = []
+    if not args.no_bundle_check:
+        checks += verify_release_bundle(Path(args.bundle).expanduser())
+        checks += verify_submission_bundle(
+            Path(args.submit_dir).expanduser(),
+            Path(args.folder_zip).expanduser(),
+            work_dir,
+            compile_source=not args.no_compile,
+        )
+
+    manifest_dir.mkdir(parents=True, exist_ok=True)
     clips = sorted((DATA / "clips" / "camera_0").glob("*.mp4"))
     snapshots = sorted((DATA / "snapshots" / "camera_0").glob("*.jpg"))
     recordings = sorted((DATA / "recordings" / "camera_0").glob("*.mp4"))
@@ -201,6 +643,9 @@ def main() -> int:
     person_colors = Counter(str(x.get("color")) for x in person_meta)
     person_attrs = Counter(str(x.get("attribute_text")) for x in person_meta)
     person_ts = sorted({str(x.get("timestamp")) for x in person_meta if x.get("timestamp")})
+
+    failed = [c for c in checks if c["status"] == "fail"]
+    skipped = [c for c in checks if c["status"] == "skip"]
 
     manifest: Dict[str, Any] = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -287,9 +732,17 @@ def main() -> int:
                 ROOT / "backend" / "benchmarks" / "splits_control.json", text_field="qid"
             ),
         },
+        "release_bundle": {
+            "archive": str(Path(args.bundle).expanduser()),
+            "checks": checks,
+            "failed": len(failed),
+            "skipped": len(skipped),
+            "passed": len(checks) - len(failed) - len(skipped),
+            "ok": not failed and not (skipped and args.strict),
+        },
     }
 
-    out_json = RESULTS / "release_manifest.json"
+    out_json = manifest_dir / "release_manifest.json"
     out_json.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
 
     lines = [
@@ -331,6 +784,17 @@ def main() -> int:
             lines.append(f"- `{info['path']}`: {info.get('rows', '?')} rows{suffix}")
     lines += [
         "",
+        "## Delivery bundles",
+        "",
+    ]
+    if checks:
+        for check in checks:
+            mark = {"pass": "ok", "fail": "FAIL", "skip": "skipped"}[check["status"]]
+            lines.append(f"- **{mark}** -- {check['name']}: {check['detail']}")
+    else:
+        lines.append("- bundle verification was skipped (`--no-bundle-check`)")
+    lines += [
+        "",
         "## Reproduce",
         "",
         "```powershell",
@@ -342,9 +806,11 @@ def main() -> int:
         "python backend/scripts/eval_alpha_competitors.py",
         "python backend/scripts/eval_fusion.py",
         "python backend/scripts/eval_alerts.py",
+        "python backend/scripts/eval_end_to_end.py",
         "python backend/scripts/measure_latency.py",
         "python backend/scripts/eval_retrieval.py   # raw smoke test, not protocol-matched",
-        "python backend/scripts/package_release.py  # build the supplementary archive",
+        "python backend/scripts/package_submission.py  # camera-ready PDF + source bundle",
+        "python backend/scripts/package_release.py    # build the supplementary archive",
         "```",
         "",
         "The C1 number quoted in the paper comes from `eval_retrieval_control.py`;",
@@ -365,8 +831,26 @@ def main() -> int:
         "is released.",
         "",
     ]
-    (RESULTS / "release_manifest.md").write_text("\n".join(lines), encoding="utf-8")
-    print(f"Wrote {out_json} and {RESULTS / 'release_manifest.md'}")
+    (manifest_dir / "release_manifest.md").write_text("\n".join(lines), encoding="utf-8")
+    print(f"Wrote {out_json} and {manifest_dir / 'release_manifest.md'}")
+    if checks:
+        print_checks(checks)
+    if not args.keep_work and work_dir.exists() and not args.no_compile:
+        shutil.rmtree(work_dir, ignore_errors=True)
+    if failed:
+        sys.stdout.flush()
+        print(f"\n{len(failed)} bundle check(s) FAILED", file=sys.stderr)
+        for check in failed:
+            print(f"  - {check['name']}: {check['detail']}", file=sys.stderr)
+        return 1
+    if skipped and args.strict:
+        sys.stdout.flush()
+        print(f"\n{len(skipped)} bundle check(s) skipped (--strict)", file=sys.stderr)
+        for check in skipped:
+            print(f"  - {check['name']}: {check['detail']}", file=sys.stderr)
+        return 1
+    if skipped:
+        print(f"\n{len(skipped)} bundle check(s) skipped (not a failure without --strict)")
     return 0
 
 

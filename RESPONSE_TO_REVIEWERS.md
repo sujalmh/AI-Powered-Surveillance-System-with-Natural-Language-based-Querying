@@ -77,3 +77,58 @@ stated as limitations rather than estimated:
   limitation note, including the fact that its ordering differs from the
   deployment one because the pseudo-tracks were formed from the visual branch
   and therefore bias visual-only upwards.
+
+---
+
+## Independent evidence audit (2026-10-22)
+
+An independent read-only trace of every numeric claim in the manuscript
+against `results/`, `backend/` and the built PDF (`PAPER_EVIDENCE_AUDIT.md`,
+5 blockers, 11 major items, 14 minor nits) was applied in full. **The
+deployment numbers are unchanged**: `0.666 -> 0.828` macro P@5, `0.785 ->
+0.807` F1@10, `91%` alert rule-correctness, `6.0 s / 12.0 s` query latency,
+`312,544` person descriptors, 4 cameras, 2 FPS and the 109 ms person-index
+median are all still the primary evidence, and the PDF still builds to exactly
+8 pages with zero overfull box and zero undefined reference.
+
+* **B1 — action-query mechanism vs. Table II.** §IV-B now states that the
+  deployed pipeline routes action queries semantic-only, so `α` is inert for
+  them in production, and that the `α`-sweep harness scores them by a
+  time-overlap proxy; the `α=1.0` column of Table II therefore must not be
+  read as structured-branch noise injection. The same caveat is repeated in
+  the "Query resolution" paragraph of §VII.
+* **B2 — override-gap wording.** The "Released-subset check (C1)" paragraph no
+  longer claims that the released subset reproduces the override gap. It now
+  says that the overrides are not harmful, that the best per-category fixed
+  `α` (`0.7`) happens to match the adaptive rule on all five categories of the
+  subset, and that the subset therefore does not reproduce the deployment gain.
+* **B3 — the contradicting raw-benchmark ordering is now disclosed.** The
+  paper states that the release also ships a *raw*, non-protocol-matched smoke
+  benchmark (its count questions carry no target count, its action queries
+  carry a time window the structured branch can exploit) which ranks adaptive
+  below the best fixed `α` (`0.486` vs. `0.568`) and prefers `α=1.0` on action
+  queries (`0.520`), and it calls the control a **post-hoc** protocol-matched
+  control everywhere it is described. The abstract and the evaluation setup
+  repeat that the deployment per-query export was not preserved, so the
+  deployment CIs and `p`-values are not re-computable.
+* **B4 — learned-`α` failure mode.** The learned competitor is now described
+  correctly: it collapses to the constant `α=0.5`, matches the closed-form
+  rule on both override categories (count `0.39`, action `0.09`) and loses
+  only on the soft zone (find `0.91` vs. `0.92`, filter `0.47` vs. `0.48`).
+* **B5 — release-link wording.** The cited repository URL returns HTTP 404 and
+  has been removed. The footnote and the conclusion now refer to the
+  supplementary artifact, and the abstract says the harness, benchmark
+  definitions and reproducibility track are "included in the supplementary
+  artifact" rather than "released"; the public URL is withheld from this
+  preprint and will be given on acceptance.
+
+Two structural displacements were needed to keep the 8-page limit: the
+consolidated comparison table (former Table V) was **deleted** because it
+restated Tables II and IV and was never cited — the R1-15/R2-1 rows above are
+therefore superseded by Tables II, IV and VI — and the "Generalization"
+paragraph was folded into the conclusion, which now carries the
+schema-decoupling statement and the single-premises caveat. The remaining
+major items (M1–M10) and the minor nits were applied in the manuscript
+without changing any headline number; two audit items fall outside the
+manuscript and were left to their owners: the README captioning stack and the
+stale checkmark/test count in `VERIFICATION.md`.

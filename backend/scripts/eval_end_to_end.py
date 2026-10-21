@@ -226,6 +226,37 @@ def normalise_for_eval(row: Dict[str, Any], use_parsed_time: bool = True) -> Dic
     return out
 
 
+def normalise_oracle(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Drive the branch with the metadata-derived reference filter instead.
+
+    This is the control of the control: the same harness, the same protocol,
+    the same labels, but the filter comes from the benchmark's reference parse
+    rather than from the parser.  It isolates the parser's contribution, and
+    it must reproduce the control track's macro P@5 exactly -- if it does not,
+    the two harnesses are not equivalent and no comparison between them means
+    anything.
+    """
+    ref = row.get("parsed") or {}
+    out = dict(row)
+    count_constraint = ref.get("count_constraint")
+    if count_constraint is None and ref.get("count_target_in_text") is not None:
+        count_constraint = {"eq": int(ref["count_target_in_text"])}
+    out["parsed"] = {
+        "time_start": ref.get("time_start"),
+        "time_end": ref.get("time_end"),
+        "camera_id": ref.get("camera_id"),
+        "count_target_in_text": ref.get("count_target_in_text"),
+        "count_constraint": count_constraint,
+        "objects.color": ref.get("objects.color"),
+        "objects.object_name": ref.get("objects.object_name"),
+        "attributes": list(ref.get("attributes") or []),
+        "zone": ref.get("zone"),
+        "action": ref.get("action"),
+        "event": ref.get("event"),
+    }
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default=None, help="model id override")
@@ -236,6 +267,10 @@ def main() -> None:
                     help="query file (default: the protocol-matched control file)")
     ap.add_argument("--out-prefix", default="end_to_end",
                     help="prefix of the result files written under results/")
+    ap.add_argument("--parse-source", choices=("llm", "oracle"), default="llm",
+                    help="'llm': the parser's own answer drives the branch; "
+                         "'oracle': the benchmark's reference filter does (the "
+                         "harness-equivalence control)")
     ap.add_argument("--benchmark-time", action="store_true",
                     help="use the benchmark's query window instead of the parsed one")
     args = ap.parse_args()
@@ -257,10 +292,15 @@ def main() -> None:
         for line in queries_path.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
-    print(f"parsing {min(args.limit, len(queries))} queries with the deployed parser...")
-    parsed = parse_queries(queries, model, args.limit, args.refresh)
-    rows = [normalise_for_eval(r, use_parsed_time=not args.benchmark_time)
-            for r in parsed["rows"]]
+    if args.parse_source == "oracle":
+        print("parse source: ORACLE (the benchmark's reference filter)")
+        rows = [normalise_oracle(q) for q in queries[: args.limit or None]]
+        parsed = {"rows": rows, "cache": "n/a (reference filter)"}
+    else:
+        print(f"parsing {min(args.limit, len(queries))} queries with the deployed parser...")
+        parsed = parse_queries(queries, model, args.limit, args.refresh)
+        rows = [normalise_for_eval(r, use_parsed_time=not args.benchmark_time)
+                for r in parsed["rows"]]
 
     # --- retrieval over the released scene index -----------------------------
     index, frames, clips, clip_ids = erc.load_scene_index()
@@ -460,6 +500,7 @@ def main() -> None:
             "track": "end-to-end released-subset evaluation (real LLM parse)",
             "model": model,
             "provider": cfg.get("provider"),
+            "parse_source": args.parse_source,
             "queries": query_file,
             "protocol": (
                 "protocol-matched with eval_retrieval_control.py: same queries, "

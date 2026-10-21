@@ -1,7 +1,7 @@
 # Release manifest
 
-Generated: `2026-10-21T18:02:15.720114+00:00`
-Git: `fcf0f3701d4da1b5c86cc9deb740c08f74df79bb`
+Generated: `2026-10-21T20:58:42.857022+00:00`
+Git: `430bede639d10526c9e234c2ef992f6b4f25eef8`
 
 ## Subset
 
@@ -22,6 +22,20 @@ Git: `fcf0f3701d4da1b5c86cc9deb740c08f74df79bb`
 - `backend\benchmarks\splits.json`: JSON object (keys: seed, tune, test, n_tune, n_test, stratified_by, note)
 - `backend\benchmarks\splits_control.json`: JSON object (keys: n_tune, n_test, total, seed, source, tune, test, note, categories)
 
+## Delivery bundles
+
+- **ok** -- release archive present: indicon2026_supplementary.zip (1.41 MB, sha256 343d7fbb0b5e18d1)
+- **ok** -- release archive contents: 6 required entries present (llm_client.py, eval_end_to_end.py, test_llm_client.py, ...)
+- **ok** -- no secrets in the release: no *.env/*.key/*.pem/credentials*/secrets* entries
+- **ok** -- no parse caches in the release: no parsed_cache/parser_cache entries
+- **ok** -- measured results shipped: all measured results present
+- **ok** -- camera-ready PDF: 8 pages (0.44 MB, sha256 ebdb99460925379c)
+- **ok** -- source bundle: 4 entries (INDICON2026Conference.tex, References.bib, IEEEtran.cls, README.txt)
+- **ok** -- source bundle carries the current paper: INDICON2026Conference.tex is byte-identical to INDICON2026Conference.tex
+- **ok** -- LaTeX log clean: no errors, 8 pages reported
+- **ok** -- folder package: INDICON2026_submit.zip carries the PDF, the source bundle and the sources (0.56 MB)
+- **ok** -- source bundle compiles standalone: rebuilt from INDICON2026_850_source.zip into a clean 8-page PDF (scratch: C:\Users\sujal\AppData\Local\Temp\opencode\check_release)
+
 ## Reproduce
 
 ```powershell
@@ -33,9 +47,11 @@ python backend/scripts/eval_retrieval_control.py
 python backend/scripts/eval_alpha_competitors.py
 python backend/scripts/eval_fusion.py
 python backend/scripts/eval_alerts.py
+python backend/scripts/eval_end_to_end.py
 python backend/scripts/measure_latency.py
 python backend/scripts/eval_retrieval.py   # raw smoke test, not protocol-matched
-python backend/scripts/package_release.py  # build the supplementary archive
+python backend/scripts/package_submission.py  # camera-ready PDF + source bundle
+python backend/scripts/package_release.py    # build the supplementary archive
 ```
 
 The C1 number quoted in the paper comes from `eval_retrieval_control.py`;

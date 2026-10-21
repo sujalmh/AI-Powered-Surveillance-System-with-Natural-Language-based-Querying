@@ -1,7 +1,9 @@
 # Benchmarks — construction, provenance, splits
 
 Everything in this folder is regenerated from the **released single-camera
-subset** by the scripts named below. No file here is a hand-written
+subset** by the scripts named below, except `parsed_cache/` and
+`parser_cache/`, which are build artifacts of the end-to-end and the parser
+track. No file here is a hand-written
 placeholder, and no label is human-annotated.
 
 ## Files
@@ -14,6 +16,8 @@ placeholder, and no label is human-annotated.
 | `queries_control.jsonl`, `splits_control.json` | 150 (50/100) | `build_subset_control.py` | post-hoc protocol-matched control (see below) |
 | `alert_utterances.jsonl` | 120 (60 clean + 60 stress) | authored for this revision | author-constructed, closed vocabulary, 30/30 dev/test |
 | `alert_schema.json` | — | authored | canonical 9-field rule schema |
+| `parsed_cache/<model>.json` | one entry per parsed query | `backend/scripts/eval_end_to_end.py` (via `llm_client.ParseCache`) | build artifact: the LLM parse of each query id; not a benchmark input |
+| `parser_cache/<model>.json` | one entry per parsed query | `backend/scripts/eval_parser.py` (via `llm_client.ParseCache`) | build artifact: the LLM parse of each query id; not a benchmark input |
 
 Regenerate everything with:
 
@@ -78,6 +82,93 @@ measurements in the paper.
 - `alert_schema.json` — the 9-tuple alert rule schema.
 - `nlfilter_schema.json` — query filter schema pointer.
 
+## Parse cache
+
+`parsed_cache/` and `parser_cache/` hold the on-disk parse caches of the
+end-to-end track (`eval_end_to_end.py`) and of the parser track
+(`eval_parser.py`).  They are **build artifacts**, not benchmark inputs:
+`queries.jsonl` and `splits.json` stay the only inputs of the benchmark, and
+`build_subset.py` / `build_subset_control.py` never read a cache.
+
+*   One JSON file per model id; the file name is the model id with `/` and `:`
+    replaced by `_` (for example `opencode-go_beam-free.json`).
+*   The file is a JSON object keyed by query id (the `qid` used in
+    `queries.jsonl`) plus a digest of the query text and the model
+    (`<qid>:<sha1-12>`), so a stale parse is never reused after the benchmark
+    is rebuilt or the model changes.  Each value holds the parsed filter in
+    the backend filter shape (`timestamp`, `camera_id`,
+    `objects.object_name`, `objects.color`, `zone`, `action`,
+    `count_constraint`), the flag `ok` (`false` when the parse failed and the
+    deterministic heuristic fallback was used) and the parse duration
+    `seconds`; a failed parse also stores the truncated `error`.  The parser
+    track (`parser_cache/`) uses the same value shape but keys it by the plain
+    query id.
+*   `backend/app/services/llm_client.ParseCache` reads and writes it, and
+    both evaluation scripts save it after every query.  A run stopped by a
+    provider quota can therefore be resumed, and a re-run reproduces the same
+    filters without calling the model.
+*   Regenerate it by deleting the file(s) and running the script again
+    (`eval_end_to_end.py` / `eval_parser.py`); `--refresh` re-parses and
+    overwrites the cached entries during the run.
+*   The directories never ship: `package_release.py` excludes `parsed_cache`
+    and `parser_cache` from the release archive and `check_release.py` fails
+    when such a path reaches it, because the cached parses are regenerable.
+
+See `parsed_cache/README.md` for the full description of the format.
+
+## End-to-end track
+
+`backend/scripts/eval_end_to_end.py` measures the whole query path on the
+released subset:
+
+1.  every query text is parsed by the deployed LLM backend
+    (`nl_parser.parse_nl_with_llm` -> `llm_client`), and the parse is cached;
+2.  the parsed filter is mapped onto the structured branch (colour, zone,
+    action, count constraint and the time window when the parser produced
+    one; the benchmark window is only the fallback);
+3.  the semantic branch encodes the query text with the shipped OpenCLIP
+    model and searches the released 242-frame scene index;
+4.  the branches are merged with the production adaptive-alpha rule
+    (`backend.app.services.result_merger.compute_adaptive_alpha`), the same
+    rule the API uses;
+5.  the merged ranking is scored with the metrics and bootstrap code of the
+    control track (`eval_retrieval_control.py` is imported for the fusion,
+    alpha and scoring helpers), on the standard 50 tune / 100 test split.
+
+The default query file is `queries_control.jsonl` — the protocol-matched
+control of `build_subset_control.py` — so the end-to-end track and the
+control track use the same queries, the same split, the same relevance labels
+and the same per-category wording, and differ only in where the filter comes
+from.  The raw released benchmark (`queries.jsonl`) can be run with
+`--queries`, but its numbers are not protocol-matched with the control track.
+
+Outputs land in `results/end_to_end_results.json` and
+`results/end_to_end_tables.md` (`--out-prefix` changes the names).
+
+The track reuses the released scene index and the released metadata; it
+replaces only the metadata-derived filter of the control track with the LLM
+parse.  It is single-camera evidence for the deployed query path and does not
+reproduce the 4-camera/312k deployment numbers.
+
+## Parser track
+
+`backend/scripts/eval_parser.py` measures the parser itself: every query in
+`queries.jsonl` is parsed through the production path
+(`nl_parser.parse_nl_with_llm`) and the resulting filter is compared field by
+field with the reference parse stored next to the query in the same file.
+
+The reference is **metadata-derived**, not human-annotated: it was
+reconstructed from the archive metadata that generated the query, so it is an
+approximation of the query intent and a disagreement can be a wrong reference
+rather than a wrong parse.  The reported numbers are therefore **agreement
+rates, not accuracy**.  Reported: the per-field agreement (overall and per
+category), the time-window error, the camera-id and intent agreement on the
+queries that state them, the parse latency, the parse failures and the
+queries with at least one disagreement.
+
+Outputs land in `results/parser_results.json` and `results/parser_results.md`;
+the parses are cached in `parser_cache/`.
+
 ## Reproducing the numbers
 
 ```powershell
@@ -88,6 +179,8 @@ python backend/scripts/eval_alpha_competitors.py  # C1 competitors + robustness
 python backend/scripts/eval_fusion.py             # person-pair fusion
 python backend/scripts/eval_alerts.py             # alert authoring
 python backend/scripts/measure_latency.py         # component latency
+python backend/scripts/eval_parser.py             # parser quality (real LLM parse)
+python backend/scripts/eval_end_to_end.py         # end-to-end track (real LLM parse)
 ```
 
 Outputs land in `results/` with a JSON, a markdown table and (where relevant)
