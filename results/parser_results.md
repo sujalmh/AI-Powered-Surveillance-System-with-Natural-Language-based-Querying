@@ -2,8 +2,8 @@
 
 - Model requested: `opencode-go/beam-free` (provider `opencode`)
 - Models that answered: `opencode-go/beam-free` x150
-- Generated at: 2026-10-21T20:56:42.294815+00:00
-- Repo commit: `430bede` (working tree dirty: True)
+- Generated at: 2026-10-21T21:02:43.833254+00:00
+- Repo commit: `c8fbce8` (working tree dirty: True)
 - Queries: 150 of 150 in `backend/benchmarks/queries_control.jsonl` (splits: test 100, tune 50)
 - Reference: the 'parsed' field of the query file used for the run
 

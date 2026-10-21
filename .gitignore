@@ -125,3 +125,15 @@ Desktop.ini
 .coverage
 coverage/
 htmlcov/
+
+# ──────────────────────────────────────────────
+# LaTeX build logs (regenerable; the PDF is tracked)
+# ──────────────────────────────────────────────
+INDICON2026_submit/compile_out*.txt
+
+# ──────────────────────────────────────────────
+# LaTeX build logs (regenerable, not part of the submission)
+# ──────────────────────────────────────────────
+INDICON2026_submit/compile_out*.txt
+INDICON2026_submit/*.out
+INDICON2026_submit/*.blg

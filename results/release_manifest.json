@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-10-21T20:58:57.580837+00:00",
-  "git_commit": "430bede639d10526c9e234c2ef992f6b4f25eef8",
+  "generated_at_utc": "2026-10-21T21:04:05.684065+00:00",
+  "git_commit": "c8fbce8ca0178ad663cc4c8680de1a884665a738",
   "platform": {
     "python": "3.12.4",
     "platform": "Windows-11-10.0.26300-SP0",
@@ -336,7 +336,7 @@
       {
         "name": "release archive present",
         "status": "pass",
-        "detail": "indicon2026_supplementary.zip (1.41 MB, sha256 343d7fbb0b5e18d1)"
+        "detail": "indicon2026_supplementary.zip (1.41 MB, sha256 46ad522b4269829a)"
       },
       {
         "name": "release archive contents",
@@ -361,7 +361,7 @@
       {
         "name": "camera-ready PDF",
         "status": "pass",
-        "detail": "8 pages (0.44 MB, sha256 ebdb99460925379c)"
+        "detail": "8 pages (0.44 MB, sha256 f773cd9ba5990cde)"
       },
       {
         "name": "source bundle",

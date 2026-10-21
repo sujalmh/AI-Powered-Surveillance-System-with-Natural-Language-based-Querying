@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-21T20:56:42.294815+00:00",
+  "generated_at": "2026-10-21T21:02:43.833254+00:00",
   "script": "backend/scripts/eval_parser.py",
   "scope": {
     "track": "natural-language parser quality (parsed filter vs reference parse)",
@@ -11,7 +11,7 @@
     "reference_date": "2026-03-01",
     "queries_file": "backend/benchmarks/queries_control.jsonl",
     "repo": {
-      "commit": "430bede",
+      "commit": "c8fbce8",
       "dirty": true
     },
     "note": "Single-camera released subset (camera 0); the paper's 4-camera deployment benchmark is not represented here."
