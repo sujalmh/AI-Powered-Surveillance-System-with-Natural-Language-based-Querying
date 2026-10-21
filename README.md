@@ -130,21 +130,46 @@ spanning a 2 h timestamp window), 242 scene frames, and 1,778 person
 descriptors.  It is a code-path and reproducibility subset, not a reproduction
 of the 4-camera/312k results.
 
+**Which script produces which number.**  The paper quotes the *deployment*
+measurements; the released track is a separate, self-contained check.
+
+| Paper claim | Deployment number | Released-subset check | Script |
+|---|---|---|---|
+| C1 adaptive blending | 0.666 -> 0.828 macro P@5 | 0.538 (equals the best tune-selected fixed alpha; per-intent lookup 0.428) | `eval_retrieval_control.py` |
+| C1 competitors / robustness | per-intent lookup 0.822, soft terms +0.006 | learned per-query alpha 0.534 (< 0.538); 16-point weight sweep all 0.538; count EM 0.10 / MAE 2.20 with the label-noise ceiling | `eval_alpha_competitors.py` |
+| C2 person fusion | 0.807 concat vs 0.785 RRF vs 0.700 visual | code-path check on pseudo-tracks (no identity labels) — see `results/fusion_tables.md` | `eval_fusion.py` |
+| C3 alert authoring | 0.91 rule-correctness (deployment study) | 30/30 clean and 30/30 stress on the author-constructed test split | `eval_alerts.py` |
+| Latency | 6.0 s mean / 12.0 s Find (incl. parse and clip stitching) | scene core 37.4 ms p50 / 39.7 ms p95, person core 18.5 / 20.4 ms, 26.5-39.5 q/s at 1-8 workers | `measure_latency.py` |
+
 Run the offline checks without MongoDB:
 
 ```powershell
 $env:PYTHONIOENCODING='utf-8'
 python backend/scripts/check_release.py
 python backend/scripts/eval_alerts.py
-python backend/scripts/eval_retrieval.py
-python backend/scripts/eval_retrieval_control.py
+python backend/scripts/eval_retrieval_control.py   # <- the C1 number quoted in the paper
 python backend/scripts/eval_alpha_competitors.py
 python backend/scripts/eval_fusion.py
 python backend/scripts/measure_latency.py
+python backend/scripts/eval_retrieval.py            # raw smoke test, see the note below
 ```
+
+`eval_retrieval.py` is the *raw* released benchmark.  It is a code-path smoke
+test, not the benchmark quoted in the paper: its count questions carry no
+target count and its action queries carry explicit time windows, so it is not
+protocol-matched to the deployment study.  The script prints this note itself;
+use `eval_retrieval_control.py` for the number that appears in the paper.
 
 See `results/README.md` for the two-track provenance policy and
 `VERIFICATION.md` for the release checklist.
+
+Build the supplementary archive (code, benchmarks, results, paper source;
+superseded drafts and weights excluded by construction):
+
+```powershell
+python backend/scripts/package_release.py            # 1.3 MB
+python backend/scripts/package_release.py --with-data # 18 MB, + clips and FAISS indices
+```
 
 ---
 

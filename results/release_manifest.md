@@ -1,7 +1,7 @@
 # Release manifest
 
-Generated: `2026-10-21T16:36:10.060418+00:00`
-Git: `464301492e133d317203a19dd3e12897a9674727`
+Generated: `2026-10-21T17:32:13.044556+00:00`
+Git: `7adf5bccf1a873ea95ce845d8d87f62276c8f727`
 
 ## Subset
 
@@ -29,13 +29,18 @@ $env:PYTHONIOENCODING='utf-8'
 python backend/scripts/check_release.py
 python backend/benchmarks/build_subset.py
 python backend/benchmarks/build_subset_control.py
-python backend/scripts/eval_retrieval.py
 python backend/scripts/eval_retrieval_control.py
 python backend/scripts/eval_alpha_competitors.py
 python backend/scripts/eval_fusion.py
 python backend/scripts/eval_alerts.py
 python backend/scripts/measure_latency.py
+python backend/scripts/eval_retrieval.py   # raw smoke test, not protocol-matched
+python backend/scripts/package_release.py  # build the supplementary archive
 ```
+
+The C1 number quoted in the paper comes from `eval_retrieval_control.py`;
+`eval_retrieval.py` is the raw released benchmark (a code-path smoke test
+whose count/action queries are not protocol-matched to the deployment study).
 
 ## Notes
 

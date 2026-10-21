@@ -21,7 +21,11 @@ numbers.
 ## Files
 
 - `retrieval_results.json` / `retrieval_tables.md` / `retrieval_per_query.csv`:
-  adaptive-alpha and fixed-alpha retrieval on the raw released benchmark.
+  adaptive-alpha and fixed-alpha retrieval on the **raw** released benchmark.
+  This is a code-path smoke test, not the benchmark quoted in the paper: its
+  count questions carry no target count and its action queries carry explicit
+  time windows, so it is not protocol-matched to the deployment C1 study.  The
+  script prints the same note.  Use the control below for the quoted number.
 - `retrieval_control_results.json` / `retrieval_control_tables.md` /
   `retrieval_control_per_query.csv`: the same evaluation on a
   **protocol-matched control** built by

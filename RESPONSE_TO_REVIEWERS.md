@@ -70,7 +70,10 @@ stated as limitations rather than estimated:
   coverage set that reports `1.00` on its test split; the two are reported
   side by side and never merged.
 * The deployment fusion result stays **0.807 vs. 0.785 (RRF) vs. 0.700
-  (visual-only)**. On the released subset the ordering is *not* reproduced
-  (concat `0.451` vs. visual-only `0.484`), because the released pseudo-tracks
-  were formed from the visual branch and therefore bias visual-only upwards.
-  The paper states this instead of hiding it.
+  (visual-only)**. The released subset carries pseudo-tracks rather than
+  identity labels, so it cannot test that result: the paper states this scope
+  explicitly, and the subset fusion evaluation is published with the release
+  (`results/fusion_tables.md`, `backend/scripts/eval_fusion.py`) with its own
+  limitation note, including the fact that its ordering differs from the
+  deployment one because the pseudo-tracks were formed from the visual branch
+  and therefore bias visual-only upwards.

@@ -777,6 +777,7 @@ def main() -> None:
         "count_estimate": count_est,
         "adaptive_alpha": alpha_stats,
         "limitations": [
+            "PROTOCOL NOTE: this raw benchmark is a code-path smoke test, not the benchmark quoted in the paper. It is not protocol-matched to the deployment C1 study: count questions are free 'how many' questions with no target count (so the structured branch has no numeric target to rank on) and action queries carry explicit time windows (so the structured branch has a time cue that the action override suppresses). The number quoted in the paper comes from the protocol-matched control, backend/scripts/eval_retrieval_control.py (results/retrieval_control_tables.md).",
             "Single camera (camera_0) and a 2-hour released window; cross-camera retrieval and identity tracking are untestable.",
             "Labels are derived from released VLM captions, detector metadata and snapshots, not human annotations; no IAA is available.",
             "Two clips on disk are not in the scene FAISS index (121 indexed of 123); evaluation uses the indexed clips.",
@@ -941,6 +942,13 @@ def main() -> None:
     (RESULTS / "retrieval_tables.md").write_text("\n".join(lines), encoding="utf-8")
 
     print(f"adaptive alpha source: {ADAPTIVE_SOURCE}")
+    print(
+        "NOTE: this is the RAW released benchmark (code-path smoke test). It is not\n"
+        "      protocol-matched to the deployment C1 study: count questions carry no\n"
+        "      target count and action queries carry explicit time windows.\n"
+        "      The number quoted in the paper comes from the protocol-matched control:\n"
+        "      python backend/scripts/eval_retrieval_control.py"
+    )
     print(f"best fixed on tune: {best_fixed['minmax']}")
     for m in ["fixed_0.0", "fixed_0.3", "fixed_0.5", "fixed_0.7", "fixed_1.0",
               "adaptive", "per_intent_tuned", "paper_lookup"]:

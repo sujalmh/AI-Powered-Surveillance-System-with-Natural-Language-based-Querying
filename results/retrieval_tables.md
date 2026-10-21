@@ -108,6 +108,7 @@ Adaptive z-score vs min-max paired ΔP@5 = +0.016 [+0.006, +0.028], p=0.0000.
 
 ## What cannot be reproduced
 
+- PROTOCOL NOTE: this raw benchmark is a code-path smoke test, not the benchmark quoted in the paper. It is not protocol-matched to the deployment C1 study: count questions are free 'how many' questions with no target count (so the structured branch has no numeric target to rank on) and action queries carry explicit time windows (so the structured branch has a time cue that the action override suppresses). The number quoted in the paper comes from the protocol-matched control, backend/scripts/eval_retrieval_control.py (results/retrieval_control_tables.md).
 - Single camera (camera_0) and a 2-hour released window; cross-camera retrieval and identity tracking are untestable.
 - Labels are derived from released VLM captions, detector metadata and snapshots, not human annotations; no IAA is available.
 - Two clips on disk are not in the scene FAISS index (121 indexed of 123); evaluation uses the indexed clips.
