@@ -158,3 +158,22 @@ python backend/scripts/eval_retrieval.py
 python backend/scripts/eval_fusion.py
 python backend/scripts/measure_latency.py
 ```
+
+---
+
+## Status at the end of the revision (see `VERIFICATION.md` for the checklist)
+
+All five workstreams are complete and committed:
+
+| Workstream | Outcome |
+|---|---|
+| Foundations | Mongo import no longer blocks, cached LLM config, date grounding, count-query classification fixed |
+| Alerts (C3) | deterministic 9-field materializer + clarify/abstain validator, 120-utterance benchmark, 30/30 clean and 30/30 stress on the test split |
+| Retrieval (C1) | 150-query released benchmark with a 50/100 split, grouped bootstrap + Holm, plus a protocol-matched control |
+| Fusion (C2) | track-disjoint pseudo-track benchmark, concat / zero-pad / norm-matched / RRF / learned-projection / 5-seed random-projection baselines, pair classification with calibration-only thresholds |
+| Systems | person routing, offline person search, access control, retention, face blur, gender-off, real component latency with p50/p95 and 1-8 worker concurrency |
+| Paper | 8 pages, no overfull box, no undefined reference, headline numbers kept, provenance and limits stated |
+
+Not obtainable from the shipped artefact (stated in the paper, not fabricated):
+human IAA, the deployment per-query export, cross-camera Re-ID, cross-site or
+night/rain generalisation, and 312k-descriptor latency percentiles.
