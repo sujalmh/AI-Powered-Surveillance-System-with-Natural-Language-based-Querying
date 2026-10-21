@@ -68,6 +68,31 @@ Status of every item after the revision is recorded in the last column.
 | `dist/indicon2026_supplementary.zip` | ✅ code + benchmarks + results + paper source (1.3 MB); `--with-data` variant adds clips and FAISS indices (18.3 MB) |
 | Build scripts | `backend/scripts/package_submission.py`, `backend/scripts/package_release.py` (re-runnable) |
 
+## Independent final review (Muse Spark 1.3 Contributor, xhigh)
+
+An independent reviewer agent audited the finished paper in its own worktree
+(`review/indicon-2026-final-paper`) and committed its fixes as `fcf0f37`
+(applied on `Enhance-chat-and-retrieval-processes`). Verdict:
+**accept with minor fixes**; every fix is merged and re-verified.
+
+| Finding | Severity | Resolution |
+|---|---|---|
+| `§C3` heading had a mojibake em-dash from a Windows encoding round-trip (rendered as "C3 A-third-party-char alert authoring") | blocker | fixed to `C3 -- alert authoring`; the PDF now renders "E. C3 – alert authoring"; a repo-wide scan of 272 tracked text files finds no remaining mojibake, and the `.tex` is pure ASCII with no BOM |
+| Limitations (iii) still asserted an LLM alert extractor and a "6-pp drop with local 7B models" that no artefact supports | major | reworded: the 0.91 deployment result is the recorded measurement of a held-out study whose per-utterance export was not preserved; the 0.91 claim itself is unchanged |
+| `RESPONSE_TO_REVIEWERS.md` R1-4 claimed the paper reports the z-score variant; the paper only states per-query min-max normalisation | major | corrected: the paired min-max/z-score deltas are reported in `results/retrieval_control_tables.md` |
+| "14 soft-weight triples" in two docs; the sweep has 16 points | major (docs) | corrected to 16 in `RESPONSE_TO_REVIEWERS.md` and `results/README.md`; the paper already said 16 |
+| raw-benchmark "best fixed 0.568" was ambiguous (tune-selected vs oracle 0.578) | minor | reworded in `PAPER_CHANGES.md` |
+| conclusion said the deployment numbers "can be checked" | minor | reworded to "the code paths behind the deployment numbers can be exercised end-to-end" |
+
+The reviewer also re-ran every offline check from a clean state (63 tests, all
+six evaluation scripts, the release manifest, the LaTeX build and a clean-room
+build of the source bundle), reproduced every quoted subset number, confirmed
+that the deployment-only fusion ordering is absent from the PDF text, and
+confirmed that the release contains no stale drafts. Its explicit
+unverifiable list (all deployment-only measurements, human IAA, cross-camera
+Re-ID, cross-site/night-rain generalisation, 312k latency percentiles) matches
+the limitations printed in the paper.
+
 ## Repository
 
 | Item | Status |
