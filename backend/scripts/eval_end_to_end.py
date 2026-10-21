@@ -317,6 +317,92 @@ def main() -> None:
             "count": erc.count_scores(test_rows),
         }
 
+    # --- parse fidelity: how the LLM parse compares with the reference parse --
+    # The control track replays the metadata-derived reference filter, which
+    # carries information a text-only parser cannot recover (the anchor
+    # person's attribute list) and a time window that follows the subject
+    # past the window the query states.  Quantifying that difference is what
+    # makes the two numbers comparable.
+    reference_rows = {
+        json.loads(line)["qid"]: json.loads(line)
+        for line in queries_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    }
+
+    def _ts(value: Optional[str]) -> Optional[float]:
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(value).timestamp()
+        except ValueError:
+            return None
+
+    fidelity: Dict[str, Any] = {}
+    for cat in CATEGORIES:
+        cat_rows = [r for r in rows if r["category"] == cat]
+        if not cat_rows:
+            continue
+        label_side_attrs = 0
+        window_differs = 0
+        colour_hit = colour_total = 0
+        target_hit = target_total = 0
+        for r in cat_rows:
+            ref = (reference_rows.get(r["qid"], {}).get("parsed") or {})
+            p_filter = r.get("parsed") or {}
+            if ref.get("attributes"):
+                label_side_attrs += 1
+            rs, re_ = _ts(ref.get("time_start")), _ts(ref.get("time_end"))
+            ps, pe = _ts(p_filter.get("time_start")), _ts(p_filter.get("time_end"))
+            if None not in (rs, re_, ps, pe) and abs((re_ - rs) - (pe - ps)) > 1:
+                window_differs += 1
+            ref_colour = ref.get("objects.color")
+            if ref_colour:
+                colour_total += 1
+                if str(p_filter.get("objects.color") or "").lower() == str(ref_colour).lower():
+                    colour_hit += 1
+            ref_target = ref.get("count_target_in_text")
+            if ref_target is not None:
+                target_total += 1
+                if p_filter.get("count_target_in_text") == ref_target:
+                    target_hit += 1
+        fidelity[cat] = {
+            "n": len(cat_rows),
+            "colour_agreement": [colour_hit, colour_total],
+            "count_target_agreement": [target_hit, target_total],
+            "reference_has_label_side_attributes": label_side_attrs,
+            "reference_window_differs_from_parsed": window_differs,
+        }
+
+    control_path = RESULTS / "retrieval_control_results.json"
+    oracle_delta: Optional[Dict[str, Any]] = None
+    if control_path.exists():
+        try:
+            ctrl = json.loads(control_path.read_text(encoding="utf-8"))
+            cc = ctrl["test"]["minmax"]["adaptive"]
+            oracle_delta = {
+                "control_macro_p5": cc["macro"]["p5"],
+                "end_to_end_macro_p5": summary["adaptive"]["macro"],
+                "delta": summary["adaptive"]["macro"] - cc["macro"]["p5"],
+                "per_category": {
+                    cat: {
+                        "control": cc["per_category"][cat]["p5"],
+                        "end_to_end": summary["adaptive"]["per_category"][cat],
+                        "delta": summary["adaptive"]["per_category"][cat]
+                        - cc["per_category"][cat]["p5"],
+                    }
+                    for cat in CATEGORIES if cat in cc["per_category"]
+                },
+                "note": (
+                    "The control replays the metadata-derived reference filter, which "
+                    "carries the anchor person's attribute list and a time window that "
+                    "follows the subject past the window the query states; a text-only "
+                    "parser cannot recover either.  The gap is therefore the price of "
+                    "not having an oracle parse, not a difference in the fusion rule."
+                ),
+            }
+        except (KeyError, TypeError, ValueError):
+            oracle_delta = None
+
     # --- significance: adaptive vs the tune-selected best fixed alpha ---------
     tune_scores = {
         m: erc.aggregate([r for r in all_rows[m] if r["split"] == "tune"], "p5")["macro"]
@@ -409,6 +495,8 @@ def main() -> None:
             "grouped_hi": float(ghi), "grouped_p": float(gp),
         },
         "per_category_vs_best_fixed": per_category,
+        "parse_fidelity_vs_reference": fidelity,
+        "oracle_delta": oracle_delta,
         "per_query": [
             {
                 "qid": r["qid"], "category": r["category"], "split": r["split"],
@@ -494,6 +582,48 @@ def main() -> None:
     ]
     for item in results["limitations"]:
         lines.append(f"- {item}")
+    if oracle_delta:
+        lines += [
+            "",
+            "## Comparison with the oracle-parse control",
+            "",
+            "The control track replays the metadata-derived reference filter; this track "
+            "uses the parser's own answer.  The difference is the price of not having an "
+            "oracle parse: the reference filter carries the anchor person's attribute "
+            "list and a time window that follows the subject past the window the query "
+            "states, and neither is recoverable from the query text.",
+            "",
+            "| Category | Control (oracle parse) | End-to-end (LLM parse) | Delta |",
+            "|---|---:|---:|---:|",
+        ]
+        for cat, v in oracle_delta["per_category"].items():
+            lines.append(
+                f"| {cat} | {v['control']:.3f} | {v['end_to_end']:.3f} | {v['delta']:+.3f} |"
+            )
+        lines.append(
+            f"| **macro** | **{oracle_delta['control_macro_p5']:.3f}** | "
+            f"**{oracle_delta['end_to_end_macro_p5']:.3f}** | "
+            f"**{oracle_delta['delta']:+.3f}** |"
+        )
+        lines += [
+            "",
+            "Parse fidelity against the reference parse:",
+            "",
+            "| Category | n | Colour agreement | Count target | Reference has label-side attributes | Reference window differs |",
+            "|---|---:|---|---|---:|---:|",
+        ]
+        for cat in CATEGORIES:
+            f = fidelity.get(cat)
+            if not f:
+                continue
+            ch, ct = f["colour_agreement"]
+            th, tt = f["count_target_agreement"]
+            lines.append(
+                f"| {cat} | {f['n']} | {ch}/{ct if ct else '-'} | "
+                f"{th}/{tt if tt else '-'} | "
+                f"{f['reference_has_label_side_attributes']} | "
+                f"{f['reference_window_differs_from_parsed']} |"
+            )
     lines.append("")
     (RESULTS / f"{args.out_prefix}_tables.md").write_text("\n".join(lines), encoding="utf-8")
 

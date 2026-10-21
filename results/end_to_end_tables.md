@@ -40,3 +40,26 @@ Adaptive vs fixed_0.5 (tune-selected): delta P@5 = +0.002 [-0.004, +0.010], p = 
 - The fusion is the plain alpha blend, not the live stack (no recency boost, no MMR, no track merging); n_semantic is fixed at 20 rather than the live top-k.
 - The tune and test splits share relevant clips (the split is stratified by category, not by clip or time bucket).
 - The count EM/MAE helper reads the caption count at the benchmark's anchor timestamp, so it measures whether the anchor clip ranked first rather than counting ability.
+
+## Comparison with the oracle-parse control
+
+The control track replays the metadata-derived reference filter; this track uses the parser's own answer.  The difference is the price of not having an oracle parse: the reference filter carries the anchor person's attribute list and a time window that follows the subject past the window the query states, and neither is recoverable from the query text.
+
+| Category | Control (oracle parse) | End-to-end (LLM parse) | Delta |
+|---|---:|---:|---:|
+| count | 0.390 | 0.360 | -0.030 |
+| find | 0.920 | 0.820 | -0.100 |
+| track | 0.810 | 0.530 | -0.280 |
+| action | 0.090 | 0.090 | +0.000 |
+| filter | 0.480 | 0.450 | -0.030 |
+| **macro** | **0.538** | **0.450** | **-0.088** |
+
+Parse fidelity against the reference parse:
+
+| Category | n | Colour agreement | Count target | Reference has label-side attributes | Reference window differs |
+|---|---:|---|---|---:|---:|
+| count | 30 | 0/- | 30/30 | 0 | 3 |
+| find | 30 | 30/30 | 0/- | 20 | 2 |
+| track | 30 | 30/30 | 0/- | 0 | 30 |
+| action | 30 | 0/- | 0/- | 0 | 0 |
+| filter | 30 | 30/30 | 0/- | 0 | 4 |

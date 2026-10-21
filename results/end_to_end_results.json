@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-21T20:20:25.353704+00:00",
+  "generated_at": "2026-10-21T20:29:35.880224+00:00",
   "scope": {
     "track": "end-to-end released-subset evaluation (real LLM parse)",
     "model": "opencode-go/beam-free",
@@ -210,6 +210,106 @@
       "p": 0.7033333333333334,
       "p_holm": 1.0
     }
+  },
+  "parse_fidelity_vs_reference": {
+    "count": {
+      "n": 30,
+      "colour_agreement": [
+        0,
+        0
+      ],
+      "count_target_agreement": [
+        30,
+        30
+      ],
+      "reference_has_label_side_attributes": 0,
+      "reference_window_differs_from_parsed": 3
+    },
+    "find": {
+      "n": 30,
+      "colour_agreement": [
+        30,
+        30
+      ],
+      "count_target_agreement": [
+        0,
+        0
+      ],
+      "reference_has_label_side_attributes": 20,
+      "reference_window_differs_from_parsed": 2
+    },
+    "track": {
+      "n": 30,
+      "colour_agreement": [
+        30,
+        30
+      ],
+      "count_target_agreement": [
+        0,
+        0
+      ],
+      "reference_has_label_side_attributes": 0,
+      "reference_window_differs_from_parsed": 30
+    },
+    "action": {
+      "n": 30,
+      "colour_agreement": [
+        0,
+        0
+      ],
+      "count_target_agreement": [
+        0,
+        0
+      ],
+      "reference_has_label_side_attributes": 0,
+      "reference_window_differs_from_parsed": 0
+    },
+    "filter": {
+      "n": 30,
+      "colour_agreement": [
+        30,
+        30
+      ],
+      "count_target_agreement": [
+        0,
+        0
+      ],
+      "reference_has_label_side_attributes": 0,
+      "reference_window_differs_from_parsed": 4
+    }
+  },
+  "oracle_delta": {
+    "control_macro_p5": 0.538,
+    "end_to_end_macro_p5": 0.45,
+    "delta": -0.08800000000000002,
+    "per_category": {
+      "count": {
+        "control": 0.39,
+        "end_to_end": 0.36,
+        "delta": -0.030000000000000027
+      },
+      "find": {
+        "control": 0.9199999999999999,
+        "end_to_end": 0.82,
+        "delta": -0.09999999999999998
+      },
+      "track": {
+        "control": 0.8099999999999999,
+        "end_to_end": 0.53,
+        "delta": -0.2799999999999999
+      },
+      "action": {
+        "control": 0.09,
+        "end_to_end": 0.09,
+        "delta": 0.0
+      },
+      "filter": {
+        "control": 0.48,
+        "end_to_end": 0.45,
+        "delta": -0.02999999999999997
+      }
+    },
+    "note": "The control replays the metadata-derived reference filter, which carries the anchor person's attribute list and a time window that follows the subject past the window the query states; a text-only parser cannot recover either.  The gap is therefore the price of not having an oracle parse, not a difference in the fusion rule."
   },
   "per_query": [
     {
