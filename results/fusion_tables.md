@@ -22,7 +22,9 @@
 | norm_matched | 0.450 | 0.258 | 0.288 | 0.300 | [0.431, 0.469] |
 | rrf | 0.395 | 0.233 | 0.261 | 0.264 | [0.376, 0.413] |
 | learned_proj | 0.473 | 0.274 | 0.306 | 0.319 | [0.455, 0.491] |
-| randproj | 0.436 ± 0.000 | 0.241 ± 0.000 | 0.271 ± 0.000 | 0.286 ± 0.000 | mean±SD over seeds |
+| randproj | 0.436 ± < 0.001 | 0.241 ± < 0.001 | 0.271 ± < 0.001 | 0.286 ± < 0.001 | mean±SD over seeds |
+
+`±` is the standard deviation over the 5 random-projection seeds; a spread below 0.001 is shown as `< 0.001` (it is not zero). The raw standard deviations are in `fusion_results.json`.
 
 ## Person-pair classification (threshold tuned on calibration pairs)
 
@@ -39,22 +41,24 @@
 
 ## Paired bootstrap vs concat (Holm over competitors)
 
+P-values are two-sided paired bootstrap with 3000 resamples. `< 0.0007` is the resolution floor (2/3000): no resample fell on the null side, so the p-value is below the floor and not exactly zero. The raw p-values are in `fusion_results.json`.
+
 | Task | Method | Δ [95% CI] | raw p | Holm p | reject |
 |---|---|---:|---:|---:|---|
-| retrieval P@5 | visual | +0.034 [+0.022, +0.046] | 0.0000 | 0.0000 | True |
-| retrieval P@5 | text | -0.361 [-0.379, -0.341] | 0.0000 | 0.0000 | True |
+| retrieval P@5 | visual | +0.034 [+0.022, +0.046] | < 0.0007 | < 0.0007 | True |
+| retrieval P@5 | text | -0.361 [-0.379, -0.341] | < 0.0007 | < 0.0007 | True |
 | retrieval P@5 | zero_pad | -0.000 [-0.002, +0.001] | 0.6200 | 1.0000 | False |
 | retrieval P@5 | norm_matched | -0.000 [-0.002, +0.001] | 0.6200 | 1.0000 | False |
-| retrieval P@5 | learned_proj | +0.023 [+0.015, +0.030] | 0.0000 | 0.0000 | True |
-| retrieval P@5 | rrf | -0.056 [-0.069, -0.044] | 0.0000 | 0.0000 | True |
-| retrieval P@5 | randproj | -0.015 [-0.020, -0.010] | 0.0000 | 0.0000 | True |
-| pair AUC | visual | +0.051 [+0.033, +0.068] | 0.0000 | 0.0000 | True |
-| pair AUC | text | -0.073 [-0.089, -0.057] | 0.0000 | 0.0000 | True |
+| retrieval P@5 | learned_proj | +0.023 [+0.015, +0.030] | < 0.0007 | < 0.0007 | True |
+| retrieval P@5 | rrf | -0.056 [-0.069, -0.044] | < 0.0007 | < 0.0007 | True |
+| retrieval P@5 | randproj | -0.015 [-0.020, -0.010] | < 0.0007 | < 0.0007 | True |
+| pair AUC | visual | +0.051 [+0.033, +0.068] | < 0.0007 | < 0.0007 | True |
+| pair AUC | text | -0.073 [-0.089, -0.057] | < 0.0007 | < 0.0007 | True |
 | pair AUC | zero_pad | -0.001 [-0.001, +0.000] | 0.2353 | 0.4707 | False |
 | pair AUC | norm_matched | -0.001 [-0.001, +0.000] | 0.2353 | 0.4707 | False |
-| pair AUC | learned_proj | +0.025 [+0.013, +0.038] | 0.0000 | 0.0000 | True |
-| pair AUC | rrf | +0.056 [+0.039, +0.073] | 0.0000 | 0.0000 | True |
-| pair AUC | randproj | -0.028 [-0.035, -0.021] | 0.0000 | 0.0000 | True |
+| pair AUC | learned_proj | +0.025 [+0.013, +0.038] | < 0.0007 | < 0.0007 | True |
+| pair AUC | rrf | +0.056 [+0.039, +0.073] | < 0.0007 | < 0.0007 | True |
+| pair AUC | randproj | -0.028 [-0.035, -0.021] | < 0.0007 | < 0.0007 | True |
 
 ## Grouped bootstrap by pseudo-track (P@5)
 

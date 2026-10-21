@@ -51,6 +51,7 @@ from backend.app.eval.metrics import (
 )
 from backend.app.eval.stats import (
     bootstrap_ci,
+    format_p,
     grouped_bootstrap_ci,
     holm_correction,
     paired_bootstrap_ci,
@@ -903,29 +904,38 @@ def main() -> None:
         s = norm_comparison["adaptive_paired_zscore_minus_minmax"]
         lines.append(
             f"\nAdaptive z-score vs min-max paired ΔP@5 = {s['delta_p5']:+.3f} "
-            f"[{s['lo']:+.3f}, {s['hi']:+.3f}], p={s['p']:.4f}.\n"
+            f"[{s['lo']:+.3f}, {s['hi']:+.3f}], p={format_p(s['p'], args.n_boot)}.\n"
         )
 
     lines.append("\n## Adaptive vs tune-selected best fixed-alpha\n")
+    lines.append(
+        f"P-values are two-sided paired bootstrap with {args.n_boot} resamples. "
+        f"`< {2.0 / args.n_boot:.4f}` is the resolution floor (2/{args.n_boot}): no "
+        "resample fell on the null side, so the p-value is below the floor and not "
+        "exactly zero. The raw p-values are in `retrieval_control_results.json`.\n"
+    )
     for norm in norm_modes:
         sig = significance[norm]
         o = sig["overall"]
         lines.append(
             f"- **{norm}**: `{sig['comparison']}`. ΔP@5 = {o['delta_p5']:+.3f} "
-            f"[{o['lo']:+.3f}, {o['hi']:+.3f}], p={o['p']:.4f}; "
+            f"[{o['lo']:+.3f}, {o['hi']:+.3f}], p={format_p(o['p'], args.n_boot)}; "
             f"grouped Δ = {o['grouped_delta_p5']:+.3f} "
-            f"[{o['grouped_lo']:+.3f}, {o['grouped_hi']:+.3f}], p={o['grouped_p']:.4f}."
+            f"[{o['grouped_lo']:+.3f}, {o['grouped_hi']:+.3f}], "
+            f"p={format_p(o['grouped_p'], args.n_boot)}."
         )
         for cat in CATEGORIES:
             d = sig["per_category"][cat]
             lines.append(
                 f"  - {cat}: Δ={d['delta_p5']:+.3f} [{d['lo']:+.3f}, {d['hi']:+.3f}], "
-                f"p={d['p']:.4f}, Holm-reject={sig['holm_reject'][cat]}"
+                f"p={format_p(d['p'], args.n_boot)} "
+                f"(Holm p={format_p(sig['holm_adjusted_p'][cat], args.n_boot)}), "
+                f"Holm-reject={sig['holm_reject'][cat]}"
             )
         s2 = sig["per_intent_tuned_vs_adaptive"]
         lines.append(
             f"  - per-intent tuned vs adaptive: Δ={s2['delta_p5']:+.3f} "
-            f"[{s2['lo']:+.3f}, {s2['hi']:+.3f}], p={s2['p']:.4f}"
+            f"[{s2['lo']:+.3f}, {s2['hi']:+.3f}], p={format_p(s2['p'], args.n_boot)}"
         )
 
     lines.append("\n## Per-intent alpha selected on the tune split\n")

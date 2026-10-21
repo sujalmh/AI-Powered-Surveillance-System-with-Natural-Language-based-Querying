@@ -21,6 +21,58 @@ def _mean(xs: Sequence[float]) -> float:
     return sum(xs) / len(xs) if xs else 0.0
 
 
+# ---------------------------------------------------------------------------
+# Human-readable rendering of resolution-limited numbers
+# ---------------------------------------------------------------------------
+
+def format_p(p: float, n_boot: int) -> str:
+    """Render a bootstrap p-value so a resolution-limited p is never shown as 0.
+
+    The paired and grouped bootstrap p-value is ``2 * P(boot_mean <= 0)``
+    estimated from ``n_boot`` resamples, so the estimator can only take the
+    values ``0, 2/n_boot, 4/n_boot, ...``.  The smallest *representable*
+    non-zero value is therefore ``2 / n_boot`` -- the resolution floor
+    (0.0002 for 10,000 resamples, 0.0007 for 3,000).  ``p == 0`` only means
+    that *no* resample fell on the null side, i.e. the true p-value lies
+    *below* the floor; it is not exactly zero.
+
+    Printing such a p-value as ``"0.0000"`` claims an impossible probability
+    and reads like a broken measurement, so this helper returns
+    ``"< 0.0002"`` (the floor) instead.  Every other p-value is printed with
+    four decimals.  The raw number is always kept in the JSON output; this
+    helper is for the human-readable tables only.
+    """
+    if p is None:
+        return "n/a"
+    p = float(p)
+    floor = 2.0 / float(n_boot)
+    if p <= 0.0 or p < floor:
+        return f"< {floor:.4f}"
+    text = f"{p:.4f}"
+    if text == "0.0000":  # defensive: a p-value is never printed as a bare zero
+        return f"< {floor:.4f}"
+    return text
+
+
+def format_sd(sd: float) -> str:
+    """Render a standard deviation without collapsing a small one to ``0.000``.
+
+    A dispersion that rounds to zero at three decimals (e.g. 4.4e-4 over
+    five seeds) is not zero, and printing ``"0.000"`` makes a measured spread
+    look like a broken measurement.  Such values are rendered as
+    ``"< 0.001"``, i.e. below the resolution of the three-decimal format.  A
+    genuine zero stays ``"0.000"``.
+    """
+    if sd is None:
+        return "n/a"
+    sd = float(sd)
+    if sd == 0.0:
+        return "0.000"
+    if 0.0 < sd < 0.0005:
+        return "< 0.001"
+    return f"{sd:.3f}"
+
+
 def bootstrap_ci(
     values: Sequence[float], n_boot: int = 10000, ci: float = 0.95, seed: int = 0
 ) -> Tuple[float, float, float]:

@@ -56,6 +56,8 @@ from backend.app.eval.metrics import (
 )
 from backend.app.eval.stats import (
     bootstrap_ci,
+    format_p,
+    format_sd,
     grouped_bootstrap_ci,
     paired_bootstrap_ci,
 )
@@ -876,8 +878,10 @@ def main() -> None:
         ci_txt = f"[{ci[0]:.3f}, {ci[1]:.3f}]" if ci else "mean±SD over seeds"
         if name == "randproj":
             lines.append(
-                f"| {name} | {s['p5']:.3f} ± {s['p5_sd']:.3f} | {s['r10']:.3f} ± {s['r10_sd']:.3f} | "
-                f"{s['f1']:.3f} ± {s['f1_sd']:.3f} | {s['f1_paper']:.3f} ± {s['f1_paper_sd']:.3f} | "
+                f"| {name} | {s['p5']:.3f} ± {format_sd(s['p5_sd'])} | "
+                f"{s['r10']:.3f} ± {format_sd(s['r10_sd'])} | "
+                f"{s['f1']:.3f} ± {format_sd(s['f1_sd'])} | "
+                f"{s['f1_paper']:.3f} ± {format_sd(s['f1_paper_sd'])} | "
                 f"{ci_txt} |"
             )
         else:
@@ -885,6 +889,12 @@ def main() -> None:
                 f"| {name} | {s['p5']:.3f} | {s['r10']:.3f} | {s['f1']:.3f} | "
                 f"{s['f1_paper']:.3f} | {ci_txt} |"
             )
+    lines.append(
+        "\n`±` is the standard deviation over the "
+        f"{summaries['randproj']['seeds']} random-projection seeds; a spread below "
+        "0.001 is shown as `< 0.001` (it is not zero). The raw standard deviations "
+        "are in `fusion_results.json`."
+    )
     lines.append("\n## Person-pair classification (threshold tuned on calibration pairs)\n")
     lines.append("| Method | Threshold | AUC | Accuracy | Precision | Recall | F1 |")
     lines.append("|---|---:|---:|---:|---:|---:|---:|")
@@ -894,9 +904,11 @@ def main() -> None:
             sd = pair_results[name]["test_sd"]
             lines.append(
                 f"| {name} | {pair_results[name]['threshold_mean']:.3f} | "
-                f"{s['auc']:.3f} ± {sd['auc']:.3f} | {s['accuracy']:.3f} ± {sd['accuracy']:.3f} | "
-                f"{s['precision']:.3f} ± {sd['precision']:.3f} | "
-                f"{s['recall']:.3f} ± {sd['recall']:.3f} | {s['f1']:.3f} ± {sd['f1']:.3f} |"
+                f"{s['auc']:.3f} ± {format_sd(sd['auc'])} | "
+                f"{s['accuracy']:.3f} ± {format_sd(sd['accuracy'])} | "
+                f"{s['precision']:.3f} ± {format_sd(sd['precision'])} | "
+                f"{s['recall']:.3f} ± {format_sd(sd['recall'])} | "
+                f"{s['f1']:.3f} ± {format_sd(sd['f1'])} |"
             )
         else:
             lines.append(
@@ -904,19 +916,25 @@ def main() -> None:
                 f"{s['precision']:.3f} | {s['recall']:.3f} | {s['f1']:.3f} |"
             )
     lines.append("\n## Paired bootstrap vs concat (Holm over competitors)\n")
+    lines.append(
+        f"P-values are two-sided paired bootstrap with {args.n_boot} resamples. "
+        f"`< {2.0 / args.n_boot:.4f}` is the resolution floor (2/{args.n_boot}): no "
+        "resample fell on the null side, so the p-value is below the floor and not "
+        "exactly zero. The raw p-values are in `fusion_results.json`.\n"
+    )
     lines.append("| Task | Method | Δ [95% CI] | raw p | Holm p | reject |")
     lines.append("|---|---|---:|---:|---:|---|")
     for name, s in significance.items():
         lines.append(
             f"| retrieval P@5 | {name} | {s['delta_p5']:+.3f} "
-            f"[{s['p5_lo']:+.3f}, {s['p5_hi']:+.3f}] | {s['p5_p']:.4f} | "
-            f"{s['holm_adjusted_p']:.4f} | {s['holm_reject']} |"
+            f"[{s['p5_lo']:+.3f}, {s['p5_hi']:+.3f}] | {format_p(s['p5_p'], args.n_boot)} | "
+            f"{format_p(s['holm_adjusted_p'], args.n_boot)} | {s['holm_reject']} |"
         )
     for name, s in pair_significance.items():
         lines.append(
             f"| pair AUC | {name} | {s['delta_auc']:+.3f} "
-            f"[{s['lo']:+.3f}, {s['hi']:+.3f}] | {s['p']:.4f} | "
-            f"{s['holm_adjusted_p']:.4f} | {s['holm_reject']} |"
+            f"[{s['lo']:+.3f}, {s['hi']:+.3f}] | {format_p(s['p'], args.n_boot)} | "
+            f"{format_p(s['holm_adjusted_p'], args.n_boot)} | {s['holm_reject']} |"
         )
     lines.append("\n## Grouped bootstrap by pseudo-track (P@5)\n")
     lines.append("| Method | Mean | 95% CI |")
