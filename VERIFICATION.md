@@ -46,6 +46,28 @@ Status of every item after the revision is recorded in the last column.
 | Tables/figures fit the column width; no missing figure files | ✅ |
 | `INDICON2026Conference.pdf` regenerated from the final tex | ✅ |
 
+## INDICON 2026 template conformance
+
+| Item | Status |
+|---|---|
+| Class file | ✅ `IEEEtran` V1.8b — the kit's `IEEEtran.cls` is byte-identical (SHA256 `DA751920…`) to the one used for the build |
+| Preamble | ✅ template preamble kept verbatim (`\documentclass[conference]{IEEEtran}`, `\IEEEoverridecommandlockouts`, `cite`, `amsmath`, `algorithmic`, `graphicx`, `textcomp`, `xcolor`, `fancyhdr`, `hyperref`, `\def\BibTeX{…}`) plus the packages the paper needs (`booktabs`, `multirow`, `array`, `makecell`, `pifont`, `amsthm`, `float`, `tikz`) |
+| First-page header/footer | ✅ identical to the kit: `23rd Edition of IEEE India Council International Conference (INDICON 2026)`, `979-8-3195-2581-9/26/$31.00 ©2026 IEEE`, footer `INDICON 2026`, `\thispagestyle{firstpage}` |
+| Author block | ✅ per-author `\IEEEauthorblockN` + `\IEEEauthorblockA` with `\and` separators, one affiliation per author, per-author e-mail, corresponding author marked `\textsuperscript{*}` |
+| Keywords | ✅ `IEEEkeywords` environment, 6 index terms, all inside the first column |
+| Bibliography | ✅ `\bibliographystyle{IEEEtran}` + `\bibliography{References}`, 15 entries, all cited |
+| No external assets | ✅ the dataflow figure is an inline TikZ picture, so the source bundle is self-contained |
+
+## Submission package
+
+| Artefact | Status |
+|---|---|
+| `INDICON2026_submit/INDICON2026_850.pdf` | ✅ final camera-ready PDF, 8 pages |
+| `INDICON2026_submit/INDICON2026_850_source.zip` | ✅ `INDICON2026Conference.tex` + `References.bib` + the kit's `IEEEtran.cls` + a compile README; **verified to compile standalone in a clean directory to the identical 8-page PDF** |
+| `INDICON2026_submit.zip` | ✅ folder package with the PDF, the source bundle, the `.tex` and the `.bib` |
+| `dist/indicon2026_supplementary.zip` | ✅ code + benchmarks + results + paper source (1.3 MB); `--with-data` variant adds clips and FAISS indices (18.3 MB) |
+| Build scripts | `backend/scripts/package_submission.py`, `backend/scripts/package_release.py` (re-runnable) |
+
 ## Repository
 
 | Item | Status |

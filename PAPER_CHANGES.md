@@ -297,3 +297,33 @@ the PDF at 8 pages with a clean log.
   it.
 - The released fusion track does not reproduce the deployment ordering; the
   pseudo-track construction biases visual-only and is stated in the paper.
+
+### Final submission package (INDICON 2026 template)
+
+The paper now follows the conference author kit (`IEEE__INDICON_2026.zip`):
+
+* the kit's `IEEEtran.cls` is byte-identical to the one used for the build
+  (SHA256 `DA751920...`), so the class version is not a risk;
+* the preamble, the first-page header/footer and the `\def\BibTeX{...}` block
+  are the template's own lines, with only the extra packages the paper needs
+  added (`booktabs`, `multirow`, `array`, `makecell`, `pifont`, `amsthm`,
+  `float`, `tikz`);
+* the author block was converted to the template's per-author form
+  (`\IEEEauthorblockN` + `\IEEEauthorblockA` with `\and` separators, one
+  e-mail per author, corresponding author marked `\textsuperscript{*}`);
+* the keyword list was trimmed to six terms so that it no longer spills into
+  the second column;
+* to stay inside the 8-page limit after the taller author block, the
+  statistical-protocol and evaluation-protocol paragraphs were condensed, two
+  rows were dropped from the related-work table, three captions were
+  shortened, and long author lists in the bibliography use the IEEE
+  "and others" form (all 15 references are still cited).
+
+Deliverables (built by `backend/scripts/package_submission.py`):
+
+| File | Content |
+|---|---|
+| `INDICON2026_submit/INDICON2026_850.pdf` | final camera-ready PDF, 8 pages |
+| `INDICON2026_submit/INDICON2026_850_source.zip` | `.tex` + `References.bib` + the kit's `IEEEtran.cls` + compile README; verified to compile standalone to the identical 8-page PDF |
+| `INDICON2026_submit.zip` | folder package with the PDF, the source bundle, the `.tex` and the `.bib` |
+| `dist/indicon2026_supplementary.zip` | code, benchmarks, results and paper source (`--with-data` adds clips and indices) |

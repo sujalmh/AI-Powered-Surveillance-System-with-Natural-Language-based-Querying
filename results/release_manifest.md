@@ -1,7 +1,7 @@
 # Release manifest
 
-Generated: `2026-10-21T17:32:13.044556+00:00`
-Git: `7adf5bccf1a873ea95ce845d8d87f62276c8f727`
+Generated: `2026-10-21T17:47:33.049334+00:00`
+Git: `ca1f249b5b43b69d22f4eefc6163685cee160bd3`
 
 ## Subset
 
