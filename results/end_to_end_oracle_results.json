@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-21T20:48:31.672743+00:00",
+  "generated_at": "2026-10-21T21:35:19.537486+00:00",
   "scope": {
     "track": "end-to-end released-subset evaluation (real LLM parse)",
     "model": "opencode-go/beam-free",

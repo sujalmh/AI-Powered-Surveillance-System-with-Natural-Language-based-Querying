@@ -22,6 +22,8 @@ Count queries whose parsed filter carries an explicit numeric target: 30/30.
 
 Adaptive vs fixed_0.7 (tune-selected): delta P@5 = +0.000 [+0.000, +0.000], p = 1.0000; grouped [+0.000, +0.000], p = 1.0000 (3000 resamples, seed 11).
 
+P-values are two-sided paired bootstrap; `< 0.0007` is the resolution floor (2/3000): no resample fell on the null side, so the p-value is below the floor and not exactly zero. The raw p-values are in `end_to_end_oracle_results.json`.
+
 ## Per category (test split, vs the best tune-selected fixed alpha)
 
 | Category | n | Adaptive | Best fixed | Delta | 95% CI | p | p (Holm) |
