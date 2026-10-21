@@ -208,7 +208,8 @@ latency percentiles, human IAA.
   target count (the structured branch has no target to rank), and action
   queries carry time windows (so the structured branch has a strong time
   cue, while the action override intentionally suppresses it).  The raw
-  subset numbers therefore show adaptive (0.486) below fixed (0.568); do not
+  subset numbers therefore show adaptive (0.486) below the tune-selected fixed
+  value (0.568; oracle best on test 0.578); do not
   replace the full-deployment table with these, and do not claim the subset
   reproduces C1.
 - If a protocol-matched control is produced (target-count queries and
@@ -262,7 +263,7 @@ no undefined citation (`pdflatex` -> `bibtex` -> `pdflatex` x2).
 |---|---|---|
 | Deployment C1 | paper table (primary, unchanged) | 0.666 -> 0.828 macro P@5 |
 | Released C1 control | `results/retrieval_control_results.json` | adaptive 0.538 = best fixed 0.538 (Δ 0.000, p 1.0); paper lookup 0.428; α=0.0 0.048; α=0.3 0.380; count 0.390 vs 0.010; action 0.090 vs 0.000 |
-| Raw released retrieval | `results/retrieval_results.json` | adaptive 0.486 vs best fixed 0.568 (protocol mismatch, reported in the release only) |
+| Raw released retrieval | `results/retrieval_results.json` | adaptive 0.486 vs tune-selected fixed 0.568 (oracle 0.578; protocol mismatch, reported in the release only) |
 | Deployment C2 | paper table (primary, unchanged) | concat 0.807 vs RRF 0.785 vs visual 0.700 |
 | Released C2 | `results/fusion_results.json` | visual 0.484, learned proj 0.473, concat 0.451, randproj 0.436±0.0004 (5 seeds), RRF 0.395 P@5; pair AUC 0.744/0.693/0.749 |
 | Deployment C3 | paper table (primary, unchanged) | 0.91 rule-correctness, 60 held-out utterances |
