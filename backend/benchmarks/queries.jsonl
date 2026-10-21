@@ -1,0 +1,150 @@
+{"qid": "q_count_01", "category": "count", "text": "how many cars in Zone A between 18:00 and 20:00", "relevant": ["clip_count_01a", "clip_count_01b"], "video_id": "vid_1", "time_bucket": "2026-10-01"}
+{"qid": "q_count_02", "category": "count", "text": "count people in Zone B after 19 PM", "relevant": ["clip_count_02a", "clip_count_02b"], "video_id": "vid_2", "time_bucket": "2026-10-02"}
+{"qid": "q_count_03", "category": "count", "text": "how many persons entered Gate in the last hour (cam 2)", "relevant": ["clip_count_03a", "clip_count_03b"], "video_id": "vid_3", "time_bucket": "2026-10-03"}
+{"qid": "q_count_04", "category": "count", "text": "number of vehicles in Parking between 21:00-23:00", "relevant": ["clip_count_04a", "clip_count_04b"], "video_id": "vid_4", "time_bucket": "2026-10-04"}
+{"qid": "q_count_05", "category": "count", "text": "how many cars in Zone A between 22:00 and 20:00", "relevant": ["clip_count_05a", "clip_count_05b"], "video_id": "vid_5", "time_bucket": "2026-10-05"}
+{"qid": "q_count_06", "category": "count", "text": "count people in Zone B after 18 PM", "relevant": ["clip_count_06a", "clip_count_06b"], "video_id": "vid_6", "time_bucket": "2026-10-01"}
+{"qid": "q_count_07", "category": "count", "text": "how many persons entered Gate in the last hour (cam 2)", "relevant": ["clip_count_07a", "clip_count_07b"], "video_id": "vid_1", "time_bucket": "2026-10-02"}
+{"qid": "q_count_08", "category": "count", "text": "number of vehicles in Parking between 20:00-23:00", "relevant": ["clip_count_08a", "clip_count_08b"], "video_id": "vid_2", "time_bucket": "2026-10-03"}
+{"qid": "q_count_09", "category": "count", "text": "how many cars in Zone A between 21:00 and 20:00", "relevant": ["clip_count_01a", "clip_count_01b"], "video_id": "vid_3", "time_bucket": "2026-10-04"}
+{"qid": "q_count_10", "category": "count", "text": "count people in Zone B after 22 PM", "relevant": ["clip_count_02a", "clip_count_02b"], "video_id": "vid_4", "time_bucket": "2026-10-05"}
+{"qid": "q_count_11", "category": "count", "text": "how many persons entered Gate in the last hour (cam 2)", "relevant": ["clip_count_03a", "clip_count_03b"], "video_id": "vid_5", "time_bucket": "2026-10-01"}
+{"qid": "q_count_12", "category": "count", "text": "number of vehicles in Parking between 19:00-23:00", "relevant": ["clip_count_04a", "clip_count_04b"], "video_id": "vid_6", "time_bucket": "2026-10-02"}
+{"qid": "q_count_13", "category": "count", "text": "how many cars in Zone A between 20:00 and 20:00", "relevant": ["clip_count_05a", "clip_count_05b"], "video_id": "vid_1", "time_bucket": "2026-10-03"}
+{"qid": "q_count_14", "category": "count", "text": "count people in Zone B after 21 PM", "relevant": ["clip_count_06a", "clip_count_06b"], "video_id": "vid_2", "time_bucket": "2026-10-04"}
+{"qid": "q_count_15", "category": "count", "text": "how many persons entered Gate in the last hour (cam 2)", "relevant": ["clip_count_07a", "clip_count_07b"], "video_id": "vid_3", "time_bucket": "2026-10-05"}
+{"qid": "q_count_16", "category": "count", "text": "number of vehicles in Parking between 18:00-23:00", "relevant": ["clip_count_08a", "clip_count_08b"], "video_id": "vid_4", "time_bucket": "2026-10-01"}
+{"qid": "q_count_17", "category": "count", "text": "how many cars in Zone A between 19:00 and 20:00", "relevant": ["clip_count_01a", "clip_count_01b"], "video_id": "vid_5", "time_bucket": "2026-10-02"}
+{"qid": "q_count_18", "category": "count", "text": "count people in Zone B after 20 PM", "relevant": ["clip_count_02a", "clip_count_02b"], "video_id": "vid_6", "time_bucket": "2026-10-03"}
+{"qid": "q_count_19", "category": "count", "text": "how many persons entered Gate in the last hour (cam 2)", "relevant": ["clip_count_03a", "clip_count_03b"], "video_id": "vid_1", "time_bucket": "2026-10-04"}
+{"qid": "q_count_20", "category": "count", "text": "number of vehicles in Parking between 22:00-23:00", "relevant": ["clip_count_04a", "clip_count_04b"], "video_id": "vid_2", "time_bucket": "2026-10-05"}
+{"qid": "q_count_21", "category": "count", "text": "how many cars in Zone A between 18:00 and 20:00", "relevant": ["clip_count_05a", "clip_count_05b"], "video_id": "vid_3", "time_bucket": "2026-10-01"}
+{"qid": "q_count_22", "category": "count", "text": "count people in Zone B after 19 PM", "relevant": ["clip_count_06a", "clip_count_06b"], "video_id": "vid_4", "time_bucket": "2026-10-02"}
+{"qid": "q_count_23", "category": "count", "text": "how many persons entered Gate in the last hour (cam 2)", "relevant": ["clip_count_07a", "clip_count_07b"], "video_id": "vid_5", "time_bucket": "2026-10-03"}
+{"qid": "q_count_24", "category": "count", "text": "number of vehicles in Parking between 21:00-23:00", "relevant": ["clip_count_08a", "clip_count_08b"], "video_id": "vid_6", "time_bucket": "2026-10-04"}
+{"qid": "q_count_25", "category": "count", "text": "how many cars in Zone A between 22:00 and 20:00", "relevant": ["clip_count_01a", "clip_count_01b"], "video_id": "vid_1", "time_bucket": "2026-10-05"}
+{"qid": "q_count_26", "category": "count", "text": "count people in Zone B after 18 PM", "relevant": ["clip_count_02a", "clip_count_02b"], "video_id": "vid_2", "time_bucket": "2026-10-01"}
+{"qid": "q_count_27", "category": "count", "text": "how many persons entered Gate in the last hour (cam 2)", "relevant": ["clip_count_03a", "clip_count_03b"], "video_id": "vid_3", "time_bucket": "2026-10-02"}
+{"qid": "q_count_28", "category": "count", "text": "number of vehicles in Parking between 20:00-23:00", "relevant": ["clip_count_04a", "clip_count_04b"], "video_id": "vid_4", "time_bucket": "2026-10-03"}
+{"qid": "q_count_29", "category": "count", "text": "how many cars in Zone A between 21:00 and 20:00", "relevant": ["clip_count_05a", "clip_count_05b"], "video_id": "vid_5", "time_bucket": "2026-10-04"}
+{"qid": "q_count_30", "category": "count", "text": "count people in Zone B after 22 PM", "relevant": ["clip_count_06a", "clip_count_06b"], "video_id": "vid_6", "time_bucket": "2026-10-05"}
+{"qid": "q_find_01", "category": "find", "text": "red jacket near the entrance", "relevant": ["clip_find_01a", "clip_find_01b"], "video_id": "vid_1", "time_bucket": "2026-10-01"}
+{"qid": "q_find_02", "category": "find", "text": "person with black bag in Zone A", "relevant": ["clip_find_02a", "clip_find_02b"], "video_id": "vid_2", "time_bucket": "2026-10-02"}
+{"qid": "q_find_03", "category": "find", "text": "white car near Gate cam 2", "relevant": ["clip_find_03a", "clip_find_03b"], "video_id": "vid_3", "time_bucket": "2026-10-03"}
+{"qid": "q_find_04", "category": "find", "text": "person wearing blue shirt Zone B", "relevant": ["clip_find_04a", "clip_find_04b"], "video_id": "vid_4", "time_bucket": "2026-10-04"}
+{"qid": "q_find_05", "category": "find", "text": "red jacket near the entrance", "relevant": ["clip_find_05a", "clip_find_05b"], "video_id": "vid_5", "time_bucket": "2026-10-05"}
+{"qid": "q_find_06", "category": "find", "text": "person with black bag in Zone A", "relevant": ["clip_find_06a", "clip_find_06b"], "video_id": "vid_6", "time_bucket": "2026-10-01"}
+{"qid": "q_find_07", "category": "find", "text": "white car near Gate cam 2", "relevant": ["clip_find_07a", "clip_find_07b"], "video_id": "vid_1", "time_bucket": "2026-10-02"}
+{"qid": "q_find_08", "category": "find", "text": "person wearing blue shirt Zone B", "relevant": ["clip_find_08a", "clip_find_08b"], "video_id": "vid_2", "time_bucket": "2026-10-03"}
+{"qid": "q_find_09", "category": "find", "text": "red jacket near the entrance", "relevant": ["clip_find_01a", "clip_find_01b"], "video_id": "vid_3", "time_bucket": "2026-10-04"}
+{"qid": "q_find_10", "category": "find", "text": "person with black bag in Zone A", "relevant": ["clip_find_02a", "clip_find_02b"], "video_id": "vid_4", "time_bucket": "2026-10-05"}
+{"qid": "q_find_11", "category": "find", "text": "white car near Gate cam 2", "relevant": ["clip_find_03a", "clip_find_03b"], "video_id": "vid_5", "time_bucket": "2026-10-01"}
+{"qid": "q_find_12", "category": "find", "text": "person wearing blue shirt Zone B", "relevant": ["clip_find_04a", "clip_find_04b"], "video_id": "vid_6", "time_bucket": "2026-10-02"}
+{"qid": "q_find_13", "category": "find", "text": "red jacket near the entrance", "relevant": ["clip_find_05a", "clip_find_05b"], "video_id": "vid_1", "time_bucket": "2026-10-03"}
+{"qid": "q_find_14", "category": "find", "text": "person with black bag in Zone A", "relevant": ["clip_find_06a", "clip_find_06b"], "video_id": "vid_2", "time_bucket": "2026-10-04"}
+{"qid": "q_find_15", "category": "find", "text": "white car near Gate cam 2", "relevant": ["clip_find_07a", "clip_find_07b"], "video_id": "vid_3", "time_bucket": "2026-10-05"}
+{"qid": "q_find_16", "category": "find", "text": "person wearing blue shirt Zone B", "relevant": ["clip_find_08a", "clip_find_08b"], "video_id": "vid_4", "time_bucket": "2026-10-01"}
+{"qid": "q_find_17", "category": "find", "text": "red jacket near the entrance", "relevant": ["clip_find_01a", "clip_find_01b"], "video_id": "vid_5", "time_bucket": "2026-10-02"}
+{"qid": "q_find_18", "category": "find", "text": "person with black bag in Zone A", "relevant": ["clip_find_02a", "clip_find_02b"], "video_id": "vid_6", "time_bucket": "2026-10-03"}
+{"qid": "q_find_19", "category": "find", "text": "white car near Gate cam 2", "relevant": ["clip_find_03a", "clip_find_03b"], "video_id": "vid_1", "time_bucket": "2026-10-04"}
+{"qid": "q_find_20", "category": "find", "text": "person wearing blue shirt Zone B", "relevant": ["clip_find_04a", "clip_find_04b"], "video_id": "vid_2", "time_bucket": "2026-10-05"}
+{"qid": "q_find_21", "category": "find", "text": "red jacket near the entrance", "relevant": ["clip_find_05a", "clip_find_05b"], "video_id": "vid_3", "time_bucket": "2026-10-01"}
+{"qid": "q_find_22", "category": "find", "text": "person with black bag in Zone A", "relevant": ["clip_find_06a", "clip_find_06b"], "video_id": "vid_4", "time_bucket": "2026-10-02"}
+{"qid": "q_find_23", "category": "find", "text": "white car near Gate cam 2", "relevant": ["clip_find_07a", "clip_find_07b"], "video_id": "vid_5", "time_bucket": "2026-10-03"}
+{"qid": "q_find_24", "category": "find", "text": "person wearing blue shirt Zone B", "relevant": ["clip_find_08a", "clip_find_08b"], "video_id": "vid_6", "time_bucket": "2026-10-04"}
+{"qid": "q_find_25", "category": "find", "text": "red jacket near the entrance", "relevant": ["clip_find_01a", "clip_find_01b"], "video_id": "vid_1", "time_bucket": "2026-10-05"}
+{"qid": "q_find_26", "category": "find", "text": "person with black bag in Zone A", "relevant": ["clip_find_02a", "clip_find_02b"], "video_id": "vid_2", "time_bucket": "2026-10-01"}
+{"qid": "q_find_27", "category": "find", "text": "white car near Gate cam 2", "relevant": ["clip_find_03a", "clip_find_03b"], "video_id": "vid_3", "time_bucket": "2026-10-02"}
+{"qid": "q_find_28", "category": "find", "text": "person wearing blue shirt Zone B", "relevant": ["clip_find_04a", "clip_find_04b"], "video_id": "vid_4", "time_bucket": "2026-10-03"}
+{"qid": "q_find_29", "category": "find", "text": "red jacket near the entrance", "relevant": ["clip_find_05a", "clip_find_05b"], "video_id": "vid_5", "time_bucket": "2026-10-04"}
+{"qid": "q_find_30", "category": "find", "text": "person with black bag in Zone A", "relevant": ["clip_find_06a", "clip_find_06b"], "video_id": "vid_6", "time_bucket": "2026-10-05"}
+{"qid": "q_track_01", "category": "track", "text": "track person in red coat across cam 0 and cam 1", "relevant": ["clip_track_01a", "clip_track_01b"], "video_id": "vid_1", "time_bucket": "2026-10-01"}
+{"qid": "q_track_02", "category": "track", "text": "follow white van leaving Parking", "relevant": ["clip_track_02a", "clip_track_02b"], "video_id": "vid_2", "time_bucket": "2026-10-02"}
+{"qid": "q_track_03", "category": "track", "text": "track loitering person near Entrance", "relevant": ["clip_track_03a", "clip_track_03b"], "video_id": "vid_3", "time_bucket": "2026-10-03"}
+{"qid": "q_track_04", "category": "track", "text": "person moving from Zone A to Zone B", "relevant": ["clip_track_04a", "clip_track_04b"], "video_id": "vid_4", "time_bucket": "2026-10-04"}
+{"qid": "q_track_05", "category": "track", "text": "track person in red coat across cam 0 and cam 1", "relevant": ["clip_track_05a", "clip_track_05b"], "video_id": "vid_5", "time_bucket": "2026-10-05"}
+{"qid": "q_track_06", "category": "track", "text": "follow white van leaving Parking", "relevant": ["clip_track_06a", "clip_track_06b"], "video_id": "vid_6", "time_bucket": "2026-10-01"}
+{"qid": "q_track_07", "category": "track", "text": "track loitering person near Entrance", "relevant": ["clip_track_07a", "clip_track_07b"], "video_id": "vid_1", "time_bucket": "2026-10-02"}
+{"qid": "q_track_08", "category": "track", "text": "person moving from Zone A to Zone B", "relevant": ["clip_track_08a", "clip_track_08b"], "video_id": "vid_2", "time_bucket": "2026-10-03"}
+{"qid": "q_track_09", "category": "track", "text": "track person in red coat across cam 0 and cam 1", "relevant": ["clip_track_01a", "clip_track_01b"], "video_id": "vid_3", "time_bucket": "2026-10-04"}
+{"qid": "q_track_10", "category": "track", "text": "follow white van leaving Parking", "relevant": ["clip_track_02a", "clip_track_02b"], "video_id": "vid_4", "time_bucket": "2026-10-05"}
+{"qid": "q_track_11", "category": "track", "text": "track loitering person near Entrance", "relevant": ["clip_track_03a", "clip_track_03b"], "video_id": "vid_5", "time_bucket": "2026-10-01"}
+{"qid": "q_track_12", "category": "track", "text": "person moving from Zone A to Zone B", "relevant": ["clip_track_04a", "clip_track_04b"], "video_id": "vid_6", "time_bucket": "2026-10-02"}
+{"qid": "q_track_13", "category": "track", "text": "track person in red coat across cam 0 and cam 1", "relevant": ["clip_track_05a", "clip_track_05b"], "video_id": "vid_1", "time_bucket": "2026-10-03"}
+{"qid": "q_track_14", "category": "track", "text": "follow white van leaving Parking", "relevant": ["clip_track_06a", "clip_track_06b"], "video_id": "vid_2", "time_bucket": "2026-10-04"}
+{"qid": "q_track_15", "category": "track", "text": "track loitering person near Entrance", "relevant": ["clip_track_07a", "clip_track_07b"], "video_id": "vid_3", "time_bucket": "2026-10-05"}
+{"qid": "q_track_16", "category": "track", "text": "person moving from Zone A to Zone B", "relevant": ["clip_track_08a", "clip_track_08b"], "video_id": "vid_4", "time_bucket": "2026-10-01"}
+{"qid": "q_track_17", "category": "track", "text": "track person in red coat across cam 0 and cam 1", "relevant": ["clip_track_01a", "clip_track_01b"], "video_id": "vid_5", "time_bucket": "2026-10-02"}
+{"qid": "q_track_18", "category": "track", "text": "follow white van leaving Parking", "relevant": ["clip_track_02a", "clip_track_02b"], "video_id": "vid_6", "time_bucket": "2026-10-03"}
+{"qid": "q_track_19", "category": "track", "text": "track loitering person near Entrance", "relevant": ["clip_track_03a", "clip_track_03b"], "video_id": "vid_1", "time_bucket": "2026-10-04"}
+{"qid": "q_track_20", "category": "track", "text": "person moving from Zone A to Zone B", "relevant": ["clip_track_04a", "clip_track_04b"], "video_id": "vid_2", "time_bucket": "2026-10-05"}
+{"qid": "q_track_21", "category": "track", "text": "track person in red coat across cam 0 and cam 1", "relevant": ["clip_track_05a", "clip_track_05b"], "video_id": "vid_3", "time_bucket": "2026-10-01"}
+{"qid": "q_track_22", "category": "track", "text": "follow white van leaving Parking", "relevant": ["clip_track_06a", "clip_track_06b"], "video_id": "vid_4", "time_bucket": "2026-10-02"}
+{"qid": "q_track_23", "category": "track", "text": "track loitering person near Entrance", "relevant": ["clip_track_07a", "clip_track_07b"], "video_id": "vid_5", "time_bucket": "2026-10-03"}
+{"qid": "q_track_24", "category": "track", "text": "person moving from Zone A to Zone B", "relevant": ["clip_track_08a", "clip_track_08b"], "video_id": "vid_6", "time_bucket": "2026-10-04"}
+{"qid": "q_track_25", "category": "track", "text": "track person in red coat across cam 0 and cam 1", "relevant": ["clip_track_01a", "clip_track_01b"], "video_id": "vid_1", "time_bucket": "2026-10-05"}
+{"qid": "q_track_26", "category": "track", "text": "follow white van leaving Parking", "relevant": ["clip_track_02a", "clip_track_02b"], "video_id": "vid_2", "time_bucket": "2026-10-01"}
+{"qid": "q_track_27", "category": "track", "text": "track loitering person near Entrance", "relevant": ["clip_track_03a", "clip_track_03b"], "video_id": "vid_3", "time_bucket": "2026-10-02"}
+{"qid": "q_track_28", "category": "track", "text": "person moving from Zone A to Zone B", "relevant": ["clip_track_04a", "clip_track_04b"], "video_id": "vid_4", "time_bucket": "2026-10-03"}
+{"qid": "q_track_29", "category": "track", "text": "track person in red coat across cam 0 and cam 1", "relevant": ["clip_track_05a", "clip_track_05b"], "video_id": "vid_5", "time_bucket": "2026-10-04"}
+{"qid": "q_track_30", "category": "track", "text": "follow white van leaving Parking", "relevant": ["clip_track_06a", "clip_track_06b"], "video_id": "vid_6", "time_bucket": "2026-10-05"}
+{"qid": "q_action_01", "category": "action", "text": "person running near gate", "relevant": ["clip_action_01a", "clip_action_01b"], "video_id": "vid_1", "time_bucket": "2026-10-01"}
+{"qid": "q_action_02", "category": "action", "text": "fight near Entrance cam 1", "relevant": ["clip_action_02a", "clip_action_02b"], "video_id": "vid_2", "time_bucket": "2026-10-02"}
+{"qid": "q_action_03", "category": "action", "text": "person loitering in Zone B for a while", "relevant": ["clip_action_03a", "clip_action_03b"], "video_id": "vid_3", "time_bucket": "2026-10-03"}
+{"qid": "q_action_04", "category": "action", "text": "crowd gathering in Zone A", "relevant": ["clip_action_04a", "clip_action_04b"], "video_id": "vid_4", "time_bucket": "2026-10-04"}
+{"qid": "q_action_05", "category": "action", "text": "person running near gate", "relevant": ["clip_action_05a", "clip_action_05b"], "video_id": "vid_5", "time_bucket": "2026-10-05"}
+{"qid": "q_action_06", "category": "action", "text": "fight near Entrance cam 1", "relevant": ["clip_action_06a", "clip_action_06b"], "video_id": "vid_6", "time_bucket": "2026-10-01"}
+{"qid": "q_action_07", "category": "action", "text": "person loitering in Zone B for a while", "relevant": ["clip_action_07a", "clip_action_07b"], "video_id": "vid_1", "time_bucket": "2026-10-02"}
+{"qid": "q_action_08", "category": "action", "text": "crowd gathering in Zone A", "relevant": ["clip_action_08a", "clip_action_08b"], "video_id": "vid_2", "time_bucket": "2026-10-03"}
+{"qid": "q_action_09", "category": "action", "text": "person running near gate", "relevant": ["clip_action_01a", "clip_action_01b"], "video_id": "vid_3", "time_bucket": "2026-10-04"}
+{"qid": "q_action_10", "category": "action", "text": "fight near Entrance cam 1", "relevant": ["clip_action_02a", "clip_action_02b"], "video_id": "vid_4", "time_bucket": "2026-10-05"}
+{"qid": "q_action_11", "category": "action", "text": "person loitering in Zone B for a while", "relevant": ["clip_action_03a", "clip_action_03b"], "video_id": "vid_5", "time_bucket": "2026-10-01"}
+{"qid": "q_action_12", "category": "action", "text": "crowd gathering in Zone A", "relevant": ["clip_action_04a", "clip_action_04b"], "video_id": "vid_6", "time_bucket": "2026-10-02"}
+{"qid": "q_action_13", "category": "action", "text": "person running near gate", "relevant": ["clip_action_05a", "clip_action_05b"], "video_id": "vid_1", "time_bucket": "2026-10-03"}
+{"qid": "q_action_14", "category": "action", "text": "fight near Entrance cam 1", "relevant": ["clip_action_06a", "clip_action_06b"], "video_id": "vid_2", "time_bucket": "2026-10-04"}
+{"qid": "q_action_15", "category": "action", "text": "person loitering in Zone B for a while", "relevant": ["clip_action_07a", "clip_action_07b"], "video_id": "vid_3", "time_bucket": "2026-10-05"}
+{"qid": "q_action_16", "category": "action", "text": "crowd gathering in Zone A", "relevant": ["clip_action_08a", "clip_action_08b"], "video_id": "vid_4", "time_bucket": "2026-10-01"}
+{"qid": "q_action_17", "category": "action", "text": "person running near gate", "relevant": ["clip_action_01a", "clip_action_01b"], "video_id": "vid_5", "time_bucket": "2026-10-02"}
+{"qid": "q_action_18", "category": "action", "text": "fight near Entrance cam 1", "relevant": ["clip_action_02a", "clip_action_02b"], "video_id": "vid_6", "time_bucket": "2026-10-03"}
+{"qid": "q_action_19", "category": "action", "text": "person loitering in Zone B for a while", "relevant": ["clip_action_03a", "clip_action_03b"], "video_id": "vid_1", "time_bucket": "2026-10-04"}
+{"qid": "q_action_20", "category": "action", "text": "crowd gathering in Zone A", "relevant": ["clip_action_04a", "clip_action_04b"], "video_id": "vid_2", "time_bucket": "2026-10-05"}
+{"qid": "q_action_21", "category": "action", "text": "person running near gate", "relevant": ["clip_action_05a", "clip_action_05b"], "video_id": "vid_3", "time_bucket": "2026-10-01"}
+{"qid": "q_action_22", "category": "action", "text": "fight near Entrance cam 1", "relevant": ["clip_action_06a", "clip_action_06b"], "video_id": "vid_4", "time_bucket": "2026-10-02"}
+{"qid": "q_action_23", "category": "action", "text": "person loitering in Zone B for a while", "relevant": ["clip_action_07a", "clip_action_07b"], "video_id": "vid_5", "time_bucket": "2026-10-03"}
+{"qid": "q_action_24", "category": "action", "text": "crowd gathering in Zone A", "relevant": ["clip_action_08a", "clip_action_08b"], "video_id": "vid_6", "time_bucket": "2026-10-04"}
+{"qid": "q_action_25", "category": "action", "text": "person running near gate", "relevant": ["clip_action_01a", "clip_action_01b"], "video_id": "vid_1", "time_bucket": "2026-10-05"}
+{"qid": "q_action_26", "category": "action", "text": "fight near Entrance cam 1", "relevant": ["clip_action_02a", "clip_action_02b"], "video_id": "vid_2", "time_bucket": "2026-10-01"}
+{"qid": "q_action_27", "category": "action", "text": "person loitering in Zone B for a while", "relevant": ["clip_action_03a", "clip_action_03b"], "video_id": "vid_3", "time_bucket": "2026-10-02"}
+{"qid": "q_action_28", "category": "action", "text": "crowd gathering in Zone A", "relevant": ["clip_action_04a", "clip_action_04b"], "video_id": "vid_4", "time_bucket": "2026-10-03"}
+{"qid": "q_action_29", "category": "action", "text": "person running near gate", "relevant": ["clip_action_05a", "clip_action_05b"], "video_id": "vid_5", "time_bucket": "2026-10-04"}
+{"qid": "q_action_30", "category": "action", "text": "fight near Entrance cam 1", "relevant": ["clip_action_06a", "clip_action_06b"], "video_id": "vid_6", "time_bucket": "2026-10-05"}
+{"qid": "q_filter_01", "category": "filter", "text": "persons in Zone A between 22:00 and 23:00", "relevant": ["clip_filter_01a", "clip_filter_01b"], "video_id": "vid_1", "time_bucket": "2026-10-01"}
+{"qid": "q_filter_02", "category": "filter", "text": "cars in Parking after 10 PM cam 1", "relevant": ["clip_filter_02a", "clip_filter_02b"], "video_id": "vid_2", "time_bucket": "2026-10-02"}
+{"qid": "q_filter_03", "category": "filter", "text": "all persons with bags yesterday Zone C", "relevant": ["clip_filter_03a", "clip_filter_03b"], "video_id": "vid_3", "time_bucket": "2026-10-03"}
+{"qid": "q_filter_04", "category": "filter", "text": "snapshots of crowd in Entrance last hour", "relevant": ["clip_filter_04a", "clip_filter_04b"], "video_id": "vid_4", "time_bucket": "2026-10-04"}
+{"qid": "q_filter_05", "category": "filter", "text": "persons in Zone A between 22:00 and 23:00", "relevant": ["clip_filter_05a", "clip_filter_05b"], "video_id": "vid_5", "time_bucket": "2026-10-05"}
+{"qid": "q_filter_06", "category": "filter", "text": "cars in Parking after 10 PM cam 1", "relevant": ["clip_filter_06a", "clip_filter_06b"], "video_id": "vid_6", "time_bucket": "2026-10-01"}
+{"qid": "q_filter_07", "category": "filter", "text": "all persons with bags yesterday Zone C", "relevant": ["clip_filter_07a", "clip_filter_07b"], "video_id": "vid_1", "time_bucket": "2026-10-02"}
+{"qid": "q_filter_08", "category": "filter", "text": "snapshots of crowd in Entrance last hour", "relevant": ["clip_filter_08a", "clip_filter_08b"], "video_id": "vid_2", "time_bucket": "2026-10-03"}
+{"qid": "q_filter_09", "category": "filter", "text": "persons in Zone A between 22:00 and 23:00", "relevant": ["clip_filter_01a", "clip_filter_01b"], "video_id": "vid_3", "time_bucket": "2026-10-04"}
+{"qid": "q_filter_10", "category": "filter", "text": "cars in Parking after 10 PM cam 1", "relevant": ["clip_filter_02a", "clip_filter_02b"], "video_id": "vid_4", "time_bucket": "2026-10-05"}
+{"qid": "q_filter_11", "category": "filter", "text": "all persons with bags yesterday Zone C", "relevant": ["clip_filter_03a", "clip_filter_03b"], "video_id": "vid_5", "time_bucket": "2026-10-01"}
+{"qid": "q_filter_12", "category": "filter", "text": "snapshots of crowd in Entrance last hour", "relevant": ["clip_filter_04a", "clip_filter_04b"], "video_id": "vid_6", "time_bucket": "2026-10-02"}
+{"qid": "q_filter_13", "category": "filter", "text": "persons in Zone A between 22:00 and 23:00", "relevant": ["clip_filter_05a", "clip_filter_05b"], "video_id": "vid_1", "time_bucket": "2026-10-03"}
+{"qid": "q_filter_14", "category": "filter", "text": "cars in Parking after 10 PM cam 1", "relevant": ["clip_filter_06a", "clip_filter_06b"], "video_id": "vid_2", "time_bucket": "2026-10-04"}
+{"qid": "q_filter_15", "category": "filter", "text": "all persons with bags yesterday Zone C", "relevant": ["clip_filter_07a", "clip_filter_07b"], "video_id": "vid_3", "time_bucket": "2026-10-05"}
+{"qid": "q_filter_16", "category": "filter", "text": "snapshots of crowd in Entrance last hour", "relevant": ["clip_filter_08a", "clip_filter_08b"], "video_id": "vid_4", "time_bucket": "2026-10-01"}
+{"qid": "q_filter_17", "category": "filter", "text": "persons in Zone A between 22:00 and 23:00", "relevant": ["clip_filter_01a", "clip_filter_01b"], "video_id": "vid_5", "time_bucket": "2026-10-02"}
+{"qid": "q_filter_18", "category": "filter", "text": "cars in Parking after 10 PM cam 1", "relevant": ["clip_filter_02a", "clip_filter_02b"], "video_id": "vid_6", "time_bucket": "2026-10-03"}
+{"qid": "q_filter_19", "category": "filter", "text": "all persons with bags yesterday Zone C", "relevant": ["clip_filter_03a", "clip_filter_03b"], "video_id": "vid_1", "time_bucket": "2026-10-04"}
+{"qid": "q_filter_20", "category": "filter", "text": "snapshots of crowd in Entrance last hour", "relevant": ["clip_filter_04a", "clip_filter_04b"], "video_id": "vid_2", "time_bucket": "2026-10-05"}
+{"qid": "q_filter_21", "category": "filter", "text": "persons in Zone A between 22:00 and 23:00", "relevant": ["clip_filter_05a", "clip_filter_05b"], "video_id": "vid_3", "time_bucket": "2026-10-01"}
+{"qid": "q_filter_22", "category": "filter", "text": "cars in Parking after 10 PM cam 1", "relevant": ["clip_filter_06a", "clip_filter_06b"], "video_id": "vid_4", "time_bucket": "2026-10-02"}
+{"qid": "q_filter_23", "category": "filter", "text": "all persons with bags yesterday Zone C", "relevant": ["clip_filter_07a", "clip_filter_07b"], "video_id": "vid_5", "time_bucket": "2026-10-03"}
+{"qid": "q_filter_24", "category": "filter", "text": "snapshots of crowd in Entrance last hour", "relevant": ["clip_filter_08a", "clip_filter_08b"], "video_id": "vid_6", "time_bucket": "2026-10-04"}
+{"qid": "q_filter_25", "category": "filter", "text": "persons in Zone A between 22:00 and 23:00", "relevant": ["clip_filter_01a", "clip_filter_01b"], "video_id": "vid_1", "time_bucket": "2026-10-05"}
+{"qid": "q_filter_26", "category": "filter", "text": "cars in Parking after 10 PM cam 1", "relevant": ["clip_filter_02a", "clip_filter_02b"], "video_id": "vid_2", "time_bucket": "2026-10-01"}
+{"qid": "q_filter_27", "category": "filter", "text": "all persons with bags yesterday Zone C", "relevant": ["clip_filter_03a", "clip_filter_03b"], "video_id": "vid_3", "time_bucket": "2026-10-02"}
+{"qid": "q_filter_28", "category": "filter", "text": "snapshots of crowd in Entrance last hour", "relevant": ["clip_filter_04a", "clip_filter_04b"], "video_id": "vid_4", "time_bucket": "2026-10-03"}
+{"qid": "q_filter_29", "category": "filter", "text": "persons in Zone A between 22:00 and 23:00", "relevant": ["clip_filter_05a", "clip_filter_05b"], "video_id": "vid_5", "time_bucket": "2026-10-04"}
+{"qid": "q_filter_30", "category": "filter", "text": "cars in Parking after 10 PM cam 1", "relevant": ["clip_filter_06a", "clip_filter_06b"], "video_id": "vid_6", "time_bucket": "2026-10-05"}
