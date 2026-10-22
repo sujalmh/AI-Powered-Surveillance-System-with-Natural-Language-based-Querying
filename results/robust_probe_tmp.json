@@ -1,0 +1,684 @@
+{
+  "cases": [
+    {
+      "case": "normalize_scores.empty",
+      "status": "ok",
+      "value": []
+    },
+    {
+      "case": "normalize_scores.single_zero",
+      "status": "ok",
+      "value": [
+        0.5
+      ]
+    },
+    {
+      "case": "normalize_scores.single_0.3",
+      "status": "ok",
+      "value": [
+        0.8
+      ]
+    },
+    {
+      "case": "normalize_scores.single_duration_5s",
+      "status": "ok",
+      "value": [
+        1.0
+      ]
+    },
+    {
+      "case": "normalize_scores.all_tie_durations",
+      "status": "ok",
+      "value": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "case": "normalize_scores.all_zero",
+      "status": "ok",
+      "value": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "case": "normalize_scores.negative",
+      "status": "ok",
+      "value": [
+        0.5,
+        1.0
+      ]
+    },
+    {
+      "case": "normalize_scores.mixed_sign",
+      "status": "ok",
+      "value": [
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "case": "normalize_scores.nan_first",
+      "status": "ok",
+      "value": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "case": "normalize_scores.nan_last",
+      "status": "ok",
+      "value": [
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "case": "normalize_scores.inf",
+      "status": "ok",
+      "value": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "case": "normalize_scores.short_durations",
+      "status": "ok",
+      "value": [
+        0.25,
+        0.5
+      ]
+    },
+    {
+      "case": "normalize_scores.long_durations",
+      "status": "ok",
+      "value": [
+        0.0033333333333333335,
+        1.0
+      ]
+    },
+    {
+      "case": "normalize_scores.single_candidate_gallery",
+      "status": "ok",
+      "value": [
+        1.0
+      ]
+    },
+    {
+      "case": "sem_norm.empty",
+      "status": "ok",
+      "value": []
+    },
+    {
+      "case": "sem_norm.single",
+      "status": "ok",
+      "value": [
+        1.0
+      ]
+    },
+    {
+      "case": "sem_norm.all_tie",
+      "status": "ok",
+      "value": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "case": "sem_norm.two_distinct",
+      "status": "ok",
+      "value": [
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "case": "sem_norm.negative",
+      "status": "ok",
+      "value": [
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "case": "merge.empty_struct_only",
+      "status": "ok",
+      "value": []
+    },
+    {
+      "case": "merge.empty_both",
+      "status": "ok",
+      "value": []
+    },
+    {
+      "case": "merge.semantic_only",
+      "status": "ok",
+      "value": [
+        {
+          "camera_id": 0,
+          "clip_url": "/clips/cam0/a.mp4",
+          "clip_path": "clips/cam0/a.mp4",
+          "score_struct": 0.0,
+          "score_semantic": 0.8,
+          "score_raw_semantic": 0.5,
+          "source": "semantic",
+          "frames": [
+            {
+              "frame_ts": "2026-03-01T17:10:00",
+              "frame_index": 0,
+              "score": 0.5
+            }
+          ],
+          "score": 0.42400000000000004
+        }
+      ]
+    },
+    {
+      "case": "merge.struct_only",
+      "status": "ok",
+      "value": [
+        {
+          "camera_id": 0,
+          "object_name": "person",
+          "color": "red",
+          "start": "2026-03-01T17:10:00",
+          "end": "2026-03-01T17:10:00",
+          "duration_seconds": 0,
+          "objects": [
+            {
+              "object_name": "person",
+              "color": "red",
+              "track_id": 1,
+              "confidence": 0.9,
+              "colors": [
+                "red"
+              ]
+            }
+          ],
+          "matched_timestamps": [
+            "2026-03-01T17:10:00"
+          ],
+          "score_struct": 0.5,
+          "score_semantic": 0.0,
+          "source": "structured",
+          "score": 0.33499999999999996
+        }
+      ]
+    },
+    {
+      "case": "merge.both_normal",
+      "status": "ok",
+      "value": [
+        {
+          "camera_id": 0,
+          "object_name": "person",
+          "color": "red",
+          "start": "2026-03-01T17:10:00",
+          "end": "2026-03-01T17:10:00",
+          "duration_seconds": 0,
+          "objects": [
+            {
+              "object_name": "person",
+              "color": "red",
+              "track_id": 1,
+              "confidence": 0.9,
+              "colors": [
+                "red"
+              ]
+            }
+          ],
+          "matched_timestamps": [
+            "2026-03-01T17:10:00"
+          ],
+          "score_struct": 0.5,
+          "score_semantic": 0.8,
+          "source": "hybrid",
+          "frames": [
+            {
+              "frame_ts": "2026-03-01T17:10:00",
+              "frame_index": 0,
+              "score": 0.5
+            }
+          ],
+          "score": 0.639
+        }
+      ]
+    },
+    {
+      "case": "merge.all_tie_struct",
+      "status": "ok",
+      "value": [
+        {
+          "camera_id": 0,
+          "object_name": "person",
+          "color": "red",
+          "start": "2026-03-01T17:10:00",
+          "end": "2026-03-01T17:10:00",
+          "duration_seconds": 0,
+          "objects": [
+            {
+              "object_name": "person",
+              "color": "red",
+              "track_id": 1,
+              "confidence": 0.9,
+              "colors": [
+                "red"
+              ]
+            }
+          ],
+          "matched_timestamps": [
+            "2026-03-01T17:10:00",
+            "2026-03-01T17:10:00"
+          ],
+          "score_struct": 0.5,
+          "score_semantic": 0.0,
+          "source": "structured",
+          "score": 0.33499999999999996
+        }
+      ]
+    },
+    {
+      "case": "merge.sem_score_norm_missing",
+      "status": "ok",
+      "value": [
+        {
+          "camera_id": 0,
+          "clip_url": "/x.mp4",
+          "clip_path": "x.mp4",
+          "score_struct": 0.0,
+          "score_semantic": 0.0,
+          "score_raw_semantic": 0.5,
+          "source": "semantic",
+          "frames": [],
+          "score": 0.0
+        }
+      ]
+    },
+    {
+      "case": "merge.sem_score_norm_none",
+      "status": "exception",
+      "exc_type": "TypeError",
+      "exc_msg": "unsupported operand type(s) for *: 'float' and 'NoneType'",
+      "trace_tail": [
+        "    final_score = alpha * result[\"score_struct\"] + (1 - alpha) * result[\"score_semantic\"]",
+        "                                                   ~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~",
+        "TypeError: unsupported operand type(s) for *: 'float' and 'NoneType'"
+      ]
+    },
+    {
+      "case": "merge.sem_score_norm_nan",
+      "status": "ok",
+      "value": [
+        {
+          "camera_id": 0,
+          "clip_url": "/x.mp4",
+          "clip_path": "x.mp4",
+          "score_struct": 0.0,
+          "score_semantic": "NaN",
+          "score_raw_semantic": 0.5,
+          "source": "semantic",
+          "frames": [],
+          "score": "NaN"
+        }
+      ]
+    },
+    {
+      "case": "merge.struct_none",
+      "status": "ok",
+      "value": [
+        {
+          "camera_id": 0,
+          "clip_url": "/clips/cam0/a.mp4",
+          "clip_path": "clips/cam0/a.mp4",
+          "score_struct": 0.0,
+          "score_semantic": 0.8,
+          "score_raw_semantic": 0.5,
+          "source": "semantic",
+          "frames": [
+            {
+              "frame_ts": "2026-03-01T17:10:00",
+              "frame_index": 0,
+              "score": 0.5
+            }
+          ],
+          "score": 0.42400000000000004
+        }
+      ]
+    },
+    {
+      "case": "merge.sem_none",
+      "status": "exception",
+      "exc_type": "TypeError",
+      "exc_msg": "object of type 'NoneType' has no len()",
+      "trace_tail": [
+        "    n_structured=len(combined_tracks), n_semantic=len(semantic),",
+        "                                                  ^^^^^^^^^^^^^",
+        "TypeError: object of type 'NoneType' has no len()"
+      ]
+    },
+    {
+      "case": "merge.struct_none_count_constraint",
+      "status": "exception",
+      "exc_type": "TypeError",
+      "exc_msg": "'NoneType' object is not iterable",
+      "trace_tail": [
+        "  File \"S:\\college\\ai-surveillance\\backend\\app\\services\\retrieval_utils.py\", line 201, in filter_docs_by_count_constraint",
+        "    for d in docs:",
+        "TypeError: 'NoneType' object is not iterable"
+      ]
+    },
+    {
+      "case": "merge.count_constraint_semantic_ignored",
+      "status": "ok",
+      "value": [
+        {
+          "camera_id": 0,
+          "object_name": null,
+          "color": null,
+          "start": "2026-03-01T17:10:00",
+          "end": "2026-03-01T17:10:00",
+          "duration_seconds": 0,
+          "objects": [
+            {
+              "object_name": "person",
+              "color": "red",
+              "track_id": 1,
+              "confidence": 0.9,
+              "colors": [
+                "red"
+              ]
+            }
+          ],
+          "match_count_peak": 1,
+          "count_constraint": {
+            "gte": 1
+          },
+          "matched_timestamps": [
+            "2026-03-01T17:10:00"
+          ],
+          "score_struct": 0.5,
+          "score_semantic": 0.0,
+          "source": "structured",
+          "score": 0.5
+        }
+      ]
+    },
+    {
+      "case": "mmr.negative_scores_drop_all",
+      "status": "ok",
+      "value": []
+    },
+    {
+      "case": "mmr.two_items_passthrough",
+      "status": "ok",
+      "value": [
+        {
+          "camera_id": 0,
+          "score": 0.1
+        },
+        {
+          "camera_id": 1,
+          "score": 0.2
+        }
+      ]
+    },
+    {
+      "case": "mmr.all_ties",
+      "status": "ok",
+      "value": [
+        {
+          "camera_id": 0,
+          "start": "2026-03-01T17:00:00",
+          "score": 0.5
+        },
+        {
+          "camera_id": 1,
+          "start": "2026-03-01T18:00:00",
+          "score": 0.5
+        },
+        {
+          "camera_id": 0,
+          "start": "2026-03-01T17:00:00",
+          "score": 0.5
+        }
+      ]
+    },
+    {
+      "case": "alpha.no_branches",
+      "status": "ok",
+      "value": 0.57
+    },
+    {
+      "case": "alpha.empty_score_vectors",
+      "status": "ok",
+      "value": 0.5349999999999999
+    },
+    {
+      "case": "alpha.degenerate_struct_ties",
+      "status": "ok",
+      "value": 0.285
+    },
+    {
+      "case": "alpha.nan_score_vector",
+      "status": "ok",
+      "value": 1.0
+    },
+    {
+      "case": "conf.confidence_alpha_empty",
+      "status": "ok",
+      "value": 0.5
+    },
+    {
+      "case": "conf.branch_conf_all_tie",
+      "status": "ok",
+      "value": 0.0
+    },
+    {
+      "case": "conf.branch_conf_single",
+      "status": "ok",
+      "value": 0.0
+    },
+    {
+      "case": "conf.confidence_alpha_nan",
+      "status": "ok",
+      "value": "NaN"
+    },
+    {
+      "case": "conf.topk_conc_all_tie",
+      "status": "ok",
+      "value": 0.0
+    },
+    {
+      "case": "conf.topk_conc_negative",
+      "status": "ok",
+      "value": 1.0
+    },
+    {
+      "case": "fusion.fuse_inplace_mutation",
+      "status": "ok",
+      "value": {
+        "v0_before": 1.0,
+        "v0_after": 0.6000000238418579,
+        "t0_after": 0.4000000059604645,
+        "mutated": true
+      }
+    },
+    {
+      "case": "fusion.fuse_not_idempotent",
+      "status": "ok",
+      "value": {
+        "v0_after_two_calls": 0.36000001430511475
+      }
+    },
+    {
+      "case": "fusion.fuse_zero_input_norm",
+      "status": "ok",
+      "value": {
+        "norm": 0.0,
+        "dtype": "float32"
+      }
+    },
+    {
+      "case": "fusion.fuse_gated_nan_quality",
+      "status": "ok",
+      "value": {
+        "vis_block_norm": 0.9996930360794067,
+        "text_block_norm": 0.024803142994642258,
+        "implied_wv_over_wt": 40.305095055709316
+      }
+    },
+    {
+      "case": "fusion.fuse_gated_empty_visual_branch",
+      "status": "ok",
+      "value": {
+        "vis_block_norm": 0.0,
+        "text_block_norm": 0.9999987483024597,
+        "total_norm": 0.9999987483024597
+      }
+    },
+    {
+      "case": "fusion.fuse_gated_none_quality",
+      "status": "exception",
+      "exc_type": "TypeError",
+      "exc_msg": "float() argument must be a string or a real number, not 'NoneType'",
+      "trace_tail": [
+        "    qv = max(0.0, min(1.0, float(visual_quality)))",
+        "                           ^^^^^^^^^^^^^^^^^^^^^",
+        "TypeError: float() argument must be a string or a real number, not 'NoneType'"
+      ]
+    },
+    {
+      "case": "norm.production_vs_harness",
+      "status": "ok",
+      "value": {
+        "production_max_norm": [
+          0.0033333333333333335,
+          1.0
+        ],
+        "eval_minmax": [
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "case": "alpha.branch_emptiness",
+      "status": "ok",
+      "value": {
+        "both_empty": 0.57,
+        "struct_only": 0.6699999999999999,
+        "sem_only": 0.47
+      }
+    },
+    {
+      "case": "merge.mmr_semantic_only",
+      "status": "ok",
+      "value": {
+        "n": 4,
+        "scores": [
+          0.47700000000000004,
+          0.4505,
+          0.42400000000000004,
+          0.3975
+        ],
+        "sources": [
+          "semantic",
+          "semantic",
+          "semantic",
+          "semantic"
+        ]
+      }
+    },
+    {
+      "case": "patch.deltas",
+      "status": "ok",
+      "value": {
+        "struct_only_score_before": 0.33499999999999996,
+        "struct_only_score_after": null,
+        "semantic_only_score_before": 0.42400000000000004,
+        "semantic_only_score_after": 0.8,
+        "alpha_sem_only_before": 0.47,
+        "alpha_sem_only_after": 0.0
+      }
+    }
+  ],
+  "n_cases": 55,
+  "patched_tests": [
+    {
+      "test": "t_degenerate_branch_not_confident",
+      "status": "pass"
+    },
+    {
+      "test": "t_single_element_unit_independent",
+      "status": "pass"
+    },
+    {
+      "test": "t_normalisation_unit_free",
+      "status": "pass"
+    },
+    {
+      "test": "t_negative_scores_preserve_order",
+      "status": "pass"
+    },
+    {
+      "test": "t_nan_does_not_poison_branch",
+      "status": "pass"
+    },
+    {
+      "test": "t_infinite_score_isolated",
+      "status": "pass"
+    },
+    {
+      "test": "t_empty_structured_rebalances_alpha",
+      "status": "pass"
+    },
+    {
+      "test": "t_count_constraint_keeps_alpha_one",
+      "status": "pass"
+    },
+    {
+      "test": "t_surviving_branch_keeps_full_scale",
+      "status": "pass"
+    },
+    {
+      "test": "t_mmr_never_drops_every_result",
+      "status": "pass"
+    },
+    {
+      "test": "t_mmr_keeps_relevance_order",
+      "status": "pass"
+    },
+    {
+      "test": "t_fuse_does_not_mutate_buffers",
+      "status": "pass"
+    },
+    {
+      "test": "t_fuse_is_idempotent",
+      "status": "pass"
+    },
+    {
+      "test": "t_gated_nan_quality_not_maximal_trust",
+      "status": "pass"
+    },
+    {
+      "test": "t_gated_none_quality_no_raise",
+      "status": "pass"
+    },
+    {
+      "test": "t_fusion_of_empty_branches_rejected",
+      "status": "pass"
+    },
+    {
+      "test": "t_confidence_nan_safe",
+      "status": "pass"
+    },
+    {
+      "test": "t_degenerate_detection",
+      "status": "pass"
+    }
+  ]
+}

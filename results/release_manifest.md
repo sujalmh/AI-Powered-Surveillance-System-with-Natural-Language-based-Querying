@@ -1,7 +1,7 @@
 # Release manifest
 
-Generated: `2026-10-22T12:48:37.959236+00:00`
-Git: `ca4c8a93687b6ed0d0051bfd0d2522678c02d952`
+Generated: `2026-10-22T15:25:43.928746+00:00`
+Git: `889a945f721eb3ba98ec574ec708ac82e87b8746`
 
 ## Subset
 
@@ -29,7 +29,7 @@ Git: `ca4c8a93687b6ed0d0051bfd0d2522678c02d952`
 - **ok** -- no secrets in the release: no *.env/*.key/*.pem/credentials*/secrets* entries
 - **ok** -- no parse caches in the release: no parsed_cache/parser_cache entries
 - **ok** -- measured results shipped: all measured results present
-- **ok** -- camera-ready PDF: 6 pages (0.34 MB, sha256 5af4037242abb97d)
+- **ok** -- camera-ready PDF: 6 pages (0.35 MB, sha256 44cfc9079921804a)
 - **ok** -- source bundle: 4 entries (INDICON2026Conference.tex, References.bib, IEEEtran.cls, README.txt)
 - **ok** -- source bundle carries the current paper: INDICON2026Conference.tex is byte-identical to INDICON2026Conference.tex
 - **ok** -- LaTeX log clean: no errors, 6 pages reported

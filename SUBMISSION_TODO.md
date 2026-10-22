@@ -187,3 +187,11 @@ Select-String -Path INDICON2026_submit\INDICON2026Conference.log -Pattern 'Outpu
 | H3 | C2 calibrated rank gate (PIT commensuration, λ=2, calibration-frozen): retrieval P@5 0.472 vs 0.427 (Δ=+0.0447, Holm p<0.0007), pair-AUC parity (0.734 vs 0.726, n.s.), kfold 0.721 vs 0.699 (4/5 folds); supersedes uncalibrated gate | **DONE** |
 | H4 | C1 combMAX operator ablation (tune-frozen): zscore ceiling 0.538 (Δ=+0.014, Holm p=0.0013), minmax unchanged (Δ=0); production uses minmax — reported scoped, routing rule + Lemma untouched | **DONE** |
 | H5 | Paper holds 6 pages, 0 overfull, 0 undefined, 15/15 refs; public repo re-pushed single-commit with new harness + results | **DONE** |
+
+## I. Review-driven cascade (2026-10-22) — robustness hardening + presentation fixes
+
+| # | Item | Status |
+|---|---|---|
+| I1 | Hardening D1–D9 (robust normalization, shared semantic normaliser, CombANZ rebalancing, fail-open MMR, NaN-safe confidence/fusion, production confidence wiring + production-normaliser arm, CombANZ/MNZ baselines); 21 regression tests; end-to-end unchanged at 0.450, control family unchanged, production arm ties 0.538 | **DONE** |
+| I2 | Presentation: F→F_{5,10} rename + standard 0.289, effective weights 0.69/0.31, fuzz split (642 vs 0/200), grouped-primary protocol + Holm 0.20, action/filter levels + confound, Bruch→TOIS, Jiang-2025 survey (b36 for b35), governance (iv)+(v) with ranking effect, reconciliation, counting move, leakage (98/104) + Holm/confound/stats, calib prior-wins line | **DONE** (6 pages, 0 overfull, 0 undefined, 15/15 cited) |
+| I3 | Unadopted as drafted: unexecuted-analysis language (N1/N2/N6), CUT-1 wholesale delete, full threat-model paragraph (space) | **DONE** (documented in proposals) |

@@ -9,6 +9,21 @@ def _sigmoid(x: float) -> float:
     return 1.0 / (1.0 + math.exp(-x))
 
 
+def _safe_quality(value: object, default: float = 0.5) -> float:
+    """Coerce a quality signal to a finite float in [0, 1].
+
+    ``min(1.0, nan)`` returns 1.0 in Python, so a NaN quality would
+    otherwise be read as *maximum* trust.  ``None`` would raise.
+    """
+    try:
+        f = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return float(default)
+    if f != f or f in (float("inf"), float("-inf")):
+        return float(default)
+    return max(0.0, min(1.0, f))
+
+
 def fuse_gated(
     visual_emb: np.ndarray,
     text_emb: np.ndarray,
@@ -27,8 +42,8 @@ def fuse_gated(
     point.  Output is a 1152-d L2-normalized float32 vector, identical in
     format to :meth:`MultimodalFusion.fuse`.
     """
-    v = np.asarray(visual_emb, dtype=np.float32).reshape(-1)
-    t = np.asarray(text_emb, dtype=np.float32).reshape(-1)
+    v = np.array(visual_emb, dtype=np.float32, copy=True).reshape(-1)
+    t = np.array(text_emb, dtype=np.float32, copy=True).reshape(-1)
     if v.shape[0] != 768:
         v2 = np.zeros((768,), dtype=np.float32)
         n = min(768, v.shape[0])
@@ -41,8 +56,8 @@ def fuse_gated(
         if n > 0:
             t2[:n] = t[:n]
         t = t2
-    qv = max(0.0, min(1.0, float(visual_quality)))
-    qt = max(0.0, min(1.0, float(text_quality)))
+    qv = _safe_quality(visual_quality)
+    qt = _safe_quality(text_quality)
     gw = _sigmoid(float(lam) * (qv - qt))
     gw = max(0.05, min(0.95, gw))
     # Tie (gw=0.5) reproduces the static weights exactly; the gate
@@ -53,7 +68,12 @@ def fuse_gated(
     t = (t * wt).astype(np.float32)
     fused = np.concatenate([v, t]).astype(np.float32)
     norm = float(np.linalg.norm(fused)) + 1e-6
-    return (fused / norm).astype(np.float32)
+    out = (fused / norm).astype(np.float32)
+    if float(np.linalg.norm(out)) <= 1e-9:
+        # Both branches empty (or exactly cancelling): refuse to return a
+        # non-unit vector, which would silently poison the FAISS index.
+        raise ValueError("fusion produced a zero vector (empty visual/text branch)")
+    return out
 
 
 class MultimodalFusion:
@@ -75,8 +95,10 @@ class MultimodalFusion:
         Returns:
             np.ndarray: shape (1152,) float32 L2-normalized
         """
-        v = np.asarray(visual_emb, dtype=np.float32).reshape(-1)
-        t = np.asarray(text_emb, dtype=np.float32).reshape(-1)
+        # copy=True: asarray() on a float32 input returns a *view*, so the
+        # in-place `v *=` below would scale the caller's buffer.
+        v = np.array(visual_emb, dtype=np.float32, copy=True).reshape(-1)
+        t = np.array(text_emb, dtype=np.float32, copy=True).reshape(-1)
 
         # Defensive shape correction
         if v.shape[0] != 768:
@@ -99,6 +121,10 @@ class MultimodalFusion:
         # L2 normalize
         norm = float(np.linalg.norm(fused)) + 1e-6
         fused = (fused / norm).astype(np.float32)
+        if float(np.linalg.norm(fused)) <= 1e-9:
+            # Both branches empty: refuse to return a non-unit vector,
+            # which would silently poison the FAISS index.
+            raise ValueError("fusion produced a zero vector (empty visual/text branch)")
         return fused
 
     def fuse_gated(

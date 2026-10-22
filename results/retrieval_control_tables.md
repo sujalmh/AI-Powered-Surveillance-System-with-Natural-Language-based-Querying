@@ -73,6 +73,13 @@ P-values are two-sided paired bootstrap with 3000 resamples. `< 0.0007` is the r
   - action: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
   - filter: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
   - per-intent tuned vs adaptive: Δ=-0.002 [-0.006, +0.000], p=0.7253
+- **production**: `adaptive vs fixed_0.7 (fixed alpha selected on tune split)`. ΔP@5 = +0.000 [+0.000, +0.000], p=1.0000; grouped Δ = +0.000 [+0.000, +0.000], p=1.0000.
+  - count: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
+  - find: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
+  - track: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
+  - action: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
+  - filter: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
+  - per-intent tuned vs adaptive: Δ=-0.002 [-0.006, +0.000], p=0.7253
 - **zscore**: `adaptive vs fixed_0.7 (fixed alpha selected on tune split)`. ΔP@5 = +0.002 [+0.000, +0.006], p=0.7187; grouped Δ = +0.002 [+0.000, +0.007], p=0.7113.
   - count: Δ=+0.010 [+0.000, +0.030], p=0.7353 (Holm p=1.0000), Holm-reject=False
   - find: Δ=+0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
@@ -90,11 +97,19 @@ P-values are two-sided paired bootstrap with 3000 resamples. `< 0.0007` is the r
 | minmax | adaptive | 0.538 | 0.619 |
 | minmax | conf_only | 0.536 | 0.732 |
 | minmax | combined | 0.538 | 0.675 |
+| production | adaptive | 0.538 | 0.619 |
+| production | conf_only | 0.536 | 0.732 |
+| production | combined | 0.538 | 0.675 |
 | zscore | adaptive | 0.524 | 0.619 |
 | zscore | conf_only | 0.532 | 0.733 |
 | zscore | combined | 0.526 | 0.676 |
 
 - **minmax** score diagnostics: mean struct margin 0.089, mean sem margin 0.044; mean struct concentration 0.497, mean sem concentration 0.070; mean top-5 branch overlap 0.045.
+  - combined_vs_prior (`combined` vs `adaptive`): ΔP@5 = +0.000 [+0.000, +0.000], p=1.0000; grouped Δ = +0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
+  - conf_only_vs_prior (`conf_only` vs `adaptive`): ΔP@5 = -0.002 [-0.006, +0.000], p=0.6893; grouped Δ = -0.002 [-0.007, +0.000], p=0.7267 (Holm p=1.0000), Holm-reject=False
+  - combined_vs_best_fixed (`combined` vs `fixed_0.7`): ΔP@5 = +0.000 [+0.000, +0.000], p=1.0000; grouped Δ = +0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
+
+- **production** score diagnostics: mean struct margin 0.089, mean sem margin 0.044; mean struct concentration 0.497, mean sem concentration 0.070; mean top-5 branch overlap 0.045.
   - combined_vs_prior (`combined` vs `adaptive`): ΔP@5 = +0.000 [+0.000, +0.000], p=1.0000; grouped Δ = +0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
   - conf_only_vs_prior (`conf_only` vs `adaptive`): ΔP@5 = -0.002 [-0.006, +0.000], p=0.6893; grouped Δ = -0.002 [-0.007, +0.000], p=0.7267 (Holm p=1.0000), Holm-reject=False
   - combined_vs_best_fixed (`combined` vs `fixed_0.7`): ΔP@5 = +0.000 [+0.000, +0.000], p=1.0000; grouped Δ = +0.000 [+0.000, +0.000], p=1.0000 (Holm p=1.0000), Holm-reject=False
@@ -109,6 +124,7 @@ P-values are two-sided paired bootstrap with 3000 resamples. `< 0.0007` is the r
 | Normalisation | Count | Find | Track | Action | Filter |
 |---|---:|---:|---:|---:|---:|
 | minmax | 0.5 | 0.6 | 0.5 | 0.5 | 0.5 |
+| production | 0.5 | 0.6 | 0.5 | 0.5 | 0.5 |
 | zscore | 0.7 | 0.9 | 0.8 | 0.5 | 0.9 |
 
 ## Realized adaptive alpha

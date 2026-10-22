@@ -328,6 +328,12 @@ def normalize_branch(values: Sequence[float], mode: str) -> np.ndarray:
         return minmax(arr)
     if mode == "zscore":
         return np.asarray(zscore_norm(arr.tolist()), dtype=np.float64)
+    if mode == "production":
+        # The normaliser the product actually ships for the structured
+        # branch (backend.app.services.retrieval_utils.normalize_scores).
+        from backend.app.services.retrieval_utils import normalize_scores
+
+        return np.asarray(normalize_scores([float(v) for v in arr]), dtype=np.float64)
     raise ValueError(mode)
 
 
@@ -611,7 +617,7 @@ def main() -> None:
     struct_raw = {qid: np.asarray([ctx["raw"][cid] for cid in clip_ids], dtype=np.float64)
                   for qid, ctx in contexts.items()}
 
-    norm_modes = ["minmax"] + ([] if args.no_zscore else ["zscore"])
+    norm_modes = ["minmax", "production"] + ([] if args.no_zscore else ["zscore"])
     systems = (
         [f"fixed_{a:.1f}" for a in FIXED_ALPHAS]
         + ["adaptive", "conf_only", "combined", "per_intent_tuned", "paper_lookup"]

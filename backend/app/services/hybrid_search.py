@@ -53,12 +53,10 @@ def parse_for_hybrid(query: str) -> ParsedQuery:
 
 
 def _norm_scores(scores: List[float]) -> List[float]:
-    if not scores:
-        return []
-    mn, mx = min(scores), max(scores)
-    if mx - mn < 1e-9:
-        return [1.0 for _ in scores]
-    return [(s - mn) / (mx - mn) for s in scores]
+    """See :func:`backend.app.services.sem_search._norm_scores`."""
+    from backend.app.services.sem_search import _norm_scores as _shared
+
+    return _shared(scores)
 
 
 def _clip_bounds(clip_path: Optional[str]) -> Tuple[Optional[str], Optional[str]]:

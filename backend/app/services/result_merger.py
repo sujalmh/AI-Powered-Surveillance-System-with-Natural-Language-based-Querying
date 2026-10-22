@@ -25,6 +25,7 @@ from backend.app.services.retrieval_utils import (
     SEM_RAW_THRESH_MED,
     aggregate_objects,
     count_matches_constraint,
+    finite_score,
     normalize_count_constraint,
     normalize_scores,
     object_matches,
@@ -317,15 +318,46 @@ def compute_adaptive_alpha(
         parsed_filter, intent, has_count_constraint, has_action,
         n_structured, n_semantic,
     )
-    if struct_scores is None or sem_scores is None:
-        return prior
-    try:
-        from backend.app.eval.confidence import combined_alpha
+    alpha = prior
+    if struct_scores is not None and sem_scores is not None:
+        try:
+            from backend.app.eval.confidence import combined_alpha
 
-        return float(combined_alpha(prior, struct_scores, sem_scores, blend=confidence_blend))
-    except Exception:
-        logger.opt(exception=True).debug("Confidence blend failed, using metadata prior")
-        return prior
+            alpha = float(
+                combined_alpha(prior, struct_scores, sem_scores, blend=confidence_blend)
+            )
+        except Exception:
+            logger.opt(exception=True).debug("Confidence blend failed, using metadata prior")
+            alpha = prior
+    return _rebalance_for_empty_branches(
+        alpha, has_count_constraint, n_structured, n_semantic
+    )
+
+
+def _rebalance_for_empty_branches(
+    alpha: float,
+    has_count_constraint: bool,
+    n_structured: int,
+    n_semantic: int,
+) -> float:
+    """Give a branch's weight back when that branch returned nothing.
+
+    A fixed-weight blend keeps the share of a branch that produced no
+    candidates, so the fused score scale silently depends on how many
+    branches contributed.  CombANZ / CombMNZ (Fox & Shaw, TREC-2 1994)
+    renormalise by the branches that actually contributed; this is the same
+    idea applied to the alpha of a two-branch blend.
+
+    With a count constraint the semantic branch is *deliberately* disabled
+    and alpha stays at 1.0.
+    """
+    if has_count_constraint:
+        return alpha
+    if n_structured <= 0 and n_semantic > 0:
+        return 0.0
+    if n_semantic <= 0 and n_structured > 0:
+        return 1.0
+    return alpha
 
 
 def _metadata_prior_alpha(
@@ -427,9 +459,9 @@ def apply_mmr_diversity(
                 return 0
 
         while remaining:
-            best_idx, best_mmr = -1, -1.0
+            best_idx, best_mmr = -1, -math.inf
             for i, r in enumerate(remaining):
-                rel = r.get("score", 0.0)
+                rel = finite_score(r.get("score"))
                 key_r = (r.get("camera_id"), _time_bucket(r))
                 max_sim = 0.0
                 for s in selected:
@@ -442,7 +474,8 @@ def apply_mmr_diversity(
             if best_idx < 0:
                 break
             selected.append(remaining.pop(best_idx))
-        return selected
+        # Fail open: never turn a ranking problem into an empty answer.
+        return selected if selected else results
     except Exception:
         logger.opt(exception=True).debug("MMR diversity failed, returning original order")
         return results
@@ -464,6 +497,9 @@ def merge_results(
     Intelligently merge structured detection results with semantic FAISS
     results into a single ranked list.
     """
+    structured = structured or []
+    semantic = semantic or []
+    parsed_filter = parsed_filter or {}
     count_constraint = normalize_count_constraint(parsed_filter.get("count_constraint"))
     has_count_constraint = count_constraint is not None
     has_action = parsed_filter.get("action") is not None
@@ -485,9 +521,27 @@ def merge_results(
             combined_tracks = []
 
     # --- Scoring --------------------------------------------------------
+    # Score vectors for the confidence blend (C1'): per-branch min-max
+    # normalised first, because raw durations (seconds) and semantic
+    # similarities ([0, 1]) live on incomparable scales.  Vectors are passed
+    # only when both branches can discriminate (≥2 candidates with spread);
+    # otherwise the metadata prior stands unchanged.
+    struct_raw = [finite_score(t.get("duration_seconds", 0)) for t in combined_tracks]
+    sem_raw = [finite_score(s.get("score_norm")) for s in semantic]
+
+    def _minmax_or_none(vals: List[float]) -> Optional[List[float]]:
+        if len(vals) < 2:
+            return None
+        lo, hi = min(vals), max(vals)
+        if hi - lo <= 1e-12:
+            return None
+        return [(v - lo) / (hi - lo) for v in vals]
+
     alpha = compute_adaptive_alpha(
         parsed_filter, intent, has_count_constraint, has_action,
         n_structured=len(combined_tracks), n_semantic=len(semantic),
+        struct_scores=_minmax_or_none(struct_raw),
+        sem_scores=_minmax_or_none(sem_raw),
     )
 
     results_map: Dict[str, Dict[str, Any]] = {}
@@ -509,11 +563,13 @@ def merge_results(
         enable_temporal = getattr(settings, "ENABLE_TEMPORAL_OVERLAP", True)
         for sem in semantic:
             clip_url = sem.get("clip_url")
+            sem_norm = finite_score(sem.get("score_norm"))
+            sem_raw = finite_score(sem.get("score_raw"))
             matched = False
             # Direct clip_url match
             for _key, result in results_map.items():
                 if result.get("clip_url") == clip_url:
-                    result["score_semantic"] = sem.get("score_norm", 0.0)
+                    result["score_semantic"] = sem_norm
                     result["source"] = "hybrid"
                     result["frames"] = sem.get("frames", [])
                     matched = True
@@ -527,7 +583,7 @@ def merge_results(
                         if r_start and r_end and _ranges_overlap(sem_start, sem_end, r_start, r_end):
                             result["score_semantic"] = max(
                                 result.get("score_semantic", 0.0),
-                                sem.get("score_norm", 0.0),
+                                sem_norm,
                             )
                             result["source"] = "hybrid"
                             if not result.get("frames"):
@@ -541,8 +597,8 @@ def merge_results(
                     "clip_url": sem.get("clip_url"),
                     "clip_path": sem.get("clip_path"),
                     "score_struct": 0.0,
-                    "score_semantic": sem.get("score_norm", 0.0),
-                    "score_raw_semantic": sem.get("score_raw", 0.0),
+                    "score_semantic": sem_norm,
+                    "score_raw_semantic": sem_raw,
                     "source": "semantic",
                     "frames": sem.get("frames", []),
                 }
@@ -554,11 +610,14 @@ def merge_results(
 
     results: List[Dict[str, Any]] = []
     for result in results_map.values():
-        final_score = alpha * result["score_struct"] + (1 - alpha) * result["score_semantic"]
+        final_score = (
+            alpha * finite_score(result.get("score_struct"))
+            + (1 - alpha) * finite_score(result.get("score_semantic"))
+        )
 
         # Semantic-only penalty
         if result.get("source") == "semantic":
-            raw_sem = result.get("score_raw_semantic", 0.0)
+            raw_sem = finite_score(result.get("score_raw_semantic"))
             if raw_sem < SEM_RAW_THRESH_LOW:
                 final_score *= SEM_PENALTY_STRONG
             elif raw_sem < SEM_RAW_THRESH_MED:

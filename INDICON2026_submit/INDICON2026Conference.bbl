@@ -50,18 +50,19 @@ S.~Li \emph{et~al.}, ``Person search with natural language description,'' in
   \emph{Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2017, pp.
   1970--1979.
 
-\bibitem{b35}
-------, ``{CLIP-ReID}: Exploiting vision-language model for image
-  re-identification without concrete text labels,'' in \emph{Proc. AAAI Conf.
-  Artif. Intell. (AAAI)}, 2023.
+\bibitem{b36}
+F.~Jiang, S.~Yang, M.~W. Jones, and L.~Zhang, ``From attributes to natural
+  language: a survey and foresight on text-based person re-identification,''
+  \emph{Inf. Fusion}, vol. 118, p. 102879, 2025.
 
 \bibitem{b25}
 J.~Johnson \emph{et~al.}, ``Billion-scale similarity search with {GPUs},''
   \emph{IEEE Trans. Big Data}, vol.~7, no.~3, pp. 535--547, 2021.
 
 \bibitem{b33}
-S.~Bruch \emph{et~al.}, ``An analysis of fusion functions for hybrid
-  retrieval,'' \emph{arXiv preprint arXiv:2210.11934}, 2022.
+S.~Bruch, S.~Gai, and A.~Ingber, ``An analysis of fusion functions for hybrid
+  retrieval,'' \emph{ACM Trans. Inf. Syst.}, vol.~42, no.~1, pp. 20:1--20:35,
+  2024.
 
 \bibitem{b34}
 Hsu and Tzeng, ``{DAT}: Dynamic alpha tuning for hybrid retrieval in

@@ -35,8 +35,34 @@ _MARGIN_W = 0.5
 _CONC_W = 0.5
 
 
+def _finite(values: Sequence[float]) -> list:
+    out = []
+    for s in values:
+        try:
+            f = float(s)
+        except (TypeError, ValueError):
+            f = 0.0
+        if f != f or f in (float("inf"), float("-inf")):
+            f = 0.0
+        out.append(f)
+    return out
+
+
 def _sorted_desc(scores: Sequence[float]) -> list:
-    return sorted((float(s) for s in scores), reverse=True)
+    return sorted(_finite(scores), reverse=True)
+
+
+def is_degenerate(scores: Sequence[float], eps: float = 1e-12) -> bool:
+    """True when the branch carries no discrimination information.
+
+    A constant (all-tie) vector and a single-element vector are both
+    degenerate: neither can tell two candidates apart.  The merge uses this
+    to stop a branchless-in-effect branch from keeping its share of alpha.
+    """
+    vals = _finite(scores)
+    if len(vals) < 2:
+        return True
+    return (max(vals) - min(vals)) <= eps
 
 
 def top1_margin(scores: Sequence[float]) -> float:
@@ -84,7 +110,10 @@ def branch_confidence(
     """
     margin = top1_margin(scores)
     conc = topk_concentration(scores, k=k)
-    return float(margin_weight * margin + conc_weight * conc)
+    value = float(margin_weight * margin + conc_weight * conc)
+    if value != value:  # NaN
+        return 0.0
+    return max(0.0, min(1.0, value))
 
 
 def confidence_alpha(
@@ -97,7 +126,10 @@ def confidence_alpha(
     ce = branch_confidence(sem_scores, k=k)
     if cs + ce <= 1e-12:
         return 0.5
-    return float(cs / (cs + ce))
+    alpha = float(cs / (cs + ce))
+    if alpha != alpha:  # NaN
+        return 0.5
+    return max(0.0, min(1.0, alpha))
 
 
 def combined_alpha(
@@ -110,6 +142,8 @@ def combined_alpha(
     """Half prior, half score-driven (blend tunable, default 0.5)."""
     conf = confidence_alpha(struct_scores, sem_scores, k=k)
     alpha = float(blend * float(prior_alpha) + (1.0 - blend) * conf)
+    if alpha != alpha:  # NaN: min()/max() silently return the first argument
+        return float(prior_alpha)
     return max(0.0, min(1.0, alpha))
 
 

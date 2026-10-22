@@ -55,6 +55,43 @@ def zscore_norm(scores: Sequence[float]) -> List[float]:
     return [1.0 / (1.0 + math.exp(-(x - m) / sd)) for x in xs]
 
 
+def comb_anz_fuse(
+    branch_scores: Sequence[Sequence[float]],
+    ids: Sequence[Sequence[str]],
+) -> Dict[str, float]:
+    """CombANZ (Fox & Shaw, TREC-2 1994): average of the *non-zero* scores.
+
+    A branch that returned nothing therefore does not dilute the surviving
+    branch -- the empty-branch behaviour that the alpha blend lacks.
+    """
+    sums: Dict[str, float] = {}
+    counts: Dict[str, int] = {}
+    for scores, branch_ids in zip(branch_scores, ids):
+        for s, d in zip(scores, branch_ids):
+            if float(s) <= 0.0:
+                continue
+            sums[d] = sums.get(d, 0.0) + float(s)
+            counts[d] = counts.get(d, 0) + 1
+    return {d: sums[d] / counts[d] for d in sums if counts.get(d)}
+
+
+def comb_mnz_fuse(
+    branch_scores: Sequence[Sequence[float]],
+    ids: Sequence[Sequence[str]],
+) -> Dict[str, float]:
+    """CombMNZ: sum of the non-zero scores times the number of branches that
+    actually returned the document (consensus bonus)."""
+    sums: Dict[str, float] = {}
+    counts: Dict[str, int] = {}
+    for scores, branch_ids in zip(branch_scores, ids):
+        for s, d in zip(scores, branch_ids):
+            if float(s) <= 0.0:
+                continue
+            sums[d] = sums.get(d, 0.0) + float(s)
+            counts[d] = counts.get(d, 0) + 1
+    return {d: sums[d] * counts[d] for d in sums if counts.get(d)}
+
+
 def rrf_fuse(rank_a: Sequence[str], rank_b: Sequence[str], k: int = 60) -> List[str]:
     """Reciprocal Rank Fusion (parameter-free baseline, R1-7/R2-1).
 

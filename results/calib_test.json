@@ -1,0 +1,4080 @@
+{
+  "generator": "backend/scripts/eval_calib_base.py",
+  "stage": "test",
+  "n_test": 100,
+  "n_boot": 3000,
+  "preregistration": {
+    "protocol": [
+      "Comparison set is fixed a priori; there is no selection stage, so the whole set is evaluated once on TEST (n=100).",
+      "TUNE (n=50) is computed for transparency only and is not used to choose anything.",
+      "Arms: minmax (released control protocol, primary) and zscore (repository's alternative calibration, secondary = score-distribution shift).",
+      "control protocol: dense branches over the whole 121-clip gallery, calibrated over the whole gallery. Systems: prior_only (source-count-ratio alpha) and fixed_0.5 (equal-weight calibrated fusion).",
+      "prod protocol (production candidate model): structured shortlist = clips with a structured result (threshold 0.05, the control's own n_structured rule), semantic shortlist = top-20 semantic hits (the control's own n_semantic), union = the gallery, each branch calibrated over its own shortlist, missing candidates zero-filled. Systems: prior_only_prod, comb_sum_cal, comb_anz_cal, comb_mnz_cal.",
+      "Statistic: macro P@5 (mean of five category means). Primary: paired bootstrap with within-category resampling (n_boot=3000). Secondary: grouped 5-minute-cluster bootstrap on the macro statistic, pooled per-query paired bootstrap, pooled per-query grouped bootstrap, Wilcoxon signed-rank, paired sign-flip randomisation.",
+      "Holm: one family per calibration arm (4 comparisons) plus a conservative global family over all 8 arm-level comparisons.",
+      "The paper's metadata prior alpha is reused unchanged; these are competing baselines, not replacements."
+    ],
+    "literature": {
+      "comb_sum": "CombSUM (normalise-then-sum) of Fox & Shaw, 'Combination of Multiple Searches', TREC-2 (NIST, 1994), https://trec.nist.gov/pubs/trec2/papers/txt/23.txt",
+      "comb_anz": "CombANZ (normalise-then-sum, multiplied by the number of systems that returned the document) of Fox & Shaw, TREC-2 (1994); the UMass CIIR 'Analysis of Multiple Evidence Combination' report https://ciir-publications.cs.umass.edu/getpdf.php?id=63",
+      "comb_mnz": "CombMNZ (CombANZ with the count taken over the systems that assigned a non-zero score) of Fox & Shaw, TREC-2 (1994); Lee (1997), 'Hybrid test collections and the fusion of retrieval systems'",
+      "empty_branch": "Empty-branch rebalancing: a branch that returns nothing must not deflate the other branch (the canonical fix for an empty result set); see also Raza et al. (2019) 'A survey on deep learning for hybrid information retrieval', and the UMass CIIR evidence-combination report"
+    },
+    "constants": {
+      "K_SEM": 20,
+      "STRUCT_THRESH": 0.05,
+      "WEIGHT": 0.5,
+      "PROBE_SEED": 20260401,
+      "n_boot": 3000
+    },
+    "systems_control": {
+      "prior_only": "prior",
+      "fixed_0.5": "sum"
+    },
+    "systems_prod": {
+      "prior_only_prod": "prior",
+      "comb_sum_cal": "sum",
+      "comb_anz_cal": "anz",
+      "comb_mnz_cal": "mnz"
+    }
+  },
+  "arms": [
+    {
+      "name": "minmax",
+      "control_protocol": {
+        "prior_only": {
+          "macro": {
+            "p5": {
+              "macro": 0.538,
+              "per_category": {
+                "count": 0.39,
+                "find": 0.9199999999999999,
+                "track": 0.8099999999999999,
+                "action": 0.09,
+                "filter": 0.48
+              }
+            },
+            "r10": {
+              "macro": 0.7967351667939904,
+              "per_category": {
+                "count": 1.0,
+                "find": 0.8931331168831169,
+                "track": 0.9567927170868348,
+                "action": 0.13375,
+                "filter": 1.0
+              }
+            },
+            "f1": {
+              "macro": 0.4471577363698107,
+              "per_category": {
+                "count": 0.3127039627039627,
+                "find": 0.8012680886365097,
+                "track": 0.6327105027182427,
+                "action": 0.09888888888888889,
+                "filter": 0.39021723890144944
+              }
+            },
+            "f1_paper": {
+              "macro": 0.5877532194900617,
+              "per_category": {
+                "count": 0.5273809523809524,
+                "find": 0.88324337942759,
+                "track": 0.843404280904281,
+                "action": 0.08076923076923079,
+                "filter": 0.6039682539682539
+              }
+            },
+            "mrr": {
+              "macro": 0.852705938697318,
+              "per_category": {
+                "count": 1.0,
+                "find": 1.0,
+                "track": 1.0,
+                "action": 0.26352969348659006,
+                "filter": 1.0
+              }
+            }
+          },
+          "count": {
+            "n": 20,
+            "em": 0.95,
+            "mae": 0.05
+          }
+        },
+        "fixed_0.5": {
+          "macro": {
+            "p5": {
+              "macro": 0.534,
+              "per_category": {
+                "count": 0.39,
+                "find": 0.9099999999999999,
+                "track": 0.8099999999999999,
+                "action": 0.09,
+                "filter": 0.47000000000000003
+              }
+            },
+            "r10": {
+              "macro": 0.793401833460657,
+              "per_category": {
+                "count": 1.0,
+                "find": 0.8931331168831169,
+                "track": 0.9567927170868348,
+                "action": 0.13375,
+                "filter": 0.9833333333333334
+              }
+            },
+            "f1": {
+              "macro": 0.44561927483134917,
+              "per_category": {
+                "count": 0.3127039627039627,
+                "find": 0.8012680886365097,
+                "track": 0.6327105027182427,
+                "action": 0.09888888888888889,
+                "filter": 0.38252493120914177
+              }
+            },
+            "f1_paper": {
+              "macro": 0.5842501235148294,
+              "per_category": {
+                "count": 0.5273809523809524,
+                "find": 0.878227899551429,
+                "track": 0.843404280904281,
+                "action": 0.08076923076923079,
+                "filter": 0.591468253968254
+              }
+            },
+            "mrr": {
+              "macro": 0.8410392720306513,
+              "per_category": {
+                "count": 0.9666666666666666,
+                "find": 1.0,
+                "track": 1.0,
+                "action": 0.26352969348659006,
+                "filter": 0.975
+              }
+            }
+          },
+          "count": {
+            "n": 19,
+            "em": 0.9473684210526315,
+            "mae": 0.10526315789473684
+          }
+        }
+      },
+      "prod_protocol": {
+        "prior_only_prod": {
+          "macro": {
+            "p5": {
+              "macro": 0.538,
+              "per_category": {
+                "count": 0.39,
+                "find": 0.9199999999999999,
+                "track": 0.8099999999999999,
+                "action": 0.09,
+                "filter": 0.48
+              }
+            },
+            "r10": {
+              "macro": 0.7977351667939903,
+              "per_category": {
+                "count": 1.0,
+                "find": 0.8981331168831168,
+                "track": 0.9567927170868348,
+                "action": 0.13375,
+                "filter": 1.0
+              }
+            },
+            "f1": {
+              "macro": 0.4481577363698107,
+              "per_category": {
+                "count": 0.3127039627039627,
+                "find": 0.8062680886365097,
+                "track": 0.6327105027182427,
+                "action": 0.09888888888888889,
+                "filter": 0.39021723890144944
+              }
+            },
+            "f1_paper": {
+              "macro": 0.5882795352795352,
+              "per_category": {
+                "count": 0.5273809523809524,
+                "find": 0.8858749583749583,
+                "track": 0.843404280904281,
+                "action": 0.08076923076923079,
+                "filter": 0.6039682539682539
+              }
+            },
+            "mrr": {
+              "macro": 0.8476083333333333,
+              "per_category": {
+                "count": 1.0,
+                "find": 1.0,
+                "track": 1.0,
+                "action": 0.2630416666666667,
+                "filter": 0.975
+              }
+            }
+          },
+          "count": {
+            "n": 20,
+            "em": 0.95,
+            "mae": 0.05
+          },
+          "mean_alpha": 0.6188198005775132,
+          "mean_struct_pool": 67.63,
+          "mean_sem_pool": 20.0,
+          "mean_universe": 76.45
+        },
+        "comb_sum_cal": {
+          "macro": {
+            "p5": {
+              "macro": 0.518,
+              "per_category": {
+                "count": 0.38,
+                "find": 0.8699999999999999,
+                "track": 0.79,
+                "action": 0.09,
+                "filter": 0.45999999999999996
+              }
+            },
+            "r10": {
+              "macro": 0.7900358203887616,
+              "per_category": {
+                "count": 1.0,
+                "find": 0.8764664502164502,
+                "track": 0.9538515406162466,
+                "action": 0.13375,
+                "filter": 0.986111111111111
+              }
+            },
+            "f1": {
+              "macro": 0.44049618223194076,
+              "per_category": {
+                "count": 0.3127039627039627,
+                "find": 0.7831771795456006,
+                "track": 0.6290067990145389,
+                "action": 0.09888888888888889,
+                "filter": 0.3787040810067126
+              }
+            },
+            "f1_paper": {
+              "macro": 0.574016660021883,
+              "per_category": {
+                "count": 0.5218253968253969,
+                "find": 0.8489077786955546,
+                "track": 0.8326700953913344,
+                "action": 0.08076923076923079,
+                "filter": 0.5859107984278984
+              }
+            },
+            "mrr": {
+              "macro": 0.726275,
+              "per_category": {
+                "count": 0.75,
+                "find": 0.95,
+                "track": 0.925,
+                "action": 0.2630416666666667,
+                "filter": 0.7433333333333334
+              }
+            }
+          },
+          "count": {
+            "n": 20,
+            "em": 0.45,
+            "mae": 1.2
+          },
+          "mean_alpha": 0.6188198005775132,
+          "mean_struct_pool": 67.63,
+          "mean_sem_pool": 20.0,
+          "mean_universe": 76.45
+        },
+        "comb_anz_cal": {
+          "macro": {
+            "p5": {
+              "macro": 0.372,
+              "per_category": {
+                "count": 0.38,
+                "find": 0.8699999999999999,
+                "track": 0.23000000000000004,
+                "action": 0.09,
+                "filter": 0.29
+              }
+            },
+            "r10": {
+              "macro": 0.7401303582038876,
+              "per_category": {
+                "count": 1.0,
+                "find": 0.8728950216450218,
+                "track": 0.7884512138188609,
+                "action": 0.13375,
+                "filter": 0.9055555555555556
+              }
+            },
+            "f1": {
+              "macro": 0.3991889666290595,
+              "per_category": {
+                "count": 0.3127039627039627,
+                "find": 0.779010512878934,
+                "track": 0.48102335257908013,
+                "action": 0.09888888888888889,
+                "filter": 0.3243181160944319
+              }
+            },
+            "f1_paper": {
+              "macro": 0.424888785903532,
+              "per_category": {
+                "count": 0.5218253968253969,
+                "find": 0.8463715468114966,
+                "track": 0.30652953430161284,
+                "action": 0.08076923076923079,
+                "filter": 0.36894822080992296
+              }
+            },
+            "mrr": {
+              "macro": 0.6104932539682539,
+              "per_category": {
+                "count": 0.7583333333333333,
+                "find": 0.9166666666666666,
+                "track": 0.5158928571428572,
+                "action": 0.2630416666666667,
+                "filter": 0.598531746031746
+              }
+            }
+          },
+          "count": {
+            "n": 20,
+            "em": 0.5,
+            "mae": 1.2
+          },
+          "mean_alpha": 0.6188198005775132,
+          "mean_struct_pool": 67.63,
+          "mean_sem_pool": 20.0,
+          "mean_universe": 76.45
+        },
+        "comb_mnz_cal": {
+          "macro": {
+            "p5": {
+              "macro": 0.502,
+              "per_category": {
+                "count": 0.38,
+                "find": 0.8699999999999999,
+                "track": 0.78,
+                "action": 0.09,
+                "filter": 0.39
+              }
+            },
+            "r10": {
+              "macro": 0.7882104235633648,
+              "per_category": {
+                "count": 1.0,
+                "find": 0.8728950216450218,
+                "track": 0.9538515406162466,
+                "action": 0.13375,
+                "filter": 0.9805555555555555
+              }
+            },
+            "f1": {
+              "macro": 0.43861021731966005,
+              "per_category": {
+                "count": 0.3127039627039627,
+                "find": 0.779010512878934,
+                "track": 0.6290067990145389,
+                "action": 0.09888888888888889,
+                "filter": 0.37344092311197574
+              }
+            },
+            "f1_paper": {
+              "macro": 0.5588272539594917,
+              "per_category": {
+                "count": 0.5218253968253969,
+                "find": 0.8463715468114966,
+                "track": 0.8257256509468899,
+                "action": 0.08076923076923079,
+                "filter": 0.5194444444444445
+              }
+            },
+            "mrr": {
+              "macro": 0.7096916666666667,
+              "per_category": {
+                "count": 0.7333333333333333,
+                "find": 0.9166666666666666,
+                "track": 0.925,
+                "action": 0.2630416666666667,
+                "filter": 0.7104166666666667
+              }
+            }
+          },
+          "count": {
+            "n": 20,
+            "em": 0.45,
+            "mae": 1.55
+          },
+          "mean_alpha": 0.6188198005775132,
+          "mean_struct_pool": 67.63,
+          "mean_sem_pool": 20.0,
+          "mean_universe": 76.45
+        }
+      },
+      "comparisons": {
+        "fixed_0.5_vs_prior_only": {
+          "macro_a": 0.534,
+          "macro_b": 0.538,
+          "delta_macro_p5": -0.0040000000000000036,
+          "primary_paired_macro_bootstrap": {
+            "delta": -0.004000000000000015,
+            "lo": -0.009999999999999998,
+            "hi": 0.0,
+            "p": 0.2733333333333333,
+            "n_boot": 3000
+          },
+          "grouped_cluster_macro_bootstrap": {
+            "delta": -0.003999999999999992,
+            "lo": -0.014685314685314643,
+            "hi": 0.0,
+            "p": 0.7046666666666667,
+            "n_boot": 3000
+          },
+          "sign_flip_randomisation": {
+            "delta": -0.003999999999999999,
+            "p": 0.5076666666666667,
+            "n_boot": 3000
+          },
+          "pooled_per_query_paired_bootstrap": {
+            "delta": -0.003999999999999999,
+            "lo": -0.009999999999999998,
+            "hi": 0.0,
+            "p": 0.268
+          },
+          "pooled_per_query_grouped_bootstrap": {
+            "delta": -0.003999999999999999,
+            "lo": -0.013483146067415727,
+            "hi": 0.0,
+            "p": 0.7053333333333334
+          },
+          "wilcoxon_signed_rank_p": 1.0,
+          "n_queries_changed": 2,
+          "n_queries_better": 0,
+          "n_queries_worse": 2,
+          "holm_adjusted_p": 0.2733333333333333,
+          "holm_reject": false,
+          "per_category_paired_bootstrap": {
+            "count": {
+              "delta_p5": 0.0,
+              "lo": 0.0,
+              "hi": 0.0,
+              "p": 1.0
+            },
+            "find": {
+              "delta_p5": -0.009999999999999998,
+              "lo": -0.029999999999999992,
+              "hi": 0.0,
+              "p": 0.702
+            },
+            "track": {
+              "delta_p5": 0.0,
+              "lo": 0.0,
+              "hi": 0.0,
+              "p": 1.0
+            },
+            "action": {
+              "delta_p5": 0.0,
+              "lo": 0.0,
+              "hi": 0.0,
+              "p": 1.0
+            },
+            "filter": {
+              "delta_p5": -0.009999999999999998,
+              "lo": -0.029999999999999992,
+              "hi": 0.0,
+              "p": 0.7313333333333333
+            }
+          },
+          "per_category_holm_reject": {
+            "find": false,
+            "filter": false,
+            "count": false,
+            "track": false,
+            "action": false
+          },
+          "per_category_holm_adjusted_p": {
+            "find": 1.0,
+            "filter": 1.0,
+            "count": 1.0,
+            "track": 1.0,
+            "action": 1.0
+          }
+        },
+        "comb_sum_cal_vs_prior_only_prod": {
+          "macro_a": 0.518,
+          "macro_b": 0.538,
+          "delta_macro_p5": -0.020000000000000018,
+          "primary_paired_macro_bootstrap": {
+            "delta": -0.020000000000000028,
+            "lo": -0.03599999999999992,
+            "hi": -0.007999999999999962,
+            "p": 0.0006666666666666666,
+            "n_boot": 3000
+          },
+          "grouped_cluster_macro_bootstrap": {
+            "delta": -0.019999999999999917,
+            "lo": -0.03649371816638371,
+            "hi": -0.0050000000000000044,
+            "p": 0.015333333333333332,
+            "n_boot": 3000
+          },
+          "sign_flip_randomisation": {
+            "delta": -0.019999999999999997,
+            "p": 0.007666666666666666,
+            "n_boot": 3000
+          },
+          "pooled_per_query_paired_bootstrap": {
+            "delta": -0.019999999999999997,
+            "lo": -0.036,
+            "hi": -0.006,
+            "p": 0.0006666666666666666
+          },
+          "pooled_per_query_grouped_bootstrap": {
+            "delta": -0.019999999999999997,
+            "lo": -0.03777777777777777,
+            "hi": -0.0024999999999999996,
+            "p": 0.018666666666666668
+          },
+          "wilcoxon_signed_rank_p": 0.01171868559976863,
+          "n_queries_changed": 8,
+          "n_queries_better": 0,
+          "n_queries_worse": 8,
+          "holm_adjusted_p": 0.0013333333333333333,
+          "holm_reject": true,
+          "per_category_paired_bootstrap": {
+            "count": {
+              "delta_p5": -0.009999999999999998,
+              "lo": -0.029999999999999992,
+              "hi": 0.0,
+              "p": 0.7246666666666667
+            },
+            "find": {
+              "delta_p5": -0.049999999999999996,
+              "lo": -0.1,
+              "hi": -0.009999999999999998,
+              "p": 0.02
+            },
+            "track": {
+              "delta_p5": -0.019999999999999997,
+              "lo": -0.04999999999999999,
+              "hi": 0.0,
+              "p": 0.23866666666666667
+            },
+            "action": {
+              "delta_p5": 0.0,
+              "lo": 0.0,
+              "hi": 0.0,
+              "p": 1.0
+            },
+            "filter": {
+              "delta_p5": -0.02,
+              "lo": -0.06000000000000001,
+              "hi": 0.0,
+              "p": 0.7306666666666667
+            }
+          },
+          "per_category_holm_reject": {
+            "find": false,
+            "track": false,
+            "count": false,
+            "filter": false,
+            "action": false
+          },
+          "per_category_holm_adjusted_p": {
+            "find": 0.1,
+            "track": 0.9546666666666667,
+            "count": 1.0,
+            "filter": 1.0,
+            "action": 1.0
+          }
+        },
+        "comb_anz_cal_vs_prior_only_prod": {
+          "macro_a": 0.372,
+          "macro_b": 0.538,
+          "delta_macro_p5": -0.16600000000000004,
+          "primary_paired_macro_bootstrap": {
+            "delta": -0.16600000000000004,
+            "lo": -0.20199999999999996,
+            "hi": -0.12999999999999998,
+            "p": 0.0,
+            "n_boot": 3000
+          },
+          "grouped_cluster_macro_bootstrap": {
+            "delta": -0.16599999999999993,
+            "lo": -0.22398703703703707,
+            "hi": -0.1288888888888889,
+            "p": 0.0,
+            "n_boot": 3000
+          },
+          "sign_flip_randomisation": {
+            "delta": -0.166,
+            "p": 0.0,
+            "n_boot": 3000
+          },
+          "pooled_per_query_paired_bootstrap": {
+            "delta": -0.166,
+            "lo": -0.222,
+            "hi": -0.114,
+            "p": 0.0
+          },
+          "pooled_per_query_grouped_bootstrap": {
+            "delta": -0.166,
+            "lo": -0.23655913978494625,
+            "hi": -0.09411764705882353,
+            "p": 0.0
+          },
+          "wilcoxon_signed_rank_p": 3.6528331914809087e-07,
+          "n_queries_changed": 34,
+          "n_queries_better": 0,
+          "n_queries_worse": 34,
+          "holm_adjusted_p": 0.0,
+          "holm_reject": true,
+          "per_category_paired_bootstrap": {
+            "count": {
+              "delta_p5": -0.009999999999999998,
+              "lo": -0.029999999999999992,
+              "hi": 0.0,
+              "p": 0.7246666666666667
+            },
+            "find": {
+              "delta_p5": -0.049999999999999996,
+              "lo": -0.1,
+              "hi": -0.009999999999999998,
+              "p": 0.02
+            },
+            "track": {
+              "delta_p5": -0.58,
+              "lo": -0.72,
+              "hi": -0.44000000000000006,
+              "p": 0.0
+            },
+            "action": {
+              "delta_p5": 0.0,
+              "lo": 0.0,
+              "hi": 0.0,
+              "p": 1.0
+            },
+            "filter": {
+              "delta_p5": -0.19,
+              "lo": -0.29,
+              "hi": -0.1,
+              "p": 0.0
+            }
+          },
+          "per_category_holm_reject": {
+            "track": true,
+            "filter": true,
+            "find": false,
+            "count": false,
+            "action": false
+          },
+          "per_category_holm_adjusted_p": {
+            "track": 0.0,
+            "filter": 0.0,
+            "find": 0.06,
+            "count": 1.0,
+            "action": 1.0
+          }
+        },
+        "comb_mnz_cal_vs_prior_only_prod": {
+          "macro_a": 0.502,
+          "macro_b": 0.538,
+          "delta_macro_p5": -0.03600000000000003,
+          "primary_paired_macro_bootstrap": {
+            "delta": -0.036000000000000046,
+            "lo": -0.059999999999999984,
+            "hi": -0.016000000000000025,
+            "p": 0.0,
+            "n_boot": 3000
+          },
+          "grouped_cluster_macro_bootstrap": {
+            "delta": -0.03599999999999992,
+            "lo": -0.06721602434077072,
+            "hi": -0.012057416267942577,
+            "p": 0.0,
+            "n_boot": 3000
+          },
+          "sign_flip_randomisation": {
+            "delta": -0.036,
+            "p": 0.0006666666666666666,
+            "n_boot": 3000
+          },
+          "pooled_per_query_paired_bootstrap": {
+            "delta": -0.036,
+            "lo": -0.06199999999999999,
+            "hi": -0.015999999999999997,
+            "p": 0.0
+          },
+          "pooled_per_query_grouped_bootstrap": {
+            "delta": -0.036,
+            "lo": -0.06355140186915888,
+            "hi": -0.008928571428571428,
+            "p": 0.0006666666666666666
+          },
+          "wilcoxon_signed_rank_p": 0.0022177214642371545,
+          "n_queries_changed": 12,
+          "n_queries_better": 0,
+          "n_queries_worse": 12,
+          "holm_adjusted_p": 0.0,
+          "holm_reject": true,
+          "per_category_paired_bootstrap": {
+            "count": {
+              "delta_p5": -0.009999999999999998,
+              "lo": -0.029999999999999992,
+              "hi": 0.0,
+              "p": 0.7246666666666667
+            },
+            "find": {
+              "delta_p5": -0.049999999999999996,
+              "lo": -0.1,
+              "hi": -0.009999999999999998,
+              "p": 0.02
+            },
+            "track": {
+              "delta_p5": -0.03,
+              "lo": -0.08,
+              "hi": 0.0,
+              "p": 0.23866666666666667
+            },
+            "action": {
+              "delta_p5": 0.0,
+              "lo": 0.0,
+              "hi": 0.0,
+              "p": 1.0
+            },
+            "filter": {
+              "delta_p5": -0.09,
+              "lo": -0.18,
+              "hi": -0.019999999999999997,
+              "p": 0.006
+            }
+          },
+          "per_category_holm_reject": {
+            "filter": true,
+            "find": false,
+            "track": false,
+            "count": false,
+            "action": false
+          },
+          "per_category_holm_adjusted_p": {
+            "filter": 0.03,
+            "find": 0.08,
+            "track": 0.716,
+            "count": 1.0,
+            "action": 1.0
+          }
+        }
+      },
+      "holm_family": {
+        "members": [
+          "fixed_0.5_vs_prior_only",
+          "comb_sum_cal_vs_prior_only_prod",
+          "comb_anz_cal_vs_prior_only_prod",
+          "comb_mnz_cal_vs_prior_only_prod"
+        ],
+        "raw_p": {
+          "fixed_0.5_vs_prior_only": 0.2733333333333333,
+          "comb_sum_cal_vs_prior_only_prod": 0.0006666666666666666,
+          "comb_anz_cal_vs_prior_only_prod": 0.0,
+          "comb_mnz_cal_vs_prior_only_prod": 0.0
+        },
+        "holm_adjusted_p": {
+          "comb_anz_cal_vs_prior_only_prod": 0.0,
+          "comb_mnz_cal_vs_prior_only_prod": 0.0,
+          "comb_sum_cal_vs_prior_only_prod": 0.0013333333333333333,
+          "fixed_0.5_vs_prior_only": 0.2733333333333333
+        },
+        "holm_reject": {
+          "comb_anz_cal_vs_prior_only_prod": true,
+          "comb_mnz_cal_vs_prior_only_prod": true,
+          "comb_sum_cal_vs_prior_only_prod": true,
+          "fixed_0.5_vs_prior_only": false
+        }
+      }
+    },
+    {
+      "name": "zscore",
+      "control_protocol": {
+        "prior_only": {
+          "macro": {
+            "p5": {
+              "macro": 0.524,
+              "per_category": {
+                "count": 0.39,
+                "find": 0.9099999999999999,
+                "track": 0.8,
+                "action": 0.09,
+                "filter": 0.43
+              }
+            },
+            "r10": {
+              "macro": 0.7834018334606571,
+              "per_category": {
+                "count": 1.0,
+                "find": 0.8931331168831169,
+                "track": 0.9567927170868348,
+                "action": 0.13375,
+                "filter": 0.9333333333333333
+              }
+            },
+            "f1": {
+              "macro": 0.44380109301316734,
+              "per_category": {
+                "count": 0.3127039627039627,
+                "find": 0.8012680886365097,
+                "track": 0.6327105027182427,
+                "action": 0.09888888888888889,
+                "filter": 0.3734340221182326
+              }
+            },
+            "f1_paper": {
+              "macro": 0.5739723457370516,
+              "per_category": {
+                "count": 0.5273809523809524,
+                "find": 0.878227899551429,
+                "track": 0.8378487253487255,
+                "action": 0.08076923076923079,
+                "filter": 0.5456349206349207
+              }
+            },
+            "mrr": {
+              "macro": 0.8003170498084291,
+              "per_category": {
+                "count": 1.0,
+                "find": 0.9416666666666667,
+                "track": 1.0,
+                "action": 0.26352969348659006,
+                "filter": 0.7963888888888888
+              }
+            }
+          },
+          "count": {
+            "n": 20,
+            "em": 0.95,
+            "mae": 0.05
+          }
+        },
+        "fixed_0.5": {
+          "macro": {
+            "p5": {
+              "macro": 0.45,
+              "per_category": {
+                "count": 0.31,
+                "find": 0.79,
+                "track": 0.7,
+                "action": 0.09,
+                "filter": 0.36
+              }
+            },
+            "r10": {
+              "macro": 0.6821756429844665,
+              "per_category": {
+                "count": 0.8,
+                "find": 0.7403354978354979,
+                "track": 0.8451260504201681,
+                "action": 0.13375,
+                "filter": 0.8916666666666666
+              }
+            },
+            "f1": {
+              "macro": 0.38895409944945547,
+              "per_category": {
+                "count": 0.27634032634032635,
+                "find": 0.6636635002424476,
+                "track": 0.5532770929907154,
+                "action": 0.09888888888888889,
+                "filter": 0.3526006887848993
+              }
+            },
+            "f1_paper": {
+              "macro": 0.48479180508405023,
+              "per_category": {
+                "count": 0.42063492063492064,
+                "find": 0.7365426098988916,
+                "track": 0.722885697701168,
+                "action": 0.08076923076923079,
+                "filter": 0.4631265664160401
+              }
+            },
+            "mrr": {
+              "macro": 0.6966880689853306,
+              "per_category": {
+                "count": 0.6230455720749839,
+                "find": 0.8933333333333333,
+                "track": 0.95,
+                "action": 0.26352969348659006,
+                "filter": 0.7535317460317461
+              }
+            }
+          },
+          "count": {
+            "n": 20,
+            "em": 0.5,
+            "mae": 1.6
+          }
+        }
+      },
+      "prod_protocol": {
+        "prior_only_prod": {
+          "macro": {
+            "p5": {
+              "macro": 0.5,
+              "per_category": {
+                "count": 0.39,
+                "find": 0.9099999999999999,
+                "track": 0.7,
+                "action": 0.09,
+                "filter": 0.41
+              }
+            },
+            "r10": {
+              "macro": 0.793899966047025,
+              "per_category": {
+                "count": 1.0,
+                "find": 0.8981331168831168,
+                "track": 0.9431722689075631,
+                "action": 0.13375,
+                "filter": 0.9944444444444445
+              }
+            },
+            "f1": {
+              "macro": 0.4438811990669576,
+              "per_category": {
+                "count": 0.3127039627039627,
+                "find": 0.8062680886365097,
+                "track": 0.616590974098714,
+                "action": 0.09888888888888889,
+                "filter": 0.3849540810067126
+              }
+            },
+            "f1_paper": {
+              "macro": 0.5634161683409766,
+              "per_category": {
+                "count": 0.5273809523809524,
+                "find": 0.8803194028194028,
+                "track": 0.7810840110065598,
+                "action": 0.08076923076923079,
+                "filter": 0.5475272447287373
+              }
+            },
+            "mrr": {
+              "macro": 0.7758493589743589,
+              "per_category": {
+                "count": 1.0,
+                "find": 0.975,
+                "track": 0.725,
+                "action": 0.2625801282051282,
+                "filter": 0.9166666666666666
+              }
+            }
+          },
+          "count": {
+            "n": 20,
+            "em": 0.95,
+            "mae": 0.05
+          },
+          "mean_alpha": 0.6188198005775132,
+          "mean_struct_pool": 67.63,
+          "mean_sem_pool": 20.0,
+          "mean_universe": 76.45
+        },
+        "comb_sum_cal": {
+          "macro": {
+            "p5": {
+              "macro": 0.21800000000000003,
+              "per_category": {
+                "count": 0.3,
+                "find": 0.33999999999999997,
+                "track": 0.14,
+                "action": 0.09,
+                "filter": 0.22000000000000003
+              }
+            },
+            "r10": {
+              "macro": 0.643254753416518,
+              "per_category": {
+                "count": 1.0,
+                "find": 0.6177128427128428,
+                "track": 0.5981442577030812,
+                "action": 0.13375,
+                "filter": 0.8666666666666666
+              }
+            },
+            "f1": {
+              "macro": 0.31067647821161753,
+              "per_category": {
+                "count": 0.3127039627039627,
+                "find": 0.5014127042548095,
+                "track": 0.3367064923953469,
+                "action": 0.09888888888888889,
+                "filter": 0.30367034281507965
+              }
+            },
+            "f1_paper": {
+              "macro": 0.2682107859003119,
+              "per_category": {
+                "count": 0.4386904761904762,
+                "find": 0.36269418078466775,
+                "track": 0.15152408438122725,
+                "action": 0.08076923076923079,
+                "filter": 0.3073759573759574
+              }
+            },
+            "mrr": {
+              "macro": 0.47495650183150184,
+              "per_category": {
+                "count": 0.6416666666666667,
+                "find": 0.5375595238095239,
+                "track": 0.4189880952380952,
+                "action": 0.2625801282051282,
+                "filter": 0.5139880952380953
+              }
+            }
+          },
+          "count": {
+            "n": 20,
+            "em": 0.4,
+            "mae": 1.4
+          },
+          "mean_alpha": 0.6188198005775132,
+          "mean_struct_pool": 67.63,
+          "mean_sem_pool": 20.0,
+          "mean_universe": 76.45
+        },
+        "comb_anz_cal": {
+          "macro": {
+            "p5": {
+              "macro": 0.20800000000000002,
+              "per_category": {
+                "count": 0.3,
+                "find": 0.31,
+                "track": 0.14,
+                "action": 0.09,
+                "filter": 0.2
+              }
+            },
+            "r10": {
+              "macro": 0.4858887403446227,
+              "per_category": {
+                "count": 0.9733333333333333,
+                "find": 0.5753914141414141,
+                "track": 0.146968954248366,
+                "action": 0.13375,
+                "filter": 0.6
+              }
+            },
+            "f1": {
+              "macro": 0.23300952195952193,
+              "per_category": {
+                "count": 0.29834498834498835,
+                "find": 0.46057937092147616,
+                "track": 0.085848401111559,
+                "action": 0.09888888888888889,
+                "filter": 0.22138596053069737
+              }
+            },
+            "f1_paper": {
+              "macro": 0.24560783885074441,
+              "per_category": {
+                "count": 0.4367857142857143,
+                "find": 0.3133518554487363,
+                "track": 0.12835533747298453,
+                "action": 0.08076923076923079,
+                "filter": 0.2687770562770563
+              }
+            },
+            "mrr": {
+              "macro": 0.4489132117882118,
+              "per_category": {
+                "count": 0.5680555555555555,
+                "find": 0.5544246031746032,
+                "track": 0.37023809523809526,
+                "action": 0.2625801282051282,
+                "filter": 0.48926767676767674
+              }
+            }
+          },
+          "count": {
+            "n": 20,
+            "em": 0.3,
+            "mae": 1.7
+          },
+          "mean_alpha": 0.6188198005775132,
+          "mean_struct_pool": 67.63,
+          "mean_sem_pool": 20.0,
+          "mean_universe": 76.45
+        },
+        "comb_mnz_cal": {
+          "macro": {
+            "p5": {
+              "macro": 0.20800000000000002,
+              "per_category": {
+                "count": 0.3,
+                "find": 0.31,
+                "track": 0.14,
+                "action": 0.09,
+                "filter": 0.2
+              }
+            },
+            "r10": {
+              "macro": 0.4858887403446227,
+              "per_category": {
+                "count": 0.9733333333333333,
+                "find": 0.5753914141414141,
+                "track": 0.146968954248366,
+                "action": 0.13375,
+                "filter": 0.6
+              }
+            },
+            "f1": {
+              "macro": 0.23300952195952193,
+              "per_category": {
+                "count": 0.29834498834498835,
+                "find": 0.46057937092147616,
+                "track": 0.085848401111559,
+                "action": 0.09888888888888889,
+                "filter": 0.22138596053069737
+              }
+            },
+            "f1_paper": {
+              "macro": 0.24560783885074441,
+              "per_category": {
+                "count": 0.4367857142857143,
+                "find": 0.3133518554487363,
+                "track": 0.12835533747298453,
+                "action": 0.08076923076923079,
+                "filter": 0.2687770562770563
+              }
+            },
+            "mrr": {
+              "macro": 0.4489132117882118,
+              "per_category": {
+                "count": 0.5680555555555555,
+                "find": 0.5544246031746032,
+                "track": 0.37023809523809526,
+                "action": 0.2625801282051282,
+                "filter": 0.48926767676767674
+              }
+            }
+          },
+          "count": {
+            "n": 20,
+            "em": 0.3,
+            "mae": 1.7
+          },
+          "mean_alpha": 0.6188198005775132,
+          "mean_struct_pool": 67.63,
+          "mean_sem_pool": 20.0,
+          "mean_universe": 76.45
+        }
+      },
+      "comparisons": {
+        "fixed_0.5_vs_prior_only": {
+          "macro_a": 0.45,
+          "macro_b": 0.524,
+          "delta_macro_p5": -0.07400000000000001,
+          "primary_paired_macro_bootstrap": {
+            "delta": -0.07400000000000001,
+            "lo": -0.09999999999999995,
+            "hi": -0.050000000000000024,
+            "p": 0.0,
+            "n_boot": 3000
+          },
+          "grouped_cluster_macro_bootstrap": {
+            "delta": -0.074,
+            "lo": -0.1280316742081448,
+            "hi": -0.03768627450980393,
+            "p": 0.0,
+            "n_boot": 3000
+          },
+          "sign_flip_randomisation": {
+            "delta": -0.074,
+            "p": 0.0,
+            "n_boot": 3000
+          },
+          "pooled_per_query_paired_bootstrap": {
+            "delta": -0.07400000000000001,
+            "lo": -0.102,
+            "hi": -0.048,
+            "p": 0.0
+          },
+          "pooled_per_query_grouped_bootstrap": {
+            "delta": -0.07400000000000001,
+            "lo": -0.12142857142857141,
+            "hi": -0.03294117647058823,
+            "p": 0.0
+          },
+          "wilcoxon_signed_rank_p": 5.6061165274456926e-06,
+          "n_queries_changed": 27,
+          "n_queries_better": 0,
+          "n_queries_worse": 27,
+          "holm_adjusted_p": 0.0,
+          "holm_reject": true,
+          "per_category_paired_bootstrap": {
+            "count": {
+              "delta_p5": -0.07999999999999999,
+              "lo": -0.12,
+              "hi": -0.039999999999999994,
+              "p": 0.0
+            },
+            "find": {
+              "delta_p5": -0.12,
+              "lo": -0.21000000000000002,
+              "hi": -0.04,
+              "p": 0.0006666666666666666
+            },
+            "track": {
+              "delta_p5": -0.1,
+              "lo": -0.16999999999999998,
+              "hi": -0.04,
+              "p": 0.0
+            },
+            "action": {
+              "delta_p5": 0.0,
+              "lo": 0.0,
+              "hi": 0.0,
+              "p": 1.0
+            },
+            "filter": {
+              "delta_p5": -0.06999999999999999,
+              "lo": -0.12000000000000002,
+              "hi": -0.02,
+              "p": 0.0013333333333333333
+            }
+          },
+          "per_category_holm_reject": {
+            "count": true,
+            "track": true,
+            "find": true,
+            "filter": true,
+            "action": false
+          },
+          "per_category_holm_adjusted_p": {
+            "count": 0.0,
+            "track": 0.0,
+            "find": 0.002,
+            "filter": 0.0026666666666666666,
+            "action": 1.0
+          }
+        },
+        "comb_sum_cal_vs_prior_only_prod": {
+          "macro_a": 0.21800000000000003,
+          "macro_b": 0.5,
+          "delta_macro_p5": -0.282,
+          "primary_paired_macro_bootstrap": {
+            "delta": -0.28200000000000003,
+            "lo": -0.324,
+            "hi": -0.24,
+            "p": 0.0,
+            "n_boot": 3000
+          },
+          "grouped_cluster_macro_bootstrap": {
+            "delta": -0.282,
+            "lo": -0.37203065134099617,
+            "hi": -0.2361807081807082,
+            "p": 0.0,
+            "n_boot": 3000
+          },
+          "sign_flip_randomisation": {
+            "delta": -0.28200000000000003,
+            "p": 0.0,
+            "n_boot": 3000
+          },
+          "pooled_per_query_paired_bootstrap": {
+            "delta": -0.282,
+            "lo": -0.348,
+            "hi": -0.218,
+            "p": 0.0
+          },
+          "pooled_per_query_grouped_bootstrap": {
+            "delta": -0.282,
+            "lo": -0.38434782608695656,
+            "hi": -0.16266666666666668,
+            "p": 0.0
+          },
+          "wilcoxon_signed_rank_p": 2.386484343475104e-10,
+          "n_queries_changed": 53,
+          "n_queries_better": 0,
+          "n_queries_worse": 53,
+          "holm_adjusted_p": 0.0,
+          "holm_reject": true,
+          "per_category_paired_bootstrap": {
+            "count": {
+              "delta_p5": -0.09,
+              "lo": -0.18,
+              "hi": -0.009999999999999998,
+              "p": 0.02666666666666667
+            },
+            "find": {
+              "delta_p5": -0.5700000000000001,
+              "lo": -0.7,
+              "hi": -0.44000000000000006,
+              "p": 0.0
+            },
+            "track": {
+              "delta_p5": -0.56,
+              "lo": -0.67,
+              "hi": -0.45,
+              "p": 0.0
+            },
+            "action": {
+              "delta_p5": 0.0,
+              "lo": 0.0,
+              "hi": 0.0,
+              "p": 1.0
+            },
+            "filter": {
+              "delta_p5": -0.19,
+              "lo": -0.28,
+              "hi": -0.11000000000000001,
+              "p": 0.0
+            }
+          },
+          "per_category_holm_reject": {
+            "find": true,
+            "track": true,
+            "filter": true,
+            "count": false,
+            "action": false
+          },
+          "per_category_holm_adjusted_p": {
+            "find": 0.0,
+            "track": 0.0,
+            "filter": 0.0,
+            "count": 0.05333333333333334,
+            "action": 1.0
+          }
+        },
+        "comb_anz_cal_vs_prior_only_prod": {
+          "macro_a": 0.20800000000000002,
+          "macro_b": 0.5,
+          "delta_macro_p5": -0.292,
+          "primary_paired_macro_bootstrap": {
+            "delta": -0.292,
+            "lo": -0.33599999999999997,
+            "hi": -0.24800000000000005,
+            "p": 0.0,
+            "n_boot": 3000
+          },
+          "grouped_cluster_macro_bootstrap": {
+            "delta": -0.292,
+            "lo": -0.38468670076726336,
+            "hi": -0.24400000000000005,
+            "p": 0.0,
+            "n_boot": 3000
+          },
+          "sign_flip_randomisation": {
+            "delta": -0.29200000000000004,
+            "p": 0.0,
+            "n_boot": 3000
+          },
+          "pooled_per_query_paired_bootstrap": {
+            "delta": -0.292,
+            "lo": -0.35800000000000004,
+            "hi": -0.228,
+            "p": 0.0
+          },
+          "pooled_per_query_grouped_bootstrap": {
+            "delta": -0.292,
+            "lo": -0.396,
+            "hi": -0.16991150442477876,
+            "p": 0.0
+          },
+          "wilcoxon_signed_rank_p": 1.6256995749586167e-10,
+          "n_queries_changed": 54,
+          "n_queries_better": 0,
+          "n_queries_worse": 54,
+          "holm_adjusted_p": 0.0,
+          "holm_reject": true,
+          "per_category_paired_bootstrap": {
+            "count": {
+              "delta_p5": -0.09,
+              "lo": -0.18,
+              "hi": -0.009999999999999998,
+              "p": 0.02666666666666667
+            },
+            "find": {
+              "delta_p5": -0.6,
+              "lo": -0.72,
+              "hi": -0.47000000000000003,
+              "p": 0.0
+            },
+            "track": {
+              "delta_p5": -0.56,
+              "lo": -0.67,
+              "hi": -0.45,
+              "p": 0.0
+            },
+            "action": {
+              "delta_p5": 0.0,
+              "lo": 0.0,
+              "hi": 0.0,
+              "p": 1.0
+            },
+            "filter": {
+              "delta_p5": -0.21000000000000002,
+              "lo": -0.31,
+              "hi": -0.12,
+              "p": 0.0
+            }
+          },
+          "per_category_holm_reject": {
+            "find": true,
+            "track": true,
+            "filter": true,
+            "count": false,
+            "action": false
+          },
+          "per_category_holm_adjusted_p": {
+            "find": 0.0,
+            "track": 0.0,
+            "filter": 0.0,
+            "count": 0.05333333333333334,
+            "action": 1.0
+          }
+        },
+        "comb_mnz_cal_vs_prior_only_prod": {
+          "macro_a": 0.20800000000000002,
+          "macro_b": 0.5,
+          "delta_macro_p5": -0.292,
+          "primary_paired_macro_bootstrap": {
+            "delta": -0.292,
+            "lo": -0.33599999999999997,
+            "hi": -0.24800000000000005,
+            "p": 0.0,
+            "n_boot": 3000
+          },
+          "grouped_cluster_macro_bootstrap": {
+            "delta": -0.292,
+            "lo": -0.38468670076726336,
+            "hi": -0.24400000000000005,
+            "p": 0.0,
+            "n_boot": 3000
+          },
+          "sign_flip_randomisation": {
+            "delta": -0.29200000000000004,
+            "p": 0.0,
+            "n_boot": 3000
+          },
+          "pooled_per_query_paired_bootstrap": {
+            "delta": -0.292,
+            "lo": -0.35800000000000004,
+            "hi": -0.228,
+            "p": 0.0
+          },
+          "pooled_per_query_grouped_bootstrap": {
+            "delta": -0.292,
+            "lo": -0.396,
+            "hi": -0.16991150442477876,
+            "p": 0.0
+          },
+          "wilcoxon_signed_rank_p": 1.6256995749586167e-10,
+          "n_queries_changed": 54,
+          "n_queries_better": 0,
+          "n_queries_worse": 54,
+          "holm_adjusted_p": 0.0,
+          "holm_reject": true,
+          "per_category_paired_bootstrap": {
+            "count": {
+              "delta_p5": -0.09,
+              "lo": -0.18,
+              "hi": -0.009999999999999998,
+              "p": 0.02666666666666667
+            },
+            "find": {
+              "delta_p5": -0.6,
+              "lo": -0.72,
+              "hi": -0.47000000000000003,
+              "p": 0.0
+            },
+            "track": {
+              "delta_p5": -0.56,
+              "lo": -0.67,
+              "hi": -0.45,
+              "p": 0.0
+            },
+            "action": {
+              "delta_p5": 0.0,
+              "lo": 0.0,
+              "hi": 0.0,
+              "p": 1.0
+            },
+            "filter": {
+              "delta_p5": -0.21000000000000002,
+              "lo": -0.31,
+              "hi": -0.12,
+              "p": 0.0
+            }
+          },
+          "per_category_holm_reject": {
+            "find": true,
+            "track": true,
+            "filter": true,
+            "count": false,
+            "action": false
+          },
+          "per_category_holm_adjusted_p": {
+            "find": 0.0,
+            "track": 0.0,
+            "filter": 0.0,
+            "count": 0.05333333333333334,
+            "action": 1.0
+          }
+        }
+      },
+      "holm_family": {
+        "members": [
+          "fixed_0.5_vs_prior_only",
+          "comb_sum_cal_vs_prior_only_prod",
+          "comb_anz_cal_vs_prior_only_prod",
+          "comb_mnz_cal_vs_prior_only_prod"
+        ],
+        "raw_p": {
+          "fixed_0.5_vs_prior_only": 0.0,
+          "comb_sum_cal_vs_prior_only_prod": 0.0,
+          "comb_anz_cal_vs_prior_only_prod": 0.0,
+          "comb_mnz_cal_vs_prior_only_prod": 0.0
+        },
+        "holm_adjusted_p": {
+          "fixed_0.5_vs_prior_only": 0.0,
+          "comb_sum_cal_vs_prior_only_prod": 0.0,
+          "comb_anz_cal_vs_prior_only_prod": 0.0,
+          "comb_mnz_cal_vs_prior_only_prod": 0.0
+        },
+        "holm_reject": {
+          "fixed_0.5_vs_prior_only": true,
+          "comb_sum_cal_vs_prior_only_prod": true,
+          "comb_anz_cal_vs_prior_only_prod": true,
+          "comb_mnz_cal_vs_prior_only_prod": true
+        }
+      }
+    }
+  ],
+  "probe": {
+    "minmax": {
+      "cells": [
+        {
+          "cell": "full",
+          "struct_frac": 1.0,
+          "sem_frac": 1.0,
+          "struct_exponent": 1.0,
+          "systems": {
+            "prior_only_prod": {
+              "macro_p5": 0.538,
+              "per_category_p5": {
+                "count": 0.39,
+                "find": 0.9199999999999999,
+                "track": 0.8099999999999999,
+                "action": 0.09,
+                "filter": 0.48
+              },
+              "bootstrap_ci": {
+                "mean": 0.5379999999999999,
+                "lo": 0.466,
+                "hi": 0.614
+              },
+              "grouped_ci": {
+                "mean": 0.5379999999999999,
+                "lo": 0.34177215189873417,
+                "hi": 0.6929133858267716
+              },
+              "mean_alpha": 0.6188198005775132,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 76.45,
+              "mean_gallery_relevant_coverage": 1.0
+            },
+            "comb_sum_cal": {
+              "macro_p5": 0.518,
+              "per_category_p5": {
+                "count": 0.38,
+                "find": 0.8699999999999999,
+                "track": 0.79,
+                "action": 0.09,
+                "filter": 0.45999999999999996
+              },
+              "bootstrap_ci": {
+                "mean": 0.518,
+                "lo": 0.45,
+                "hi": 0.5920000000000001
+              },
+              "grouped_ci": {
+                "mean": 0.518,
+                "lo": 0.335,
+                "hi": 0.6625954198473282
+              },
+              "mean_alpha": 0.6188198005775132,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 76.45,
+              "mean_gallery_relevant_coverage": 1.0
+            },
+            "comb_anz_cal": {
+              "macro_p5": 0.372,
+              "per_category_p5": {
+                "count": 0.38,
+                "find": 0.8699999999999999,
+                "track": 0.23000000000000004,
+                "action": 0.09,
+                "filter": 0.29
+              },
+              "bootstrap_ci": {
+                "mean": 0.37200000000000005,
+                "lo": 0.306,
+                "hi": 0.43799999999999994
+              },
+              "grouped_ci": {
+                "mean": 0.37200000000000005,
+                "lo": 0.24301075268817207,
+                "hi": 0.48316831683168315
+              },
+              "mean_alpha": 0.6188198005775132,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 76.45,
+              "mean_gallery_relevant_coverage": 1.0
+            },
+            "comb_mnz_cal": {
+              "macro_p5": 0.502,
+              "per_category_p5": {
+                "count": 0.38,
+                "find": 0.8699999999999999,
+                "track": 0.78,
+                "action": 0.09,
+                "filter": 0.39
+              },
+              "bootstrap_ci": {
+                "mean": 0.502,
+                "lo": 0.434,
+                "hi": 0.574
+              },
+              "grouped_ci": {
+                "mean": 0.502,
+                "lo": 0.3265822784810127,
+                "hi": 0.6393700787401575
+              },
+              "mean_alpha": 0.6188198005775132,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 76.45,
+              "mean_gallery_relevant_coverage": 1.0
+            }
+          },
+          "random_gallery_reference": {
+            "macro_p5": 0.364,
+            "bootstrap_ci": {
+              "mean": 0.364,
+              "lo": 0.29600000000000004,
+              "hi": 0.43
+            },
+            "note": "seeded uniform subsample of the shrunken gallery, ranked by the paper's prior blend"
+          },
+          "paired_delta_vs_prior_only_prod": {
+            "comb_sum_cal": {
+              "delta_macro_p5": -0.020000000000000028,
+              "lo": -0.03599999999999992,
+              "hi": -0.007999999999999974,
+              "p": 0.0006666666666666666
+            },
+            "comb_anz_cal": {
+              "delta_macro_p5": -0.16600000000000004,
+              "lo": -0.2,
+              "hi": -0.13199999999999998,
+              "p": 0.0
+            },
+            "comb_mnz_cal": {
+              "delta_macro_p5": -0.036000000000000046,
+              "lo": -0.0599999999999999,
+              "hi": -0.016000000000000004,
+              "p": 0.0
+            }
+          }
+        },
+        {
+          "cell": "half_both",
+          "struct_frac": 0.5,
+          "sem_frac": 0.5,
+          "struct_exponent": 1.0,
+          "systems": {
+            "prior_only_prod": {
+              "macro_p5": 0.404,
+              "per_category_p5": {
+                "count": 0.39,
+                "find": 0.25,
+                "track": 0.8099999999999999,
+                "action": 0.09,
+                "filter": 0.48
+              },
+              "bootstrap_ci": {
+                "mean": 0.40399999999999997,
+                "lo": 0.33399999999999996,
+                "hi": 0.478
+              },
+              "grouped_ci": {
+                "mean": 0.40399999999999997,
+                "lo": 0.26326530612244897,
+                "hi": 0.5348837209302325
+              },
+              "mean_alpha": 0.6193651779960809,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 41.39,
+              "mean_gallery_relevant_coverage": 0.8686103896103896
+            },
+            "comb_sum_cal": {
+              "macro_p5": 0.394,
+              "per_category_p5": {
+                "count": 0.38,
+                "find": 0.24,
+                "track": 0.79,
+                "action": 0.09,
+                "filter": 0.47000000000000003
+              },
+              "bootstrap_ci": {
+                "mean": 0.39399999999999996,
+                "lo": 0.32799999999999996,
+                "hi": 0.46399999999999997
+              },
+              "grouped_ci": {
+                "mean": 0.39399999999999996,
+                "lo": 0.2606060606060606,
+                "hi": 0.5150943396226415
+              },
+              "mean_alpha": 0.6193651779960809,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 41.39,
+              "mean_gallery_relevant_coverage": 0.8686103896103896
+            },
+            "comb_anz_cal": {
+              "macro_p5": 0.352,
+              "per_category_p5": {
+                "count": 0.38,
+                "find": 0.25,
+                "track": 0.62,
+                "action": 0.1,
+                "filter": 0.41000000000000003
+              },
+              "bootstrap_ci": {
+                "mean": 0.35200000000000004,
+                "lo": 0.29600000000000004,
+                "hi": 0.41
+              },
+              "grouped_ci": {
+                "mean": 0.35200000000000004,
+                "lo": 0.24516129032258066,
+                "hi": 0.45161290322580644
+              },
+              "mean_alpha": 0.6193651779960809,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 41.39,
+              "mean_gallery_relevant_coverage": 0.8686103896103896
+            },
+            "comb_mnz_cal": {
+              "macro_p5": 0.386,
+              "per_category_p5": {
+                "count": 0.38,
+                "find": 0.24,
+                "track": 0.79,
+                "action": 0.09,
+                "filter": 0.43
+              },
+              "bootstrap_ci": {
+                "mean": 0.386,
+                "lo": 0.32,
+                "hi": 0.45399999999999996
+              },
+              "grouped_ci": {
+                "mean": 0.386,
+                "lo": 0.25473684210526315,
+                "hi": 0.5037735849056604
+              },
+              "mean_alpha": 0.6193651779960809,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 41.39,
+              "mean_gallery_relevant_coverage": 0.8686103896103896
+            }
+          },
+          "random_gallery_reference": {
+            "macro_p5": 0.22400000000000003,
+            "bootstrap_ci": {
+              "mean": 0.22400000000000003,
+              "lo": 0.16400000000000003,
+              "hi": 0.28600000000000003
+            },
+            "note": "seeded uniform subsample of the shrunken gallery, ranked by the paper's prior blend"
+          },
+          "paired_delta_vs_prior_only_prod": {
+            "comb_sum_cal": {
+              "delta_macro_p5": -0.01000000000000002,
+              "lo": -0.019999999999999952,
+              "hi": -0.0020000000000000018,
+              "p": 0.016
+            },
+            "comb_anz_cal": {
+              "delta_macro_p5": -0.05200000000000003,
+              "lo": -0.08199999999999996,
+              "hi": -0.025999999999999995,
+              "p": 0.0
+            },
+            "comb_mnz_cal": {
+              "delta_macro_p5": -0.018000000000000026,
+              "lo": -0.03199999999999997,
+              "hi": -0.005999999999999994,
+              "p": 0.0
+            }
+          }
+        },
+        {
+          "cell": "quarter_both",
+          "struct_frac": 0.25,
+          "sem_frac": 0.25,
+          "struct_exponent": 1.0,
+          "systems": {
+            "prior_only_prod": {
+              "macro_p5": 0.368,
+              "per_category_p5": {
+                "count": 0.33,
+                "find": 0.2,
+                "track": 0.8099999999999999,
+                "action": 0.1,
+                "filter": 0.4
+              },
+              "bootstrap_ci": {
+                "mean": 0.368,
+                "lo": 0.308,
+                "hi": 0.434
+              },
+              "grouped_ci": {
+                "mean": 0.368,
+                "lo": 0.247887323943662,
+                "hi": 0.4691729323308271
+              },
+              "mean_alpha": 0.6196825396825396,
+              "mean_struct_pool": 17.21,
+              "mean_sem_pool": 5.0,
+              "mean_universe": 21.54,
+              "mean_gallery_relevant_coverage": 0.7501962481962482
+            },
+            "comb_sum_cal": {
+              "macro_p5": 0.34600000000000003,
+              "per_category_p5": {
+                "count": 0.24000000000000005,
+                "find": 0.2,
+                "track": 0.79,
+                "action": 0.1,
+                "filter": 0.4
+              },
+              "bootstrap_ci": {
+                "mean": 0.34600000000000003,
+                "lo": 0.29,
+                "hi": 0.41200000000000003
+              },
+              "grouped_ci": {
+                "mean": 0.34600000000000003,
+                "lo": 0.2396551724137931,
+                "hi": 0.4363636363636364
+              },
+              "mean_alpha": 0.6196825396825396,
+              "mean_struct_pool": 17.21,
+              "mean_sem_pool": 5.0,
+              "mean_universe": 21.54,
+              "mean_gallery_relevant_coverage": 0.7501962481962482
+            },
+            "comb_anz_cal": {
+              "macro_p5": 0.34,
+              "per_category_p5": {
+                "count": 0.24000000000000005,
+                "find": 0.2,
+                "track": 0.77,
+                "action": 0.1,
+                "filter": 0.39
+              },
+              "bootstrap_ci": {
+                "mean": 0.34,
+                "lo": 0.28600000000000003,
+                "hi": 0.402
+              },
+              "grouped_ci": {
+                "mean": 0.34,
+                "lo": 0.23714285714285716,
+                "hi": 0.42619047619047623
+              },
+              "mean_alpha": 0.6196825396825396,
+              "mean_struct_pool": 17.21,
+              "mean_sem_pool": 5.0,
+              "mean_universe": 21.54,
+              "mean_gallery_relevant_coverage": 0.7501962481962482
+            },
+            "comb_mnz_cal": {
+              "macro_p5": 0.34400000000000003,
+              "per_category_p5": {
+                "count": 0.24000000000000005,
+                "find": 0.2,
+                "track": 0.79,
+                "action": 0.1,
+                "filter": 0.39
+              },
+              "bootstrap_ci": {
+                "mean": 0.344,
+                "lo": 0.28800000000000003,
+                "hi": 0.40800000000000003
+              },
+              "grouped_ci": {
+                "mean": 0.344,
+                "lo": 0.2391304347826087,
+                "hi": 0.4321428571428571
+              },
+              "mean_alpha": 0.6196825396825396,
+              "mean_struct_pool": 17.21,
+              "mean_sem_pool": 5.0,
+              "mean_universe": 21.54,
+              "mean_gallery_relevant_coverage": 0.7501962481962482
+            }
+          },
+          "random_gallery_reference": {
+            "macro_p5": 0.14,
+            "bootstrap_ci": {
+              "mean": 0.14,
+              "lo": 0.096,
+              "hi": 0.18400000000000002
+            },
+            "note": "seeded uniform subsample of the shrunken gallery, ranked by the paper's prior blend"
+          },
+          "paired_delta_vs_prior_only_prod": {
+            "comb_sum_cal": {
+              "delta_macro_p5": -0.02200000000000003,
+              "lo": -0.03799999999999998,
+              "hi": -0.008000000000000007,
+              "p": 0.0
+            },
+            "comb_anz_cal": {
+              "delta_macro_p5": -0.028000000000000004,
+              "lo": -0.044000000000000004,
+              "hi": -0.013999999999999967,
+              "p": 0.0
+            },
+            "comb_mnz_cal": {
+              "delta_macro_p5": -0.02400000000000002,
+              "lo": -0.039999999999999994,
+              "hi": -0.010000000000000004,
+              "p": 0.0
+            }
+          }
+        },
+        {
+          "cell": "struct_half",
+          "struct_frac": 0.5,
+          "sem_frac": 1.0,
+          "struct_exponent": 1.0,
+          "systems": {
+            "prior_only_prod": {
+              "macro_p5": 0.404,
+              "per_category_p5": {
+                "count": 0.39,
+                "find": 0.25,
+                "track": 0.8099999999999999,
+                "action": 0.09,
+                "filter": 0.48
+              },
+              "bootstrap_ci": {
+                "mean": 0.40399999999999997,
+                "lo": 0.33399999999999996,
+                "hi": 0.478
+              },
+              "grouped_ci": {
+                "mean": 0.40399999999999997,
+                "lo": 0.26326530612244897,
+                "hi": 0.5348837209302325
+              },
+              "mean_alpha": 0.6041471799805134,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 48.48,
+              "mean_gallery_relevant_coverage": 0.8880465367965367
+            },
+            "comb_sum_cal": {
+              "macro_p5": 0.392,
+              "per_category_p5": {
+                "count": 0.38,
+                "find": 0.24,
+                "track": 0.79,
+                "action": 0.09,
+                "filter": 0.45999999999999996
+              },
+              "bootstrap_ci": {
+                "mean": 0.392,
+                "lo": 0.326,
+                "hi": 0.46399999999999997
+              },
+              "grouped_ci": {
+                "mean": 0.392,
+                "lo": 0.25825242718446606,
+                "hi": 0.5127272727272727
+              },
+              "mean_alpha": 0.6041471799805134,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 48.48,
+              "mean_gallery_relevant_coverage": 0.8880465367965367
+            },
+            "comb_anz_cal": {
+              "macro_p5": 0.334,
+              "per_category_p5": {
+                "count": 0.38,
+                "find": 0.27,
+                "track": 0.54,
+                "action": 0.09,
+                "filter": 0.39
+              },
+              "bootstrap_ci": {
+                "mean": 0.33399999999999996,
+                "lo": 0.28,
+                "hi": 0.39399999999999996
+              },
+              "grouped_ci": {
+                "mean": 0.33399999999999996,
+                "lo": 0.22580645161290322,
+                "hi": 0.440909090909091
+              },
+              "mean_alpha": 0.6041471799805134,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 48.48,
+              "mean_gallery_relevant_coverage": 0.8880465367965367
+            },
+            "comb_mnz_cal": {
+              "macro_p5": 0.378,
+              "per_category_p5": {
+                "count": 0.38,
+                "find": 0.24,
+                "track": 0.78,
+                "action": 0.09,
+                "filter": 0.4
+              },
+              "bootstrap_ci": {
+                "mean": 0.37799999999999995,
+                "lo": 0.314,
+                "hi": 0.446
+              },
+              "grouped_ci": {
+                "mean": 0.37799999999999995,
+                "lo": 0.25263157894736843,
+                "hi": 0.4899224806201551
+              },
+              "mean_alpha": 0.6041471799805134,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 48.48,
+              "mean_gallery_relevant_coverage": 0.8880465367965367
+            }
+          },
+          "random_gallery_reference": {
+            "macro_p5": 0.28400000000000003,
+            "bootstrap_ci": {
+              "mean": 0.28400000000000003,
+              "lo": 0.226,
+              "hi": 0.344
+            },
+            "note": "seeded uniform subsample of the shrunken gallery, ranked by the paper's prior blend"
+          },
+          "paired_delta_vs_prior_only_prod": {
+            "comb_sum_cal": {
+              "delta_macro_p5": -0.012000000000000021,
+              "lo": -0.023999999999999987,
+              "hi": -0.0020000000000000018,
+              "p": 0.016
+            },
+            "comb_anz_cal": {
+              "delta_macro_p5": -0.07000000000000005,
+              "lo": -0.10600000000000002,
+              "hi": -0.038000000000000034,
+              "p": 0.0
+            },
+            "comb_mnz_cal": {
+              "delta_macro_p5": -0.026000000000000034,
+              "lo": -0.047999999999999945,
+              "hi": -0.008000000000000012,
+              "p": 0.0
+            }
+          }
+        },
+        {
+          "cell": "struct_quarter",
+          "struct_frac": 0.25,
+          "sem_frac": 1.0,
+          "struct_exponent": 1.0,
+          "systems": {
+            "prior_only_prod": {
+              "macro_p5": 0.33199999999999996,
+              "per_category_p5": {
+                "count": 0.28,
+                "find": 0.09,
+                "track": 0.8099999999999999,
+                "action": 0.09,
+                "filter": 0.39
+              },
+              "bootstrap_ci": {
+                "mean": 0.332,
+                "lo": 0.27,
+                "hi": 0.402
+              },
+              "grouped_ci": {
+                "mean": 0.332,
+                "lo": 0.22298850574712645,
+                "hi": 0.42524271844660194
+              },
+              "mean_alpha": 0.5889353804763011,
+              "mean_struct_pool": 17.21,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 34.27,
+              "mean_gallery_relevant_coverage": 0.7781926406926406
+            },
+            "comb_sum_cal": {
+              "macro_p5": 0.306,
+              "per_category_p5": {
+                "count": 0.19,
+                "find": 0.09,
+                "track": 0.79,
+                "action": 0.09,
+                "filter": 0.37
+              },
+              "bootstrap_ci": {
+                "mean": 0.306,
+                "lo": 0.24600000000000002,
+                "hi": 0.374
+              },
+              "grouped_ci": {
+                "mean": 0.306,
+                "lo": 0.21204819277108436,
+                "hi": 0.38899082568807336
+              },
+              "mean_alpha": 0.5889353804763011,
+              "mean_struct_pool": 17.21,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 34.27,
+              "mean_gallery_relevant_coverage": 0.7781926406926406
+            },
+            "comb_anz_cal": {
+              "macro_p5": 0.272,
+              "per_category_p5": {
+                "count": 0.19,
+                "find": 0.1,
+                "track": 0.67,
+                "action": 0.09,
+                "filter": 0.31
+              },
+              "bootstrap_ci": {
+                "mean": 0.272,
+                "lo": 0.222,
+                "hi": 0.32800000000000007
+              },
+              "grouped_ci": {
+                "mean": 0.272,
+                "lo": 0.1952755905511811,
+                "hi": 0.3415730337078652
+              },
+              "mean_alpha": 0.5889353804763011,
+              "mean_struct_pool": 17.21,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 34.27,
+              "mean_gallery_relevant_coverage": 0.7781926406926406
+            },
+            "comb_mnz_cal": {
+              "macro_p5": 0.292,
+              "per_category_p5": {
+                "count": 0.19,
+                "find": 0.09,
+                "track": 0.78,
+                "action": 0.09,
+                "filter": 0.31
+              },
+              "bootstrap_ci": {
+                "mean": 0.292,
+                "lo": 0.23600000000000002,
+                "hi": 0.35800000000000004
+              },
+              "grouped_ci": {
+                "mean": 0.292,
+                "lo": 0.20600000000000002,
+                "hi": 0.36460176991150445
+              },
+              "mean_alpha": 0.5889353804763011,
+              "mean_struct_pool": 17.21,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 34.27,
+              "mean_gallery_relevant_coverage": 0.7781926406926406
+            }
+          },
+          "random_gallery_reference": {
+            "macro_p5": 0.218,
+            "bootstrap_ci": {
+              "mean": 0.218,
+              "lo": 0.168,
+              "hi": 0.27
+            },
+            "note": "seeded uniform subsample of the shrunken gallery, ranked by the paper's prior blend"
+          },
+          "paired_delta_vs_prior_only_prod": {
+            "comb_sum_cal": {
+              "delta_macro_p5": -0.026000000000000023,
+              "lo": -0.04799999999999998,
+              "hi": -0.008000000000000002,
+              "p": 0.0013333333333333333
+            },
+            "comb_anz_cal": {
+              "delta_macro_p5": -0.06000000000000004,
+              "lo": -0.09200000000000001,
+              "hi": -0.03199999999999999,
+              "p": 0.0
+            },
+            "comb_mnz_cal": {
+              "delta_macro_p5": -0.04000000000000002,
+              "lo": -0.06799999999999995,
+              "hi": -0.016000000000000004,
+              "p": 0.0
+            }
+          }
+        },
+        {
+          "cell": "sem_half",
+          "struct_frac": 1.0,
+          "sem_frac": 0.5,
+          "struct_exponent": 1.0,
+          "systems": {
+            "prior_only_prod": {
+              "macro_p5": 0.538,
+              "per_category_p5": {
+                "count": 0.39,
+                "find": 0.9199999999999999,
+                "track": 0.8099999999999999,
+                "action": 0.09,
+                "filter": 0.48
+              },
+              "bootstrap_ci": {
+                "mean": 0.5379999999999999,
+                "lo": 0.466,
+                "hi": 0.614
+              },
+              "grouped_ci": {
+                "mean": 0.5379999999999999,
+                "lo": 0.34177215189873417,
+                "hi": 0.6929133858267716
+              },
+              "mean_alpha": 0.6324891965467139,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 72.03,
+              "mean_gallery_relevant_coverage": 1.0
+            },
+            "comb_sum_cal": {
+              "macro_p5": 0.522,
+              "per_category_p5": {
+                "count": 0.38,
+                "find": 0.8800000000000001,
+                "track": 0.79,
+                "action": 0.09,
+                "filter": 0.47000000000000003
+              },
+              "bootstrap_ci": {
+                "mean": 0.522,
+                "lo": 0.45399999999999996,
+                "hi": 0.596
+              },
+              "grouped_ci": {
+                "mean": 0.522,
+                "lo": 0.33563218390804594,
+                "hi": 0.6699029126213593
+              },
+              "mean_alpha": 0.6324891965467139,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 72.03,
+              "mean_gallery_relevant_coverage": 1.0
+            },
+            "comb_anz_cal": {
+              "macro_p5": 0.41600000000000004,
+              "per_category_p5": {
+                "count": 0.38,
+                "find": 0.8699999999999999,
+                "track": 0.47000000000000003,
+                "action": 0.09,
+                "filter": 0.27
+              },
+              "bootstrap_ci": {
+                "mean": 0.41600000000000004,
+                "lo": 0.35200000000000004,
+                "hi": 0.48200000000000004
+              },
+              "grouped_ci": {
+                "mean": 0.41600000000000004,
+                "lo": 0.27941176470588236,
+                "hi": 0.5247863247863248
+              },
+              "mean_alpha": 0.6324891965467139,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 72.03,
+              "mean_gallery_relevant_coverage": 1.0
+            },
+            "comb_mnz_cal": {
+              "macro_p5": 0.512,
+              "per_category_p5": {
+                "count": 0.38,
+                "find": 0.8699999999999999,
+                "track": 0.79,
+                "action": 0.09,
+                "filter": 0.43
+              },
+              "bootstrap_ci": {
+                "mean": 0.512,
+                "lo": 0.444,
+                "hi": 0.584
+              },
+              "grouped_ci": {
+                "mean": 0.512,
+                "lo": 0.33170731707317075,
+                "hi": 0.6548672566371682
+              },
+              "mean_alpha": 0.6324891965467139,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 72.03,
+              "mean_gallery_relevant_coverage": 1.0
+            }
+          },
+          "random_gallery_reference": {
+            "macro_p5": 0.33799999999999997,
+            "bootstrap_ci": {
+              "mean": 0.33799999999999997,
+              "lo": 0.27,
+              "hi": 0.41
+            },
+            "note": "seeded uniform subsample of the shrunken gallery, ranked by the paper's prior blend"
+          },
+          "paired_delta_vs_prior_only_prod": {
+            "comb_sum_cal": {
+              "delta_macro_p5": -0.016000000000000025,
+              "lo": -0.026000000000000002,
+              "hi": -0.006000000000000005,
+              "p": 0.0006666666666666666
+            },
+            "comb_anz_cal": {
+              "delta_macro_p5": -0.12200000000000004,
+              "lo": -0.16399999999999998,
+              "hi": -0.08399999999999998,
+              "p": 0.0
+            },
+            "comb_mnz_cal": {
+              "delta_macro_p5": -0.026000000000000034,
+              "lo": -0.042,
+              "hi": -0.011999999999999988,
+              "p": 0.0
+            }
+          }
+        },
+        {
+          "cell": "warp_struct",
+          "struct_frac": 1.0,
+          "sem_frac": 1.0,
+          "struct_exponent": 2.0,
+          "systems": {
+            "prior_only_prod": {
+              "macro_p5": 0.538,
+              "per_category_p5": {
+                "count": 0.39,
+                "find": 0.9199999999999999,
+                "track": 0.8099999999999999,
+                "action": 0.09,
+                "filter": 0.48
+              },
+              "bootstrap_ci": {
+                "mean": 0.5379999999999999,
+                "lo": 0.466,
+                "hi": 0.614
+              },
+              "grouped_ci": {
+                "mean": 0.5379999999999999,
+                "lo": 0.34177215189873417,
+                "hi": 0.6929133858267716
+              },
+              "mean_alpha": 0.6188198005775132,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 76.45,
+              "mean_gallery_relevant_coverage": 1.0
+            },
+            "comb_sum_cal": {
+              "macro_p5": 0.52,
+              "per_category_p5": {
+                "count": 0.38,
+                "find": 0.8800000000000001,
+                "track": 0.79,
+                "action": 0.09,
+                "filter": 0.4600000000000001
+              },
+              "bootstrap_ci": {
+                "mean": 0.52,
+                "lo": 0.452,
+                "hi": 0.594
+              },
+              "grouped_ci": {
+                "mean": 0.52,
+                "lo": 0.3345454545454546,
+                "hi": 0.6661417322834645
+              },
+              "mean_alpha": 0.6188198005775132,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 76.45,
+              "mean_gallery_relevant_coverage": 1.0
+            },
+            "comb_anz_cal": {
+              "macro_p5": 0.372,
+              "per_category_p5": {
+                "count": 0.37,
+                "find": 0.8699999999999999,
+                "track": 0.23000000000000004,
+                "action": 0.09,
+                "filter": 0.3
+              },
+              "bootstrap_ci": {
+                "mean": 0.37200000000000005,
+                "lo": 0.308,
+                "hi": 0.43799999999999994
+              },
+              "grouped_ci": {
+                "mean": 0.37200000000000005,
+                "lo": 0.24301075268817207,
+                "hi": 0.4816666666666667
+              },
+              "mean_alpha": 0.6188198005775132,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 76.45,
+              "mean_gallery_relevant_coverage": 1.0
+            },
+            "comb_mnz_cal": {
+              "macro_p5": 0.502,
+              "per_category_p5": {
+                "count": 0.37,
+                "find": 0.8699999999999999,
+                "track": 0.79,
+                "action": 0.09,
+                "filter": 0.39
+              },
+              "bootstrap_ci": {
+                "mean": 0.502,
+                "lo": 0.434,
+                "hi": 0.5760000000000001
+              },
+              "grouped_ci": {
+                "mean": 0.502,
+                "lo": 0.3265822784810127,
+                "hi": 0.6393700787401575
+              },
+              "mean_alpha": 0.6188198005775132,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 76.45,
+              "mean_gallery_relevant_coverage": 1.0
+            }
+          },
+          "random_gallery_reference": {
+            "macro_p5": 0.366,
+            "bootstrap_ci": {
+              "mean": 0.366,
+              "lo": 0.298,
+              "hi": 0.436
+            },
+            "note": "seeded uniform subsample of the shrunken gallery, ranked by the paper's prior blend"
+          },
+          "paired_delta_vs_prior_only_prod": {
+            "comb_sum_cal": {
+              "delta_macro_p5": -0.018000000000000026,
+              "lo": -0.02999999999999996,
+              "hi": -0.007999999999999985,
+              "p": 0.0
+            },
+            "comb_anz_cal": {
+              "delta_macro_p5": -0.16600000000000004,
+              "lo": -0.20199999999999996,
+              "hi": -0.13199999999999995,
+              "p": 0.0
+            },
+            "comb_mnz_cal": {
+              "delta_macro_p5": -0.036000000000000046,
+              "lo": -0.05799999999999996,
+              "hi": -0.01799999999999995,
+              "p": 0.0
+            }
+          }
+        },
+        {
+          "cell": "warp_struct_half_both",
+          "struct_frac": 0.5,
+          "sem_frac": 0.5,
+          "struct_exponent": 2.0,
+          "systems": {
+            "prior_only_prod": {
+              "macro_p5": 0.404,
+              "per_category_p5": {
+                "count": 0.39,
+                "find": 0.25,
+                "track": 0.8099999999999999,
+                "action": 0.09,
+                "filter": 0.48
+              },
+              "bootstrap_ci": {
+                "mean": 0.40399999999999997,
+                "lo": 0.33399999999999996,
+                "hi": 0.478
+              },
+              "grouped_ci": {
+                "mean": 0.40399999999999997,
+                "lo": 0.26326530612244897,
+                "hi": 0.5348837209302325
+              },
+              "mean_alpha": 0.6193651779960809,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 41.18,
+              "mean_gallery_relevant_coverage": 0.8723322510822511
+            },
+            "comb_sum_cal": {
+              "macro_p5": 0.396,
+              "per_category_p5": {
+                "count": 0.38,
+                "find": 0.24,
+                "track": 0.79,
+                "action": 0.09,
+                "filter": 0.48
+              },
+              "bootstrap_ci": {
+                "mean": 0.396,
+                "lo": 0.32800000000000007,
+                "hi": 0.46799999999999997
+              },
+              "grouped_ci": {
+                "mean": 0.396,
+                "lo": 0.2613861386138614,
+                "hi": 0.5177777777777778
+              },
+              "mean_alpha": 0.6193651779960809,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 41.18,
+              "mean_gallery_relevant_coverage": 0.8723322510822511
+            },
+            "comb_anz_cal": {
+              "macro_p5": 0.35,
+              "per_category_p5": {
+                "count": 0.38,
+                "find": 0.25,
+                "track": 0.63,
+                "action": 0.09,
+                "filter": 0.4
+              },
+              "bootstrap_ci": {
+                "mean": 0.35,
+                "lo": 0.292,
+                "hi": 0.41
+              },
+              "grouped_ci": {
+                "mean": 0.35,
+                "lo": 0.23380281690140847,
+                "hi": 0.45436893203883494
+              },
+              "mean_alpha": 0.6193651779960809,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 41.18,
+              "mean_gallery_relevant_coverage": 0.8723322510822511
+            },
+            "comb_mnz_cal": {
+              "macro_p5": 0.394,
+              "per_category_p5": {
+                "count": 0.38,
+                "find": 0.24,
+                "track": 0.79,
+                "action": 0.09,
+                "filter": 0.47000000000000003
+              },
+              "bootstrap_ci": {
+                "mean": 0.39399999999999996,
+                "lo": 0.32799999999999996,
+                "hi": 0.46399999999999997
+              },
+              "grouped_ci": {
+                "mean": 0.39399999999999996,
+                "lo": 0.2606060606060606,
+                "hi": 0.5150943396226415
+              },
+              "mean_alpha": 0.6193651779960809,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 41.18,
+              "mean_gallery_relevant_coverage": 0.8723322510822511
+            }
+          },
+          "random_gallery_reference": {
+            "macro_p5": 0.22400000000000003,
+            "bootstrap_ci": {
+              "mean": 0.22400000000000003,
+              "lo": 0.168,
+              "hi": 0.282
+            },
+            "note": "seeded uniform subsample of the shrunken gallery, ranked by the paper's prior blend"
+          },
+          "paired_delta_vs_prior_only_prod": {
+            "comb_sum_cal": {
+              "delta_macro_p5": -0.008000000000000018,
+              "lo": -0.015999999999999993,
+              "hi": -0.0019999999999999797,
+              "p": 0.032
+            },
+            "comb_anz_cal": {
+              "delta_macro_p5": -0.05400000000000003,
+              "lo": -0.08,
+              "hi": -0.029999999999999992,
+              "p": 0.0
+            },
+            "comb_mnz_cal": {
+              "delta_macro_p5": -0.01000000000000002,
+              "lo": -0.019999999999999952,
+              "hi": -0.0020000000000000018,
+              "p": 0.016
+            }
+          }
+        }
+      ]
+    },
+    "zscore": {
+      "cells": [
+        {
+          "cell": "full",
+          "struct_frac": 1.0,
+          "sem_frac": 1.0,
+          "struct_exponent": 1.0,
+          "systems": {
+            "prior_only_prod": {
+              "macro_p5": 0.5,
+              "per_category_p5": {
+                "count": 0.39,
+                "find": 0.9099999999999999,
+                "track": 0.7,
+                "action": 0.09,
+                "filter": 0.41
+              },
+              "bootstrap_ci": {
+                "mean": 0.5,
+                "lo": 0.43200000000000005,
+                "hi": 0.57
+              },
+              "grouped_ci": {
+                "mean": 0.5,
+                "lo": 0.32727272727272727,
+                "hi": 0.6369565217391304
+              },
+              "mean_alpha": 0.6188198005775132,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 76.45,
+              "mean_gallery_relevant_coverage": 1.0
+            },
+            "comb_sum_cal": {
+              "macro_p5": 0.21800000000000003,
+              "per_category_p5": {
+                "count": 0.3,
+                "find": 0.33999999999999997,
+                "track": 0.14,
+                "action": 0.09,
+                "filter": 0.22000000000000003
+              },
+              "bootstrap_ci": {
+                "mean": 0.218,
+                "lo": 0.17600000000000002,
+                "hi": 0.262
+              },
+              "grouped_ci": {
+                "mean": 0.218,
+                "lo": 0.1482758620689655,
+                "hi": 0.28888888888888886
+              },
+              "mean_alpha": 0.6188198005775132,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 76.45,
+              "mean_gallery_relevant_coverage": 1.0
+            },
+            "comb_anz_cal": {
+              "macro_p5": 0.20800000000000002,
+              "per_category_p5": {
+                "count": 0.3,
+                "find": 0.31,
+                "track": 0.14,
+                "action": 0.09,
+                "filter": 0.2
+              },
+              "bootstrap_ci": {
+                "mean": 0.20800000000000002,
+                "lo": 0.16400000000000003,
+                "hi": 0.252
+              },
+              "grouped_ci": {
+                "mean": 0.20800000000000002,
+                "lo": 0.14133333333333334,
+                "hi": 0.2759259259259259
+              },
+              "mean_alpha": 0.6188198005775132,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 76.45,
+              "mean_gallery_relevant_coverage": 1.0
+            },
+            "comb_mnz_cal": {
+              "macro_p5": 0.20800000000000002,
+              "per_category_p5": {
+                "count": 0.3,
+                "find": 0.31,
+                "track": 0.14,
+                "action": 0.09,
+                "filter": 0.2
+              },
+              "bootstrap_ci": {
+                "mean": 0.20800000000000002,
+                "lo": 0.16400000000000003,
+                "hi": 0.252
+              },
+              "grouped_ci": {
+                "mean": 0.20800000000000002,
+                "lo": 0.14133333333333334,
+                "hi": 0.2759259259259259
+              },
+              "mean_alpha": 0.6188198005775132,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 76.45,
+              "mean_gallery_relevant_coverage": 1.0
+            }
+          },
+          "random_gallery_reference": {
+            "macro_p5": 0.37200000000000005,
+            "bootstrap_ci": {
+              "mean": 0.37200000000000005,
+              "lo": 0.30200000000000005,
+              "hi": 0.444
+            },
+            "note": "seeded uniform subsample of the shrunken gallery, ranked by the paper's prior blend"
+          },
+          "paired_delta_vs_prior_only_prod": {
+            "comb_sum_cal": {
+              "delta_macro_p5": -0.28200000000000003,
+              "lo": -0.324,
+              "hi": -0.242,
+              "p": 0.0
+            },
+            "comb_anz_cal": {
+              "delta_macro_p5": -0.292,
+              "lo": -0.33599999999999997,
+              "hi": -0.25199999999999995,
+              "p": 0.0
+            },
+            "comb_mnz_cal": {
+              "delta_macro_p5": -0.292,
+              "lo": -0.33599999999999997,
+              "hi": -0.25199999999999995,
+              "p": 0.0
+            }
+          }
+        },
+        {
+          "cell": "half_both",
+          "struct_frac": 0.5,
+          "sem_frac": 0.5,
+          "struct_exponent": 1.0,
+          "systems": {
+            "prior_only_prod": {
+              "macro_p5": 0.534,
+              "per_category_p5": {
+                "count": 0.39,
+                "find": 0.9199999999999999,
+                "track": 0.8,
+                "action": 0.09,
+                "filter": 0.47000000000000003
+              },
+              "bootstrap_ci": {
+                "mean": 0.534,
+                "lo": 0.462,
+                "hi": 0.61
+              },
+              "grouped_ci": {
+                "mean": 0.534,
+                "lo": 0.33924050632911396,
+                "hi": 0.6888888888888889
+              },
+              "mean_alpha": 0.6193651779960809,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 41.32,
+              "mean_gallery_relevant_coverage": 0.854741341991342
+            },
+            "comb_sum_cal": {
+              "macro_p5": 0.352,
+              "per_category_p5": {
+                "count": 0.33999999999999997,
+                "find": 0.33,
+                "track": 0.67,
+                "action": 0.08,
+                "filter": 0.33999999999999997
+              },
+              "bootstrap_ci": {
+                "mean": 0.35200000000000004,
+                "lo": 0.302,
+                "hi": 0.406
+              },
+              "grouped_ci": {
+                "mean": 0.35200000000000004,
+                "lo": 0.2323809523809524,
+                "hi": 0.45663716814159294
+              },
+              "mean_alpha": 0.6193651779960809,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 41.32,
+              "mean_gallery_relevant_coverage": 0.854741341991342
+            },
+            "comb_anz_cal": {
+              "macro_p5": 0.242,
+              "per_category_p5": {
+                "count": 0.33,
+                "find": 0.32,
+                "track": 0.25,
+                "action": 0.07,
+                "filter": 0.24
+              },
+              "bootstrap_ci": {
+                "mean": 0.242,
+                "lo": 0.20400000000000001,
+                "hi": 0.28
+              },
+              "grouped_ci": {
+                "mean": 0.242,
+                "lo": 0.1568965517241379,
+                "hi": 0.3188118811881188
+              },
+              "mean_alpha": 0.6193651779960809,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 41.32,
+              "mean_gallery_relevant_coverage": 0.854741341991342
+            },
+            "comb_mnz_cal": {
+              "macro_p5": 0.242,
+              "per_category_p5": {
+                "count": 0.33,
+                "find": 0.32,
+                "track": 0.25,
+                "action": 0.07,
+                "filter": 0.24
+              },
+              "bootstrap_ci": {
+                "mean": 0.242,
+                "lo": 0.20400000000000001,
+                "hi": 0.28
+              },
+              "grouped_ci": {
+                "mean": 0.242,
+                "lo": 0.1568965517241379,
+                "hi": 0.3188118811881188
+              },
+              "mean_alpha": 0.6193651779960809,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 41.32,
+              "mean_gallery_relevant_coverage": 0.854741341991342
+            }
+          },
+          "random_gallery_reference": {
+            "macro_p5": 0.23600000000000002,
+            "bootstrap_ci": {
+              "mean": 0.23600000000000002,
+              "lo": 0.182,
+              "hi": 0.29400000000000004
+            },
+            "note": "seeded uniform subsample of the shrunken gallery, ranked by the paper's prior blend"
+          },
+          "paired_delta_vs_prior_only_prod": {
+            "comb_sum_cal": {
+              "delta_macro_p5": -0.18199999999999994,
+              "lo": -0.22199999999999998,
+              "hi": -0.14200000000000004,
+              "p": 0.0
+            },
+            "comb_anz_cal": {
+              "delta_macro_p5": -0.292,
+              "lo": -0.33599999999999997,
+              "hi": -0.24800000000000005,
+              "p": 0.0
+            },
+            "comb_mnz_cal": {
+              "delta_macro_p5": -0.292,
+              "lo": -0.33599999999999997,
+              "hi": -0.24800000000000005,
+              "p": 0.0
+            }
+          }
+        },
+        {
+          "cell": "quarter_both",
+          "struct_frac": 0.25,
+          "sem_frac": 0.25,
+          "struct_exponent": 1.0,
+          "systems": {
+            "prior_only_prod": {
+              "macro_p5": 0.48600000000000004,
+              "per_category_p5": {
+                "count": 0.36,
+                "find": 0.72,
+                "track": 0.8,
+                "action": 0.09,
+                "filter": 0.45999999999999996
+              },
+              "bootstrap_ci": {
+                "mean": 0.486,
+                "lo": 0.424,
+                "hi": 0.556
+              },
+              "grouped_ci": {
+                "mean": 0.486,
+                "lo": 0.31020408163265306,
+                "hi": 0.6272727272727273
+              },
+              "mean_alpha": 0.6196825396825396,
+              "mean_struct_pool": 17.21,
+              "mean_sem_pool": 5.0,
+              "mean_universe": 21.51,
+              "mean_gallery_relevant_coverage": 0.7509462481962481
+            },
+            "comb_sum_cal": {
+              "macro_p5": 0.44400000000000006,
+              "per_category_p5": {
+                "count": 0.32,
+                "find": 0.61,
+                "track": 0.76,
+                "action": 0.1,
+                "filter": 0.43
+              },
+              "bootstrap_ci": {
+                "mean": 0.444,
+                "lo": 0.38800000000000007,
+                "hi": 0.502
+              },
+              "grouped_ci": {
+                "mean": 0.444,
+                "lo": 0.2982142857142857,
+                "hi": 0.5607142857142857
+              },
+              "mean_alpha": 0.6196825396825396,
+              "mean_struct_pool": 17.21,
+              "mean_sem_pool": 5.0,
+              "mean_universe": 21.51,
+              "mean_gallery_relevant_coverage": 0.7509462481962481
+            },
+            "comb_anz_cal": {
+              "macro_p5": 0.422,
+              "per_category_p5": {
+                "count": 0.32,
+                "find": 0.61,
+                "track": 0.67,
+                "action": 0.1,
+                "filter": 0.41
+              },
+              "bootstrap_ci": {
+                "mean": 0.42200000000000004,
+                "lo": 0.37200000000000005,
+                "hi": 0.47800000000000004
+              },
+              "grouped_ci": {
+                "mean": 0.42200000000000004,
+                "lo": 0.28750000000000003,
+                "hi": 0.5327102803738317
+              },
+              "mean_alpha": 0.6196825396825396,
+              "mean_struct_pool": 17.21,
+              "mean_sem_pool": 5.0,
+              "mean_universe": 21.51,
+              "mean_gallery_relevant_coverage": 0.7509462481962481
+            },
+            "comb_mnz_cal": {
+              "macro_p5": 0.422,
+              "per_category_p5": {
+                "count": 0.32,
+                "find": 0.61,
+                "track": 0.67,
+                "action": 0.1,
+                "filter": 0.41
+              },
+              "bootstrap_ci": {
+                "mean": 0.42200000000000004,
+                "lo": 0.37200000000000005,
+                "hi": 0.47800000000000004
+              },
+              "grouped_ci": {
+                "mean": 0.42200000000000004,
+                "lo": 0.28750000000000003,
+                "hi": 0.5327102803738317
+              },
+              "mean_alpha": 0.6196825396825396,
+              "mean_struct_pool": 17.21,
+              "mean_sem_pool": 5.0,
+              "mean_universe": 21.51,
+              "mean_gallery_relevant_coverage": 0.7509462481962481
+            }
+          },
+          "random_gallery_reference": {
+            "macro_p5": 0.15200000000000002,
+            "bootstrap_ci": {
+              "mean": 0.15200000000000002,
+              "lo": 0.10800000000000001,
+              "hi": 0.198
+            },
+            "note": "seeded uniform subsample of the shrunken gallery, ranked by the paper's prior blend"
+          },
+          "paired_delta_vs_prior_only_prod": {
+            "comb_sum_cal": {
+              "delta_macro_p5": -0.04199999999999998,
+              "lo": -0.06200000000000002,
+              "hi": -0.02399999999999998,
+              "p": 0.0
+            },
+            "comb_anz_cal": {
+              "delta_macro_p5": -0.06399999999999997,
+              "lo": -0.08999999999999997,
+              "hi": -0.040000000000000015,
+              "p": 0.0
+            },
+            "comb_mnz_cal": {
+              "delta_macro_p5": -0.06399999999999997,
+              "lo": -0.08999999999999997,
+              "hi": -0.040000000000000015,
+              "p": 0.0
+            }
+          }
+        },
+        {
+          "cell": "struct_half",
+          "struct_frac": 0.5,
+          "sem_frac": 1.0,
+          "struct_exponent": 1.0,
+          "systems": {
+            "prior_only_prod": {
+              "macro_p5": 0.466,
+              "per_category_p5": {
+                "count": 0.39,
+                "find": 0.71,
+                "track": 0.6900000000000001,
+                "action": 0.09,
+                "filter": 0.45
+              },
+              "bootstrap_ci": {
+                "mean": 0.466,
+                "lo": 0.406,
+                "hi": 0.53
+              },
+              "grouped_ci": {
+                "mean": 0.466,
+                "lo": 0.30000000000000004,
+                "hi": 0.6
+              },
+              "mean_alpha": 0.6041471799805134,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 48.66,
+              "mean_gallery_relevant_coverage": 0.8913647186147184
+            },
+            "comb_sum_cal": {
+              "macro_p5": 0.248,
+              "per_category_p5": {
+                "count": 0.26,
+                "find": 0.24,
+                "track": 0.36,
+                "action": 0.09,
+                "filter": 0.29
+              },
+              "bootstrap_ci": {
+                "mean": 0.248,
+                "lo": 0.21,
+                "hi": 0.28600000000000003
+              },
+              "grouped_ci": {
+                "mean": 0.248,
+                "lo": 0.17500000000000002,
+                "hi": 0.3170212765957447
+              },
+              "mean_alpha": 0.6041471799805134,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 48.66,
+              "mean_gallery_relevant_coverage": 0.8913647186147184
+            },
+            "comb_anz_cal": {
+              "macro_p5": 0.186,
+              "per_category_p5": {
+                "count": 0.25,
+                "find": 0.22999999999999998,
+                "track": 0.14,
+                "action": 0.07,
+                "filter": 0.24
+              },
+              "bootstrap_ci": {
+                "mean": 0.18600000000000003,
+                "lo": 0.15,
+                "hi": 0.22400000000000003
+              },
+              "grouped_ci": {
+                "mean": 0.18600000000000003,
+                "lo": 0.12307692307692308,
+                "hi": 0.25142857142857145
+              },
+              "mean_alpha": 0.6041471799805134,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 48.66,
+              "mean_gallery_relevant_coverage": 0.8913647186147184
+            },
+            "comb_mnz_cal": {
+              "macro_p5": 0.186,
+              "per_category_p5": {
+                "count": 0.25,
+                "find": 0.22999999999999998,
+                "track": 0.14,
+                "action": 0.07,
+                "filter": 0.24
+              },
+              "bootstrap_ci": {
+                "mean": 0.18600000000000003,
+                "lo": 0.15,
+                "hi": 0.22400000000000003
+              },
+              "grouped_ci": {
+                "mean": 0.18600000000000003,
+                "lo": 0.12307692307692308,
+                "hi": 0.25142857142857145
+              },
+              "mean_alpha": 0.6041471799805134,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 48.66,
+              "mean_gallery_relevant_coverage": 0.8913647186147184
+            }
+          },
+          "random_gallery_reference": {
+            "macro_p5": 0.262,
+            "bootstrap_ci": {
+              "mean": 0.262,
+              "lo": 0.20400000000000001,
+              "hi": 0.324
+            },
+            "note": "seeded uniform subsample of the shrunken gallery, ranked by the paper's prior blend"
+          },
+          "paired_delta_vs_prior_only_prod": {
+            "comb_sum_cal": {
+              "delta_macro_p5": -0.21799999999999997,
+              "lo": -0.25800000000000006,
+              "hi": -0.18,
+              "p": 0.0
+            },
+            "comb_anz_cal": {
+              "delta_macro_p5": -0.27999999999999997,
+              "lo": -0.32200000000000006,
+              "hi": -0.23999999999999994,
+              "p": 0.0
+            },
+            "comb_mnz_cal": {
+              "delta_macro_p5": -0.27999999999999997,
+              "lo": -0.32200000000000006,
+              "hi": -0.23999999999999994,
+              "p": 0.0
+            }
+          }
+        },
+        {
+          "cell": "struct_quarter",
+          "struct_frac": 0.25,
+          "sem_frac": 1.0,
+          "struct_exponent": 1.0,
+          "systems": {
+            "prior_only_prod": {
+              "macro_p5": 0.418,
+              "per_category_p5": {
+                "count": 0.36,
+                "find": 0.49000000000000005,
+                "track": 0.72,
+                "action": 0.09,
+                "filter": 0.43
+              },
+              "bootstrap_ci": {
+                "mean": 0.41800000000000004,
+                "lo": 0.36200000000000004,
+                "hi": 0.47600000000000003
+              },
+              "grouped_ci": {
+                "mean": 0.41800000000000004,
+                "lo": 0.2753246753246753,
+                "hi": 0.5386138613861386
+              },
+              "mean_alpha": 0.5889353804763011,
+              "mean_struct_pool": 17.21,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 34.33,
+              "mean_gallery_relevant_coverage": 0.7811926406926405
+            },
+            "comb_sum_cal": {
+              "macro_p5": 0.24,
+              "per_category_p5": {
+                "count": 0.18,
+                "find": 0.18,
+                "track": 0.48,
+                "action": 0.07,
+                "filter": 0.29
+              },
+              "bootstrap_ci": {
+                "mean": 0.24,
+                "lo": 0.196,
+                "hi": 0.28800000000000003
+              },
+              "grouped_ci": {
+                "mean": 0.24,
+                "lo": 0.15058823529411766,
+                "hi": 0.34285714285714286
+              },
+              "mean_alpha": 0.5889353804763011,
+              "mean_struct_pool": 17.21,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 34.33,
+              "mean_gallery_relevant_coverage": 0.7811926406926405
+            },
+            "comb_anz_cal": {
+              "macro_p5": 0.174,
+              "per_category_p5": {
+                "count": 0.18,
+                "find": 0.16999999999999998,
+                "track": 0.22000000000000003,
+                "action": 0.06000000000000001,
+                "filter": 0.24
+              },
+              "bootstrap_ci": {
+                "mean": 0.17400000000000002,
+                "lo": 0.14,
+                "hi": 0.212
+              },
+              "grouped_ci": {
+                "mean": 0.17400000000000002,
+                "lo": 0.10434782608695654,
+                "hi": 0.25063291139240507
+              },
+              "mean_alpha": 0.5889353804763011,
+              "mean_struct_pool": 17.21,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 34.33,
+              "mean_gallery_relevant_coverage": 0.7811926406926405
+            },
+            "comb_mnz_cal": {
+              "macro_p5": 0.174,
+              "per_category_p5": {
+                "count": 0.18,
+                "find": 0.16999999999999998,
+                "track": 0.22000000000000003,
+                "action": 0.06000000000000001,
+                "filter": 0.24
+              },
+              "bootstrap_ci": {
+                "mean": 0.17400000000000002,
+                "lo": 0.14,
+                "hi": 0.212
+              },
+              "grouped_ci": {
+                "mean": 0.17400000000000002,
+                "lo": 0.10434782608695654,
+                "hi": 0.25063291139240507
+              },
+              "mean_alpha": 0.5889353804763011,
+              "mean_struct_pool": 17.21,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 34.33,
+              "mean_gallery_relevant_coverage": 0.7811926406926405
+            }
+          },
+          "random_gallery_reference": {
+            "macro_p5": 0.23199999999999998,
+            "bootstrap_ci": {
+              "mean": 0.23199999999999998,
+              "lo": 0.182,
+              "hi": 0.28400000000000003
+            },
+            "note": "seeded uniform subsample of the shrunken gallery, ranked by the paper's prior blend"
+          },
+          "paired_delta_vs_prior_only_prod": {
+            "comb_sum_cal": {
+              "delta_macro_p5": -0.178,
+              "lo": -0.21800000000000005,
+              "hi": -0.13999999999999999,
+              "p": 0.0
+            },
+            "comb_anz_cal": {
+              "delta_macro_p5": -0.244,
+              "lo": -0.286,
+              "hi": -0.20400000000000004,
+              "p": 0.0
+            },
+            "comb_mnz_cal": {
+              "delta_macro_p5": -0.244,
+              "lo": -0.286,
+              "hi": -0.20400000000000004,
+              "p": 0.0
+            }
+          }
+        },
+        {
+          "cell": "sem_half",
+          "struct_frac": 1.0,
+          "sem_frac": 0.5,
+          "struct_exponent": 1.0,
+          "systems": {
+            "prior_only_prod": {
+              "macro_p5": 0.5319999999999999,
+              "per_category_p5": {
+                "count": 0.39,
+                "find": 0.9199999999999999,
+                "track": 0.8099999999999999,
+                "action": 0.09,
+                "filter": 0.45
+              },
+              "bootstrap_ci": {
+                "mean": 0.532,
+                "lo": 0.46,
+                "hi": 0.608
+              },
+              "grouped_ci": {
+                "mean": 0.532,
+                "lo": 0.3389830508474576,
+                "hi": 0.6865979381443298
+              },
+              "mean_alpha": 0.6324891965467139,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 72.03,
+              "mean_gallery_relevant_coverage": 1.0
+            },
+            "comb_sum_cal": {
+              "macro_p5": 0.312,
+              "per_category_p5": {
+                "count": 0.37,
+                "find": 0.51,
+                "track": 0.34,
+                "action": 0.09,
+                "filter": 0.25
+              },
+              "bootstrap_ci": {
+                "mean": 0.312,
+                "lo": 0.266,
+                "hi": 0.358
+              },
+              "grouped_ci": {
+                "mean": 0.312,
+                "lo": 0.2148936170212766,
+                "hi": 0.39166666666666666
+              },
+              "mean_alpha": 0.6324891965467139,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 72.03,
+              "mean_gallery_relevant_coverage": 1.0
+            },
+            "comb_anz_cal": {
+              "macro_p5": 0.23399999999999999,
+              "per_category_p5": {
+                "count": 0.32999999999999996,
+                "find": 0.47000000000000003,
+                "track": 0.08,
+                "action": 0.09,
+                "filter": 0.2
+              },
+              "bootstrap_ci": {
+                "mean": 0.234,
+                "lo": 0.19,
+                "hi": 0.28
+              },
+              "grouped_ci": {
+                "mean": 0.234,
+                "lo": 0.16,
+                "hi": 0.2921875
+              },
+              "mean_alpha": 0.6324891965467139,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 72.03,
+              "mean_gallery_relevant_coverage": 1.0
+            },
+            "comb_mnz_cal": {
+              "macro_p5": 0.23399999999999999,
+              "per_category_p5": {
+                "count": 0.32999999999999996,
+                "find": 0.47000000000000003,
+                "track": 0.08,
+                "action": 0.09,
+                "filter": 0.2
+              },
+              "bootstrap_ci": {
+                "mean": 0.234,
+                "lo": 0.19,
+                "hi": 0.28
+              },
+              "grouped_ci": {
+                "mean": 0.234,
+                "lo": 0.16,
+                "hi": 0.2921875
+              },
+              "mean_alpha": 0.6324891965467139,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 72.03,
+              "mean_gallery_relevant_coverage": 1.0
+            }
+          },
+          "random_gallery_reference": {
+            "macro_p5": 0.354,
+            "bootstrap_ci": {
+              "mean": 0.354,
+              "lo": 0.28800000000000003,
+              "hi": 0.42200000000000004
+            },
+            "note": "seeded uniform subsample of the shrunken gallery, ranked by the paper's prior blend"
+          },
+          "paired_delta_vs_prior_only_prod": {
+            "comb_sum_cal": {
+              "delta_macro_p5": -0.22000000000000003,
+              "lo": -0.26199999999999996,
+              "hi": -0.18199999999999994,
+              "p": 0.0
+            },
+            "comb_anz_cal": {
+              "delta_macro_p5": -0.298,
+              "lo": -0.33999999999999997,
+              "hi": -0.258,
+              "p": 0.0
+            },
+            "comb_mnz_cal": {
+              "delta_macro_p5": -0.298,
+              "lo": -0.33999999999999997,
+              "hi": -0.258,
+              "p": 0.0
+            }
+          }
+        },
+        {
+          "cell": "warp_struct",
+          "struct_frac": 1.0,
+          "sem_frac": 1.0,
+          "struct_exponent": 2.0,
+          "systems": {
+            "prior_only_prod": {
+              "macro_p5": 0.466,
+              "per_category_p5": {
+                "count": 0.39,
+                "find": 0.6,
+                "track": 0.8,
+                "action": 0.09,
+                "filter": 0.45
+              },
+              "bootstrap_ci": {
+                "mean": 0.466,
+                "lo": 0.4,
+                "hi": 0.5379999999999999
+              },
+              "grouped_ci": {
+                "mean": 0.466,
+                "lo": 0.2989010989010989,
+                "hi": 0.612
+              },
+              "mean_alpha": 0.6188198005775132,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 76.45,
+              "mean_gallery_relevant_coverage": 1.0
+            },
+            "comb_sum_cal": {
+              "macro_p5": 0.254,
+              "per_category_p5": {
+                "count": 0.27,
+                "find": 0.2,
+                "track": 0.44000000000000006,
+                "action": 0.09,
+                "filter": 0.27
+              },
+              "bootstrap_ci": {
+                "mean": 0.254,
+                "lo": 0.21400000000000002,
+                "hi": 0.298
+              },
+              "grouped_ci": {
+                "mean": 0.254,
+                "lo": 0.17565217391304347,
+                "hi": 0.3368421052631579
+              },
+              "mean_alpha": 0.6188198005775132,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 76.45,
+              "mean_gallery_relevant_coverage": 1.0
+            },
+            "comb_anz_cal": {
+              "macro_p5": 0.186,
+              "per_category_p5": {
+                "count": 0.24000000000000005,
+                "find": 0.26,
+                "track": 0.14,
+                "action": 0.09,
+                "filter": 0.2
+              },
+              "bootstrap_ci": {
+                "mean": 0.18600000000000003,
+                "lo": 0.14600000000000002,
+                "hi": 0.23
+              },
+              "grouped_ci": {
+                "mean": 0.18600000000000003,
+                "lo": 0.11811023622047244,
+                "hi": 0.26382978723404255
+              },
+              "mean_alpha": 0.6188198005775132,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 76.45,
+              "mean_gallery_relevant_coverage": 1.0
+            },
+            "comb_mnz_cal": {
+              "macro_p5": 0.186,
+              "per_category_p5": {
+                "count": 0.24000000000000005,
+                "find": 0.26,
+                "track": 0.14,
+                "action": 0.09,
+                "filter": 0.2
+              },
+              "bootstrap_ci": {
+                "mean": 0.18600000000000003,
+                "lo": 0.14600000000000002,
+                "hi": 0.23
+              },
+              "grouped_ci": {
+                "mean": 0.18600000000000003,
+                "lo": 0.11811023622047244,
+                "hi": 0.26382978723404255
+              },
+              "mean_alpha": 0.6188198005775132,
+              "mean_struct_pool": 67.63,
+              "mean_sem_pool": 20.0,
+              "mean_universe": 76.45,
+              "mean_gallery_relevant_coverage": 1.0
+            }
+          },
+          "random_gallery_reference": {
+            "macro_p5": 0.35,
+            "bootstrap_ci": {
+              "mean": 0.35,
+              "lo": 0.28,
+              "hi": 0.42
+            },
+            "note": "seeded uniform subsample of the shrunken gallery, ranked by the paper's prior blend"
+          },
+          "paired_delta_vs_prior_only_prod": {
+            "comb_sum_cal": {
+              "delta_macro_p5": -0.21199999999999997,
+              "lo": -0.25399999999999995,
+              "hi": -0.168,
+              "p": 0.0
+            },
+            "comb_anz_cal": {
+              "delta_macro_p5": -0.27999999999999997,
+              "lo": -0.32799999999999996,
+              "hi": -0.23200000000000004,
+              "p": 0.0
+            },
+            "comb_mnz_cal": {
+              "delta_macro_p5": -0.27999999999999997,
+              "lo": -0.32799999999999996,
+              "hi": -0.23200000000000004,
+              "p": 0.0
+            }
+          }
+        },
+        {
+          "cell": "warp_struct_half_both",
+          "struct_frac": 0.5,
+          "sem_frac": 0.5,
+          "struct_exponent": 2.0,
+          "systems": {
+            "prior_only_prod": {
+              "macro_p5": 0.41200000000000003,
+              "per_category_p5": {
+                "count": 0.39,
+                "find": 0.29,
+                "track": 0.8099999999999999,
+                "action": 0.09,
+                "filter": 0.48
+              },
+              "bootstrap_ci": {
+                "mean": 0.41200000000000003,
+                "lo": 0.348,
+                "hi": 0.48200000000000004
+              },
+              "grouped_ci": {
+                "mean": 0.41200000000000003,
+                "lo": 0.2680851063829787,
+                "hi": 0.5367088607594936
+              },
+              "mean_alpha": 0.6193651779960809,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 41.0,
+              "mean_gallery_relevant_coverage": 0.8709989177489176
+            },
+            "comb_sum_cal": {
+              "macro_p5": 0.292,
+              "per_category_p5": {
+                "count": 0.26,
+                "find": 0.12,
+                "track": 0.65,
+                "action": 0.09,
+                "filter": 0.33999999999999997
+              },
+              "bootstrap_ci": {
+                "mean": 0.292,
+                "lo": 0.24400000000000002,
+                "hi": 0.344
+              },
+              "grouped_ci": {
+                "mean": 0.292,
+                "lo": 0.20674157303370788,
+                "hi": 0.3652173913043478
+              },
+              "mean_alpha": 0.6193651779960809,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 41.0,
+              "mean_gallery_relevant_coverage": 0.8709989177489176
+            },
+            "comb_anz_cal": {
+              "macro_p5": 0.184,
+              "per_category_p5": {
+                "count": 0.25,
+                "find": 0.12,
+                "track": 0.23000000000000004,
+                "action": 0.08,
+                "filter": 0.24000000000000005
+              },
+              "bootstrap_ci": {
+                "mean": 0.18400000000000002,
+                "lo": 0.15200000000000002,
+                "hi": 0.21600000000000003
+              },
+              "grouped_ci": {
+                "mean": 0.18400000000000002,
+                "lo": 0.13653846153846155,
+                "hi": 0.22912621359223304
+              },
+              "mean_alpha": 0.6193651779960809,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 41.0,
+              "mean_gallery_relevant_coverage": 0.8709989177489176
+            },
+            "comb_mnz_cal": {
+              "macro_p5": 0.184,
+              "per_category_p5": {
+                "count": 0.25,
+                "find": 0.12,
+                "track": 0.23000000000000004,
+                "action": 0.08,
+                "filter": 0.24000000000000005
+              },
+              "bootstrap_ci": {
+                "mean": 0.18400000000000002,
+                "lo": 0.15200000000000002,
+                "hi": 0.21600000000000003
+              },
+              "grouped_ci": {
+                "mean": 0.18400000000000002,
+                "lo": 0.13653846153846155,
+                "hi": 0.22912621359223304
+              },
+              "mean_alpha": 0.6193651779960809,
+              "mean_struct_pool": 34.05,
+              "mean_sem_pool": 10.0,
+              "mean_universe": 41.0,
+              "mean_gallery_relevant_coverage": 0.8709989177489176
+            }
+          },
+          "random_gallery_reference": {
+            "macro_p5": 0.234,
+            "bootstrap_ci": {
+              "mean": 0.234,
+              "lo": 0.17800000000000002,
+              "hi": 0.29400000000000004
+            },
+            "note": "seeded uniform subsample of the shrunken gallery, ranked by the paper's prior blend"
+          },
+          "paired_delta_vs_prior_only_prod": {
+            "comb_sum_cal": {
+              "delta_macro_p5": -0.12,
+              "lo": -0.16199999999999992,
+              "hi": -0.07999999999999999,
+              "p": 0.0
+            },
+            "comb_anz_cal": {
+              "delta_macro_p5": -0.22800000000000004,
+              "lo": -0.2779999999999999,
+              "hi": -0.178,
+              "p": 0.0
+            },
+            "comb_mnz_cal": {
+              "delta_macro_p5": -0.22800000000000004,
+              "lo": -0.2779999999999999,
+              "hi": -0.178,
+              "p": 0.0
+            }
+          }
+        }
+      ]
+    }
+  },
+  "empty_branch_sanity": {
+    "qc_count_01": {
+      "category": "count",
+      "cases": {
+        "empty_structured": {
+          "alpha": 1.0,
+          "systems": {
+            "prior_only_prod": {
+              "all_finite": true,
+              "max_fused_score": 0.0,
+              "top1_from_surviving_branch": false,
+              "fused_is_degenerate": true
+            },
+            "comb_sum_cal": {
+              "all_finite": true,
+              "max_fused_score": 0.5,
+              "top1_from_surviving_branch": true,
+              "fused_is_degenerate": false
+            },
+            "comb_anz_cal": {
+              "all_finite": true,
+              "max_fused_score": 0.5,
+              "top1_from_surviving_branch": true,
+              "fused_is_degenerate": false
+            },
+            "comb_mnz_cal": {
+              "all_finite": true,
+              "max_fused_score": 0.5,
+              "top1_from_surviving_branch": true,
+              "fused_is_degenerate": false
+            }
+          }
+        },
+        "empty_semantic": {
+          "alpha": 1.0,
+          "systems": {
+            "prior_only_prod": {
+              "all_finite": true,
+              "max_fused_score": 1.0,
+              "top1_from_surviving_branch": true,
+              "fused_is_degenerate": false
+            },
+            "comb_sum_cal": {
+              "all_finite": true,
+              "max_fused_score": 0.5,
+              "top1_from_surviving_branch": true,
+              "fused_is_degenerate": false
+            },
+            "comb_anz_cal": {
+              "all_finite": true,
+              "max_fused_score": 0.5,
+              "top1_from_surviving_branch": true,
+              "fused_is_degenerate": false
+            },
+            "comb_mnz_cal": {
+              "all_finite": true,
+              "max_fused_score": 0.5,
+              "top1_from_surviving_branch": true,
+              "fused_is_degenerate": false
+            }
+          }
+        }
+      },
+      "note": "the paper's alpha keeps the empty branch's weight, so the surviving branch is multiplied by (1 - alpha) (by 0 when alpha = 1): its scores are deflated and are not comparable across queries.  The calibrated rules keep the surviving branch at full scale."
+    },
+    "q_find_01": {
+      "category": "find",
+      "cases": {
+        "empty_structured": {
+          "alpha": 0.5700000000000001,
+          "systems": {
+            "prior_only_prod": {
+              "all_finite": true,
+              "max_fused_score": 0.42999999999999994,
+              "top1_from_surviving_branch": true,
+              "fused_is_degenerate": false
+            },
+            "comb_sum_cal": {
+              "all_finite": true,
+              "max_fused_score": 0.5,
+              "top1_from_surviving_branch": true,
+              "fused_is_degenerate": false
+            },
+            "comb_anz_cal": {
+              "all_finite": true,
+              "max_fused_score": 0.5,
+              "top1_from_surviving_branch": true,
+              "fused_is_degenerate": false
+            },
+            "comb_mnz_cal": {
+              "all_finite": true,
+              "max_fused_score": 0.5,
+              "top1_from_surviving_branch": true,
+              "fused_is_degenerate": false
+            }
+          }
+        },
+        "empty_semantic": {
+          "alpha": 0.77,
+          "systems": {
+            "prior_only_prod": {
+              "all_finite": true,
+              "max_fused_score": 0.77,
+              "top1_from_surviving_branch": true,
+              "fused_is_degenerate": false
+            },
+            "comb_sum_cal": {
+              "all_finite": true,
+              "max_fused_score": 0.5,
+              "top1_from_surviving_branch": true,
+              "fused_is_degenerate": false
+            },
+            "comb_anz_cal": {
+              "all_finite": true,
+              "max_fused_score": 0.5,
+              "top1_from_surviving_branch": true,
+              "fused_is_degenerate": false
+            },
+            "comb_mnz_cal": {
+              "all_finite": true,
+              "max_fused_score": 0.5,
+              "top1_from_surviving_branch": true,
+              "fused_is_degenerate": false
+            }
+          }
+        }
+      },
+      "note": "the paper's alpha keeps the empty branch's weight, so the surviving branch is multiplied by (1 - alpha) (by 0 when alpha = 1): its scores are deflated and are not comparable across queries.  The calibrated rules keep the surviving branch at full scale."
+    }
+  },
+  "reproduction_check": {
+    "minmax/prior_only/test": {
+      "published": 0.538,
+      "reproduced": 0.538,
+      "abs_diff": 0.0,
+      "ok": true
+    },
+    "minmax/fixed_0.5/test": {
+      "published": 0.534,
+      "reproduced": 0.534,
+      "abs_diff": 0.0,
+      "ok": true
+    },
+    "zscore/prior_only/test": {
+      "published": 0.524,
+      "reproduced": 0.524,
+      "abs_diff": 0.0,
+      "ok": true
+    },
+    "zscore/fixed_0.5/test": {
+      "published": 0.45,
+      "reproduced": 0.45,
+      "abs_diff": 0.0,
+      "ok": true
+    }
+  },
+  "global_holm_family": {
+    "members": [
+      "minmax/fixed_0.5_vs_prior_only",
+      "minmax/comb_sum_cal_vs_prior_only_prod",
+      "minmax/comb_anz_cal_vs_prior_only_prod",
+      "minmax/comb_mnz_cal_vs_prior_only_prod",
+      "zscore/fixed_0.5_vs_prior_only",
+      "zscore/comb_sum_cal_vs_prior_only_prod",
+      "zscore/comb_anz_cal_vs_prior_only_prod",
+      "zscore/comb_mnz_cal_vs_prior_only_prod"
+    ],
+    "raw_p": {
+      "minmax/fixed_0.5_vs_prior_only": 0.2733333333333333,
+      "minmax/comb_sum_cal_vs_prior_only_prod": 0.0006666666666666666,
+      "minmax/comb_anz_cal_vs_prior_only_prod": 0.0,
+      "minmax/comb_mnz_cal_vs_prior_only_prod": 0.0,
+      "zscore/fixed_0.5_vs_prior_only": 0.0,
+      "zscore/comb_sum_cal_vs_prior_only_prod": 0.0,
+      "zscore/comb_anz_cal_vs_prior_only_prod": 0.0,
+      "zscore/comb_mnz_cal_vs_prior_only_prod": 0.0
+    },
+    "holm_adjusted_p": {
+      "minmax/comb_anz_cal_vs_prior_only_prod": 0.0,
+      "minmax/comb_mnz_cal_vs_prior_only_prod": 0.0,
+      "zscore/fixed_0.5_vs_prior_only": 0.0,
+      "zscore/comb_sum_cal_vs_prior_only_prod": 0.0,
+      "zscore/comb_anz_cal_vs_prior_only_prod": 0.0,
+      "zscore/comb_mnz_cal_vs_prior_only_prod": 0.0,
+      "minmax/comb_sum_cal_vs_prior_only_prod": 0.0013333333333333333,
+      "minmax/fixed_0.5_vs_prior_only": 0.2733333333333333
+    },
+    "holm_reject": {
+      "minmax/comb_anz_cal_vs_prior_only_prod": true,
+      "minmax/comb_mnz_cal_vs_prior_only_prod": true,
+      "zscore/fixed_0.5_vs_prior_only": true,
+      "zscore/comb_sum_cal_vs_prior_only_prod": true,
+      "zscore/comb_anz_cal_vs_prior_only_prod": true,
+      "zscore/comb_mnz_cal_vs_prior_only_prod": true,
+      "minmax/comb_sum_cal_vs_prior_only_prod": true,
+      "minmax/fixed_0.5_vs_prior_only": false
+    }
+  },
+  "verdict": {
+    "calibrated_beats_prior": false,
+    "winning_comparison": null,
+    "robustness_direction": "ROBUST (the sign and the size of the calibrated-vs-prior difference are preserved under every candidate-set-size and score-distribution perturbation)",
+    "probe_drops": {
+      "prior_only_prod": {
+        "full": 0.538,
+        "worst_cell": "struct_quarter",
+        "worst": 0.33199999999999996,
+        "abs_drop": 0.20600000000000007,
+        "worst_ci": {
+          "mean": 0.332,
+          "lo": 0.27,
+          "hi": 0.402
+        }
+      },
+      "comb_sum_cal": {
+        "full": 0.518,
+        "worst_cell": "struct_quarter",
+        "worst": 0.306,
+        "abs_drop": 0.21200000000000002,
+        "worst_ci": {
+          "mean": 0.306,
+          "lo": 0.24600000000000002,
+          "hi": 0.374
+        }
+      },
+      "comb_anz_cal": {
+        "full": 0.372,
+        "worst_cell": "struct_quarter",
+        "worst": 0.272,
+        "abs_drop": 0.09999999999999998,
+        "worst_ci": {
+          "mean": 0.272,
+          "lo": 0.222,
+          "hi": 0.32800000000000007
+        }
+      },
+      "comb_mnz_cal": {
+        "full": 0.502,
+        "worst_cell": "struct_quarter",
+        "worst": 0.292,
+        "abs_drop": 0.21000000000000002,
+        "worst_ci": {
+          "mean": 0.292,
+          "lo": 0.23600000000000002,
+          "hi": 0.35800000000000004
+        }
+      }
+    },
+    "probe_delta_stability": {
+      "comb_sum_cal": {
+        "deltas_by_cell": {
+          "full": -0.020000000000000028,
+          "half_both": -0.01000000000000002,
+          "quarter_both": -0.02200000000000003,
+          "struct_half": -0.012000000000000021,
+          "struct_quarter": -0.026000000000000023,
+          "sem_half": -0.016000000000000025,
+          "warp_struct": -0.018000000000000026,
+          "warp_struct_half_both": -0.008000000000000018
+        },
+        "min": -0.026000000000000023,
+        "max": -0.008000000000000018,
+        "spread": 0.018000000000000006,
+        "sign_stable": true
+      },
+      "comb_anz_cal": {
+        "deltas_by_cell": {
+          "full": -0.16600000000000004,
+          "half_both": -0.05200000000000003,
+          "quarter_both": -0.028000000000000004,
+          "struct_half": -0.07000000000000005,
+          "struct_quarter": -0.06000000000000004,
+          "sem_half": -0.12200000000000004,
+          "warp_struct": -0.16600000000000004,
+          "warp_struct_half_both": -0.05400000000000003
+        },
+        "min": -0.16600000000000004,
+        "max": -0.028000000000000004,
+        "spread": 0.13800000000000004,
+        "sign_stable": true
+      },
+      "comb_mnz_cal": {
+        "deltas_by_cell": {
+          "full": -0.036000000000000046,
+          "half_both": -0.018000000000000026,
+          "quarter_both": -0.02400000000000002,
+          "struct_half": -0.026000000000000034,
+          "struct_quarter": -0.04000000000000002,
+          "sem_half": -0.026000000000000034,
+          "warp_struct": -0.036000000000000046,
+          "warp_struct_half_both": -0.01000000000000002
+        },
+        "min": -0.04000000000000002,
+        "max": -0.01000000000000002,
+        "spread": 0.030000000000000002,
+        "sign_stable": true
+      }
+    },
+    "verdict": "ROBUST",
+    "notes": {
+      "winner": "no calibrated baseline is Holm-significant against the prior-only baseline in either arm",
+      "probe_drop": "absolute macro P@5 drop from the full gallery to the worst candidate-set-size cell: prior_only_prod -0.2060, the three calibrated baselines -0.1740 on average (the drop is driven by the gallery losing relevant candidates, and is shared by all methods)",
+      "probe_stability": "comb_sum_cal: delta range [-0.0260, -0.0080], sign stable=True; comb_anz_cal: delta range [-0.1660, -0.0280], sign stable=True; comb_mnz_cal: delta range [-0.0400, -0.0100], sign stable=True",
+      "distribution_shift": "score-distribution shift (calibrated structured branch x^2): prior_only_prod@warp_struct=0.5380 (alpha 0.619), comb_sum_cal@warp_struct=0.5200 (alpha 0.619), comb_anz_cal@warp_struct=0.3720 (alpha 0.619), comb_mnz_cal@warp_struct=0.5020 (alpha 0.619), prior_only_prod@warp_struct_half_both=0.4040 (alpha 0.619), comb_sum_cal@warp_struct_half_both=0.3960 (alpha 0.619), comb_anz_cal@warp_struct_half_both=0.3500 (alpha 0.619), comb_mnz_cal@warp_struct_half_both=0.3940 (alpha 0.619)",
+      "empty_branch": "with an empty branch the source-count-ratio prior collapses to an all-zero fused score (degenerate ranking) in 1 case(s): prior_only_prod@qc_count_01/empty_structured; the calibrated rules keep the surviving branch at full scale",
+      "probe_detail": "prior_only_prod: 0.5380 -> 0.3320 (struct_quarter); comb_sum_cal: 0.5180 -> 0.3060 (struct_quarter); comb_anz_cal: 0.3720 -> 0.2720 (struct_quarter); comb_mnz_cal: 0.5020 -> 0.2920 (struct_quarter)",
+      "comparison_outcome": "no calibrated baseline beats the source-count-ratio prior-only baseline Holm-significantly on test; the simple calibrated fusion is at best a tie under the released control protocol"
+    }
+  },
+  "commands": [
+    "python backend/scripts/eval_calib_base.py --stage tune",
+    "python backend/scripts/eval_calib_base.py --stage test"
+  ],
+  "limitations": [
+    "Single camera (camera_0) and a 2-hour released window; the numbers are not the paper's full 4-camera / 312k-descriptor deployment results.",
+    "Labels are derived from released VLM captions, detector metadata and snapshots, not human annotations; no inter-annotator agreement is available.",
+    "The control harness scores every clip with the metadata structured branch (it is a dense scoring function, not a real structured search); the production candidate model therefore approximates the structured shortlist with the control's own n_structured rule (score > 0.05).",
+    "CombANZ/CombMNZ are applied to the two-branch case only; with a dense branch pair the count factor is nearly constant, so they can coincide with CombSUM -- that is reported, not hidden.",
+    "The probe is descriptive (stability under perturbation), not a hypothesis test; the CIs are bootstrap intervals over queries.",
+    "The alpha prior, the benchmark, the metrics and the statistical protocol are imported unchanged from the released control driver."
+  ]
+}
