@@ -35,7 +35,7 @@ Every value below is measured from operations executed by this script. No lognor
 | Person search_meta + nearest-clip mapping | 12 | 16.58 | 17.89 | 19.55 | 12.31 | 19.68 |
 | Person merge_results (real candidates) | 12 | 0.59 | 0.60 | 0.82 | 0.32 | 0.94 |
 
-Percentiles use NumPy linear interpolation over the measured samples. Scene FAISS is an exact `IndexFlatIP` over 242 vectors; person FAISS over 1,778 descriptors. Text-only person queries use zero visual + MiniLM text, matching Algorithm 2.
+Percentiles use NumPy linear interpolation over the measured samples. Scene FAISS is an exact `IndexFlatIP` over 242 vectors; person FAISS over 1,778 descriptors. Text-only person queries use zero visual + MiniLM text, matching the paper's text-only person branch.
 
 ## End-to-end component composition
 

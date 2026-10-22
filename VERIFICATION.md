@@ -60,29 +60,30 @@ Status of every item after the revision is recorded in the last column.
 | Item | Status |
 |---|---|
 | `pdflatex` + `bibtex` complete with no undefined references/citations | ✅ |
-| PDF is at most 8 pages (6 + 2 overlength) | ✅ 8 pages |
+| PDF is at most 6 pages (the conference's maximum, so no overlength charge) | ✅ 6 pages |
 | No overfull hbox | ✅ none remaining (the 35.5 pt box and the 3.1 pt author-block boxes are gone) |
 | Tables/figures fit the column width; no missing figure files | ✅ |
-| `INDICON2026Conference.pdf` regenerated from the final tex | ✅ |
+| Floats and equations all numbered and referenced in the text | ✅ 3 tables (`tab:alpha_baseline`, `tab:fusion_ablation`, `tab:alpha_baseline_ci`), 6 numbered equations, 1 `Observation`; the off-the-shelf detection-and-indexing algorithm, the TikZ dataflow figure and 6 supporting tables were folded into prose to reach the 6-page limit, and every `\ref` was retargeted |
+| No measured value lost in the 6-page reduction | ✅ a distinct-value diff of the 8-page and 6-page sources (excluding the removed floats) finds **no** numeric value that disappeared; only duplicate occurrences of the same value were dropped, and every caveat survives at least once |
 
 ## INDICON 2026 template conformance
 
 | Item | Status |
 |---|---|
 | Class file | ✅ `IEEEtran` V1.8b — the kit's `IEEEtran.cls` is byte-identical (SHA256 `DA751920…`) to the one used for the build |
-| Preamble | ✅ template preamble kept verbatim (`\documentclass[conference]{IEEEtran}`, `\IEEEoverridecommandlockouts`, `cite`, `amsmath`, `algorithmic`, `graphicx`, `textcomp`, `xcolor`, `fancyhdr`, `hyperref`, `\def\BibTeX{…}`) plus the packages the paper needs (`booktabs`, `multirow`, `array`, `makecell`, `pifont`, `amsthm`, `float`, `tikz`) |
+| Preamble | ✅ template preamble kept verbatim (`\documentclass[conference]{IEEEtran}`, `\IEEEoverridecommandlockouts`, `cite`, `amsmath`, `algorithmic`, `graphicx`, `textcomp`, `xcolor`, `fancyhdr`, `hyperref`, `\def\BibTeX{…}`) plus the packages the paper still needs (`booktabs`, `makecell`, `amsthm`); the `multirow`, `array`, `pifont`, `float` and `tikz` packages were dropped because the floats they served were folded into prose for the 6-page limit |
 | First-page header/footer | ✅ identical to the kit: `23rd Edition of IEEE India Council International Conference (INDICON 2026)`, `979-8-3195-2581-9/26/$31.00 ©2026 IEEE`, footer `INDICON 2026`, `\thispagestyle{firstpage}` |
 | Author block | ✅ per-author `\IEEEauthorblockN` + `\IEEEauthorblockA` with `\and` separators, one affiliation per author, per-author e-mail, corresponding author marked `\textsuperscript{*}` |
 | Keywords | ✅ `IEEEkeywords` environment, 6 index terms, all inside the first column |
 | Bibliography | ✅ `\bibliographystyle{IEEEtran}` + `\bibliography{References}`, 15 entries, all cited |
-| No external assets | ✅ the dataflow figure is an inline TikZ picture, so the source bundle is self-contained |
+| No external assets | ✅ the source bundle is self-contained (the dataflow figure was folded into prose for the 6-page limit, so the paper now has no external or TikZ assets) |
 
 ## Submission package
 
 | Artefact | Status |
 |---|---|
-| `INDICON2026_submit/INDICON2026_850.pdf` | ✅ final camera-ready PDF, 8 pages |
-| `INDICON2026_submit/INDICON2026_850_source.zip` | ✅ `INDICON2026Conference.tex` + `References.bib` + the kit's `IEEEtran.cls` + a compile README; **verified to compile standalone in a clean directory to the identical 8-page PDF** |
+| `INDICON2026_submit/INDICON2026_850.pdf` | ✅ final camera-ready PDF, 6 pages |
+| `INDICON2026_submit/INDICON2026_850_source.zip` | ✅ `INDICON2026Conference.tex` + `References.bib` + the kit's `IEEEtran.cls` + a compile README; **verified to compile standalone in a clean directory to the identical 6-page PDF** |
 | `INDICON2026_submit.zip` | ✅ folder package with the PDF, the source bundle, the `.tex` and the `.bib` |
 | `dist/indicon2026_supplementary.zip` | ✅ code + benchmarks + results + paper source (1.3 MB); `--with-data` variant adds clips and FAISS indices (18.3 MB) |
 | Build scripts | `backend/scripts/package_submission.py`, `backend/scripts/package_release.py` (re-runnable) |

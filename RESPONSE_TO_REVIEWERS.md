@@ -30,13 +30,13 @@ explicit statement of what cannot be reproduced.
 | R1-11 + R2-3 | 2 FPS vs. 6 s/12 s; percentiles and concurrency | **Fixed** | `measure_latency.py` measures the real components: scene retrieval core `37.4/37.4/39.7 ms` (mean/p50/p95), person core `17.2/18.5/20.4 ms`, and `26.5-39.5 queries/s` at 1-8 workers with p95 `39.6-265.4 ms`; LLM parse, clip stitching, MongoDB and ingestion are explicitly excluded and labelled. The deployment means remain the end-to-end number. |
 | R1-12 + R1-13 | Generalisation; privacy/consent | **Partially fixed** | Implemented and documented: opt-in role/camera/zone access control with audit log, 8 h retention prune, face-blur utility, gender-off output filter (`results/privacy_notes.md`), and the PAR bias discussion is restored with its per-attribute degradation detail. **Still open (needs data we do not have):** cross-site / night / rain evaluation and any demographic-bias measurement; the paper now states these as limitations. |
 | R1-14 + R1-19 + R2-2 | Release, protocol definitions, repeatability | **Fixed** | `backend/scripts/check_release.py` writes a manifest with checksums, package versions and a copy-paste reproduce block; the release contains the benchmarks, the eval harness, the alert schema, the privacy switches and the measured outputs; macro-mean, F1@10 and every threshold are defined in §Evaluation protocol. |
-| R1-15,16,17,20 + R1-18 + R2-1,4 | Figures, notation, storage, qualitative examples, consolidated table | **Fixed** | Qualitative retrieval table (2 wins, 2 failures including an intent-routing error), a consolidated two-axis comparison table, the dataflow figure, explicit storage figures (`1.44 GB` for 312k flat descriptors), and the storage/notation clarifications requested. |
+| R1-15,16,17,20 + R1-18 + R2-1,4 | Figures, notation, storage, qualitative examples, consolidated table | **Fixed** | Qualitative retrieval examples (2 wins, 2 failures including an intent-routing error), a consolidated two-axis position statement, the end-to-end dataflow, explicit storage figures (`1.44 GB` for 312k flat descriptors), and the storage/notation clarifications requested. To fit the 6-page limit the qualitative table, the positioning table and the dataflow figure are stated in prose; the numbers are unchanged and the per-category detail is in the supplementary artefact. |
 
 ## Reviewer 2
 
 | Item | Request | Status | Where / what changed |
 |---|---|---|---|
-| R2-1 | Consolidated comparison | **Fixed** | Table VII compares the proposed system against the best fixed-$\alpha$ and the unimodal/fusion baselines on both axes, with the deployment numbers and the release cross-referenced. |
+| R2-1 | Consolidated comparison | **Fixed** | §Related Work now compares the proposed system against the best fixed-$\alpha$ and the unimodal/fusion baselines on both axes in prose, with the deployment numbers and the release cross-referenced. |
 | R2-2 | Protocol / release details | **Fixed** | See R1-14 row. |
 | R2-3 | Latency measurement | **Fixed** | See R1-11 row. |
 | R2-4 | Notation and storage | **Fixed** | See R1-15 row. |
@@ -89,7 +89,7 @@ deployment numbers are unchanged**: `0.666 -> 0.828` macro P@5, `0.785 ->
 0.807` F1@10, `91%` alert rule-correctness, `6.0 s / 12.0 s` query latency,
 `312,544` person descriptors, 4 cameras, 2 FPS and the 109 ms person-index
 median are all still the primary evidence, and the PDF still builds to exactly
-8 pages with zero overfull box and zero undefined reference.
+6 pages with zero overfull box and zero undefined reference.
 
 * **B1 — action-query mechanism vs. Table II.** §IV-B now states that the
   deployed pipeline routes action queries semantic-only, so `α` is inert for
@@ -122,12 +122,18 @@ median are all still the primary evidence, and the PDF still builds to exactly
   artifact" rather than "released"; the public URL is withheld from this
   preprint and will be given on acceptance.
 
-Two structural displacements were needed to keep the 8-page limit: the
-consolidated comparison table (former Table V) was **deleted** because it
+Structural displacements were needed to keep the 6-page limit (the
+conference maximum, so no overlength charge). The consolidated comparison
+table (former Table V) was **deleted** because it
 restated Tables II and IV and was never cited — the R1-15/R2-1 rows above are
 therefore superseded by Tables II, IV and VI — and the "Generalization"
 paragraph was folded into the conclusion, which now carries the
-schema-decoupling statement and the single-premises caveat. The remaining
+schema-decoupling statement and the single-premises caveat. To reach 6 pages
+the off-the-shelf detection-and-indexing algorithm, the TikZ dataflow figure
+and six supporting tables were folded into prose, and the display headings
+became run-in headings; a distinct-value diff of the 8-page and 6-page sources
+shows that **no** measured value was lost, and every caveat still appears at
+least once. The remaining
 major items (M1–M10) and the minor nits were applied in the manuscript
 without changing any headline number; two audit items fall outside the
 manuscript and were left to their owners: the README captioning stack and the

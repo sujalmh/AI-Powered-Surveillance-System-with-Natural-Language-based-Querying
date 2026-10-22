@@ -98,7 +98,7 @@ class HybridSearchEngine:
 
     Person gallery vectors are 1152-d (SigLIP 768 + MiniLM 384).  A text-only
     query uses ``visual=0`` and the same weighted concat/L2 normalisation as the
-    gallery, matching Algorithm 2 in the paper.
+    gallery, matching the paper's text-only person branch.
     """
 
     def __init__(

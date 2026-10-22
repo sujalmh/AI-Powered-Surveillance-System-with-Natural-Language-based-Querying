@@ -728,7 +728,7 @@ def main() -> int:
         "Percentiles use NumPy linear interpolation over the measured samples. "
         "Scene FAISS is an exact `IndexFlatIP` over 242 vectors; person FAISS "
         "over 1,778 descriptors. Text-only person queries use zero visual + "
-        "MiniLM text, matching Algorithm 2.",
+        "MiniLM text, matching the paper's text-only person branch.",
         "",
         "## End-to-end component composition",
         "",

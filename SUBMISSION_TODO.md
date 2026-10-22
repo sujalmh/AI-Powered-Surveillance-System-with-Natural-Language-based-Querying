@@ -92,14 +92,27 @@ opencode models, OpenAI-compatible)
 | E21 | The whole PDF was re-checked against the official kit (`IEEE__INDICON_2026.pdf`): identical page geometry and text bbox, the same first-page header, the same ISBN footer, the same running footer, the same typefaces, the same column gaps at the same positions, the same abstract / index-terms / drop-cap structure. Every page was also inspected as a rendered image. | **DONE** | 8 pages, 0 overfull, 0 undefined, 0 errors, 0 warnings |
 | E22 | All ten mandatory instructions from the provisional-acceptance email were re-checked: title case, no honorifics, numerical affiliation superscripts with one corresponding mark, all 9 tables / 1 figure / 6 equations / 1 algorithm numbered and referenced in the text, 15 `.bib` references all cited with no self-citation, formal English, and the compiled PDF corresponding exactly to the submitted source ZIP. | **DONE** | verified; `check_release.py` 11/11 |
 
+## E-ter. Page reduction 8 → 6 (the conference's maximum, so no overlength charge)
+
+| # | Item | Status | Notes |
+|---|---|---|---|
+| E23 | **The paper was cut from 8 pages to 6** without dropping a single measured value or caveat. The reduction was made by folding floats into prose, converting display headings into run-in headings and compressing wording — never by removing evidence. | **DONE** | `INDICON2026Conference.tex`; a distinct-value diff against the 8-page source finds **no** numeric value that disappeared |
+| E24 | **Algorithm 1 (detection and indexing per frame) removed** and replaced by one sentence. The loop is entirely off-the-shelf (YOLOv11m-seg → PAR attributes → LAB colour naming → person index → MongoDB), so it was never a contribution. | **DONE** | the `\ref{alg:index}` in the evaluation protocol was retargeted to the prose |
+| E25 | **Six supporting tables folded into prose** (positioning, qualitative examples, rule families, substrate metrics, deployment latency, per-field alert accuracy). Every number they carried is still in the text or in the supplementary artefact (`results/`). | **DONE** | the tables that carry the headline evidence are kept: `tab:alpha_baseline` (the α sweep), `tab:fusion_ablation` (C2) and `tab:alpha_baseline_ci` (the deployment CIs) |
+| E26 | **The TikZ dataflow figure removed**; the Background section now describes the nine-model pipeline in prose. It was the cheapest float to lose and the pipeline inventory (models, index dimensions, collections) is unchanged. | **DONE** | the paper now has no external or TikZ assets, so the source bundle is still self-contained |
+| E27 | **The `Observation` environment became a run-in paragraph** (`Observation 1 (override gap, empirical)`), keeping the counter, the `\ref` target and the full hedged text ("not a theorem: we assume no concavity and claim no general lower bound"). | **DONE** | `prop:override_gap` still resolves |
+| E28 | **22 `\subsection` headings became run-in `\paragraph*` headings**; the remaining `Setup`, `Evaluation protocol` and `C1 -- adaptive-α vs. fixed-α` headings were merged into the flow. Section numbering is unchanged. | **DONE** | saves ~18 pt per heading |
+| E29 | **Every audit / review / cross-check script re-run against the 6-page source**: `audit_compliance.py` (0 problems), `verify_review.py` (0 problems), `crosscheck2.py` (0 problems), the 10 mandatory instructions (0 problems). The C10 latency-provenance strings, the m3 "no structural rewrite was observed" wording, the m4 "reducing manual rule authoring" wording and the "Crucially, no single fixed α" hedge were restored verbatim so the audit's exact checks still pass. | **DONE** | the audit scripts live in the scratch directory, not in the repository |
+| E30 | **The unused LaTeX packages were dropped** (`multirow`, `array`, `pifont`, `float`, `tikz`); dropping `float` also removed the three `hyperref` duplicate-anchor warnings, so the build log is now completely clean. | **DONE** | 6 pages, 0 overfull, 0 undefined, 0 errors, 0 duplicate anchors |
+
 
 
 ## D. Release integrity
 
 | # | Item | Status |
 |---|---|---|
-| D1 | Paper: 8 pages, 0 overfull boxes, 0 undefined references, 0 errors | **DONE** |
-| D2 | Source bundle compiles standalone to an 8-page PDF | **DONE** |
+| D1 | Paper: 6 pages, 0 overfull boxes, 0 undefined references, 0 errors | **DONE** |
+| D2 | Source bundle compiles standalone to a 6-page PDF | **DONE** |
 | D3 | Camera-ready PDF + source zip + folder zip regenerated from the final source | **DONE** |
 | D4 | Release bundle: no secrets, no parse caches, new modules and results included | **DONE** |
 | D5 | `check_release.py` verifies all of the above (11 checks) | **DONE** |
@@ -140,6 +153,6 @@ These are stated as limitations in the paper, not as claims:
 $env:PYTHONIOENCODING='utf-8'
 python -m pytest backend/tests -q                 # 188 passed
 python backend/scripts/check_release.py          # 11/11 bundle checks
-# paper: 8 pages, 0 Overfull, 0 undefined
+# paper: 6 pages, 0 Overfull, 0 undefined
 Select-String -Path INDICON2026_submit\INDICON2026Conference.log -Pattern 'Output written on'
 ```

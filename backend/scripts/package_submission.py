@@ -52,14 +52,14 @@ PAPER_BIB = "References.bib"
 CLASS_NAME = "IEEEtran.cls"
 README_NAME = "README.txt"
 PAPER_STEM = "INDICON2026Conference"
-EXPECTED_PAGES = 8
+EXPECTED_PAGES = 6
 
 README = """INDICON 2026 submission source
 ================================
 
 Files
 -----
-INDICON2026Conference.tex  paper source (8 pages, IEEEtran conference class)
+INDICON2026Conference.tex  paper source (6 pages, IEEEtran conference class)
 References.bib             bibliography (IEEEtran style)
 IEEEtran.cls              class file shipped with the INDICON 2026 author kit
 README.txt                this file
@@ -80,12 +80,12 @@ Expected result
 ---------------
 The build must end with
 
-    Output written on INDICON2026Conference.pdf (8 pages, ...)
+    Output written on INDICON2026Conference.pdf (6 pages, ...)
 
 and the log must contain neither an undefined reference/citation nor an
 "Overfull \\hbox" warning.  backend/scripts/package_submission.py and
 backend/scripts/check_release.py enforce both, so a submission that does not
-rebuild into a clean 8-page PDF is rejected before it leaves the repository.
+rebuild into a clean 6-page PDF is rejected before it leaves the repository.
 
 The paper contains no external image files: the dataflow figure is a TikZ
 picture inside the .tex source.  The only companion files needed are the two
@@ -99,7 +99,7 @@ FOLDER_README = """INDICON 2026 submission package
 
 Files
 -----
-INDICON2026_850.pdf         the camera-ready paper (8 pages, 2-column IEEEtran)
+INDICON2026_850.pdf         the camera-ready paper (6 pages, 2-column IEEEtran)
 INDICON2026_850_source.zip  the LaTeX source bundle (.tex, .bib, IEEEtran.cls,
                             README.txt with the exact rebuild sequence)
 INDICON2026Conference.tex   the paper source (same file as in the source bundle)
@@ -109,7 +109,7 @@ README.txt                  this file
 
 The camera-ready PDF is generated from INDICON2026Conference.tex with
 pdfLaTeX + BibTeX; see README.txt inside INDICON2026_850_source.zip for the
-exact command sequence and for the checks the build has to pass (8 pages, no
+exact command sequence and for the checks the build has to pass (6 pages, no
 undefined references, no "Overfull \\hbox").
 
 Paper ID: 850

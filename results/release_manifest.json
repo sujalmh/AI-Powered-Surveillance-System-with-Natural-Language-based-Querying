@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-10-22T03:38:21.719499+00:00",
-  "git_commit": "8ca1ae4eeb7107a64f3cca12af07bed5195b86a6",
+  "generated_at_utc": "2026-10-22T05:06:05.498320+00:00",
+  "git_commit": "ca72ed13928d9e89578bd6a3414919435f33a929",
   "platform": {
     "python": "3.12.4",
     "platform": "Windows-11-10.0.26300-SP0",
@@ -336,7 +336,7 @@
       {
         "name": "release archive present",
         "status": "pass",
-        "detail": "indicon2026_supplementary.zip (1.43 MB, sha256 2871d120dd471cf6)"
+        "detail": "indicon2026_supplementary.zip (1.37 MB, sha256 4355266b5bcd0c4a)"
       },
       {
         "name": "release archive contents",
@@ -361,7 +361,7 @@
       {
         "name": "camera-ready PDF",
         "status": "pass",
-        "detail": "8 pages (0.44 MB, sha256 d03347d5cf9b5c6c)"
+        "detail": "6 pages (0.37 MB, sha256 af5845d7c23b0186)"
       },
       {
         "name": "source bundle",
@@ -376,17 +376,17 @@
       {
         "name": "LaTeX log clean",
         "status": "pass",
-        "detail": "no errors, 8 pages reported"
+        "detail": "no errors, 6 pages reported"
       },
       {
         "name": "folder package",
         "status": "pass",
-        "detail": "INDICON2026_submit.zip carries the PDF, the source bundle and the sources (0.56 MB)"
+        "detail": "INDICON2026_submit.zip carries the PDF, the source bundle and the sources (0.50 MB)"
       },
       {
         "name": "source bundle compiles standalone",
         "status": "pass",
-        "detail": "rebuilt from INDICON2026_850_source.zip into a clean 8-page PDF (scratch: C:\\Users\\sujal\\AppData\\Local\\Temp\\opencode\\check_release)"
+        "detail": "rebuilt from INDICON2026_850_source.zip into a clean 6-page PDF (scratch: C:\\Users\\sujal\\AppData\\Local\\Temp\\opencode\\check_release)"
       }
     ],
     "failed": 0,

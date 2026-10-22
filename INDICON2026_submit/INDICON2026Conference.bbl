@@ -42,13 +42,13 @@ G.~V. Cormack, C.~L.~A. Clarke, and S.~B{\"u}ttcher, ``Reciprocal rank fusion
   758--759.
 
 \bibitem{b30}
-J.~Myung, J.~Park, and J.~Han, ``{HyST}: {LLM}-powered hybrid retrieval over
+J.~Myung \emph{et~al.}, ``{HyST}: {LLM}-powered hybrid retrieval over
   semi-structured tabular data,'' \emph{arXiv preprint arXiv:2508.18048}, 2025.
 
 \bibitem{b22b}
-K.~Zhou, Y.~Yang, A.~Cavallaro, and T.~Xiang, ``Omni-scale feature learning for
-  person re-identification,'' in \emph{Proc. IEEE/CVF Int. Conf. Comput. Vis.
-  (ICCV)}, 2019, pp. 3702--3712.
+K.~Zhou \emph{et~al.}, ``Omni-scale feature learning for person
+  re-identification,'' in \emph{Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV)},
+  2019, pp. 3702--3712.
 
 \bibitem{b32}
 S.~Li \emph{et~al.}, ``Person search with natural language description,'' in
@@ -56,8 +56,8 @@ S.~Li \emph{et~al.}, ``Person search with natural language description,'' in
   1970--1979.
 
 \bibitem{b25}
-J.~Johnson, M.~Douze, and H.~J{\'e}gou, ``Billion-scale similarity search with
-  {GPUs},'' \emph{IEEE Trans. Big Data}, vol.~7, no.~3, pp. 535--547, 2021.
+J.~Johnson \emph{et~al.}, ``Billion-scale similarity search with {GPUs},''
+  \emph{IEEE Trans. Big Data}, vol.~7, no.~3, pp. 535--547, 2021.
 
 \bibitem{b3}
 A.~Singh \emph{et~al.}, ``Agentic retrieval-augmented generation: A survey on
@@ -72,17 +72,17 @@ A.~Singh \emph{et~al.}, ``Agentic retrieval-augmented generation: A survey on
   2024.
 
 \bibitem{b22}
-N.~Aharon, R.~Orfaig, and B.-Z. Bobrovsky, ``{BoT-SORT}: Robust associations
-  multi-pedestrian tracking,'' \emph{arXiv preprint arXiv:2206.14651}, 2022.
+N.~Aharon \emph{et~al.}, ``{BoT-SORT}: Robust associations multi-pedestrian
+  tracking,'' \emph{arXiv preprint arXiv:2206.14651}, 2022.
 
 \bibitem{b18b}
 G.~Ilharco \emph{et~al.}, ``{OpenCLIP},''
   \url{https://github.com/mlfoundations/open_clip}, 2021.
 
 \bibitem{b24}
-X.~Zhai, B.~Mustafa, A.~Kolesnikov, and L.~Beyer, ``Sigmoid loss for language
-  image pre-training,'' in \emph{Proc. IEEE/CVF Int. Conf. Comput. Vis.
-  (ICCV)}, 2023, pp. 11\,941--11\,952.
+X.~Zhai \emph{et~al.}, ``Sigmoid loss for language image pre-training,'' in
+  \emph{Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV)}, 2023, pp.
+  11\,941--11\,952.
 
 \bibitem{b23}
 W.~Wang \emph{et~al.}, ``{MiniLM}: Deep self-attention distillation for

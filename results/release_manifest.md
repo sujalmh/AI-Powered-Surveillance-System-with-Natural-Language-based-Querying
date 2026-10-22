@@ -1,7 +1,7 @@
 # Release manifest
 
-Generated: `2026-10-22T03:38:21.719499+00:00`
-Git: `8ca1ae4eeb7107a64f3cca12af07bed5195b86a6`
+Generated: `2026-10-22T05:06:05.498320+00:00`
+Git: `ca72ed13928d9e89578bd6a3414919435f33a929`
 
 ## Subset
 
@@ -24,17 +24,17 @@ Git: `8ca1ae4eeb7107a64f3cca12af07bed5195b86a6`
 
 ## Delivery bundles
 
-- **ok** -- release archive present: indicon2026_supplementary.zip (1.43 MB, sha256 2871d120dd471cf6)
+- **ok** -- release archive present: indicon2026_supplementary.zip (1.37 MB, sha256 4355266b5bcd0c4a)
 - **ok** -- release archive contents: 6 required entries present (llm_client.py, eval_end_to_end.py, test_llm_client.py, ...)
 - **ok** -- no secrets in the release: no *.env/*.key/*.pem/credentials*/secrets* entries
 - **ok** -- no parse caches in the release: no parsed_cache/parser_cache entries
 - **ok** -- measured results shipped: all measured results present
-- **ok** -- camera-ready PDF: 8 pages (0.44 MB, sha256 d03347d5cf9b5c6c)
+- **ok** -- camera-ready PDF: 6 pages (0.37 MB, sha256 af5845d7c23b0186)
 - **ok** -- source bundle: 4 entries (INDICON2026Conference.tex, References.bib, IEEEtran.cls, README.txt)
 - **ok** -- source bundle carries the current paper: INDICON2026Conference.tex is byte-identical to INDICON2026Conference.tex
-- **ok** -- LaTeX log clean: no errors, 8 pages reported
-- **ok** -- folder package: INDICON2026_submit.zip carries the PDF, the source bundle and the sources (0.56 MB)
-- **ok** -- source bundle compiles standalone: rebuilt from INDICON2026_850_source.zip into a clean 8-page PDF (scratch: C:\Users\sujal\AppData\Local\Temp\opencode\check_release)
+- **ok** -- LaTeX log clean: no errors, 6 pages reported
+- **ok** -- folder package: INDICON2026_submit.zip carries the PDF, the source bundle and the sources (0.50 MB)
+- **ok** -- source bundle compiles standalone: rebuilt from INDICON2026_850_source.zip into a clean 6-page PDF (scratch: C:\Users\sujal\AppData\Local\Temp\opencode\check_release)
 
 ## Reproduce
 
