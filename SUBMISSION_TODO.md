@@ -36,7 +36,7 @@ opencode models, OpenAI-compatible)
 | B4 | Parser-quality track: per-field agreement with the reference parse | **DONE** | `backend/scripts/eval_parser.py` |
 | B5 | Both tracks share one cache and one protocol-matched query file | **DONE** | `backend/benchmarks/parsed_cache/` |
 | B6 | Per-category paired tests with Holm correction, resample count and seed recorded | **DONE** | `results/end_to_end_results.json` |
-| B7 | End-to-end result added to the paper | **DONE** | `INDICON2026Conference.tex` (§C1) |
+| B7 | End-to-end result added to the paper | **DONE** | `INDICON2026Conference.tex` (§C3 routing rule) |
 
 ## C. Paper corrections from the independent evidence audit
 
@@ -112,13 +112,13 @@ opencode models, OpenAI-compatible)
 
 | # | Item | Status |
 |---|---|---|
-| F1 | Abstract + §C1 state per-intent lookup 0.822 vs 0.828, soft +0.006 deploy / +0.000 subset, subset tie (p 1.0), end-to-end tie (p 0.80), per-cat p 0.04/0.07 not surviving Holm; Observation 1 stays empirical | **DONE** |
+| F1 | Abstract + §C3 state per-intent lookup 0.822 vs 0.828, soft +0.006 deploy / +0.000 subset, subset tie (p 1.0), end-to-end tie (p 0.80), per-cat p 0.04/0.07 not surviving Holm; Lemma 1 (ex-Observation 1) states the gap with explicit A1–A2 and subset scope | **DONE** |
 | F2 | Deployment CIs/p-values labelled recorded-not-recomputable; significance claimed only on released track (grouped + Holm); Statistical protocol updated | **DONE** |
 | F3 | MMR/recency 2×2 ablation (`eval_ablation.py` → `results/ablation_*`): recency Δ 0.000 (inert), production MMR −0.138 (p<0.0007); Limitations (ii) replaced | **DONE** |
-| F4 | C2: Add(proj.) illustrative single-seed + RRF margin fragile; 5-fold CV over 174 pseudo-tracks in `eval_fusion.py` (inversion on every fold); (0.6,0.4) 9-point grid on 50 pairs disclosed, no CV | **DONE** |
+| F4 | C2: Add(proj.) illustrative single-seed + RRF margin fragile; 5-fold CV over pseudo-tracks in `eval_fusion.py`; released track rebuilt on metadata-formed tracks (pair-AUC primary) with gated reported as ablation only; (0.6,0.4) 9-point grid on 50 pairs disclosed, no CV | **DONE** |
 | F5 | Public Re-ID probe time-boxed → case-study fallback (no download, no new claim; documented in RESPONSE_TO_REVIEWERS.md) | **DONE** (fallback-2; attempt measured: official repo URL 404, only unofficial mirrors ≤9 likes, SigLIP weights uncached, CPU lower bound 0.05 s/img → 60–120 min all-in over ~30 min budget) |
 | F6 | Counting: EM/MAE (0.10/2.20) stated as primary counting-ability measure; count-P@5 kept as supporting-clip retrieval | **DONE** |
-| F7 | C3: specified-field accuracy measured (test sev 7/7, cad 2/2, cool 1/1); 91% stays LLM-backed deployment study; 120-set closed-vocabulary regression | **DONE** |
+| F7 | C1: specified-field accuracy measured (test sev 7/7, cad 2/2, cool 1/1); 91% stays LLM-backed deployment study; 120-set closed-vocabulary regression; release probes (compositional 9/9 vs 51/51, oracle turns 1.08 vs 2.58, fuzz 0/0/0) | **DONE** |
 | F8 | Related work: +Bruch 2022 (b33), +DAT per-query-α 2025 (b34), +CLIP-ReID 2023 (b35); −b3/−b20/−b22 generics; 15 refs all cited; undemonstrated-scope narrowed | **DONE** |
 | F9 | Systems: near-real-time 2 FPS + keyframe-only VLM; operator-in-the-loop 6 s/12 s; flat-index 109 ms median, N=312,544 | **DONE** |
 | F10 | Paper rebuilt: 6 pages, 0 overfull, 0 undefined, 0 bibtex warnings, 9 underfull; no measured value lost (distinct-value diff) | **DONE** |
@@ -134,7 +134,7 @@ opencode models, OpenAI-compatible)
 | D4 | Release bundle: no secrets, no parse caches, new modules and results included | **DONE** |
 | D5 | `check_release.py` verifies all of the above (11 checks) | **DONE** |
 | D6 | Parse caches git-ignored as regenerable artefacts | **DONE** |
-| D7 | Full test suite green (188 tests) | **DONE** |
+| D7 | Full test suite green (193 tests) | **DONE** |
 | D8 | Response-to-reviewers letter records the audit corrections | **DONE** |
 
 ---
@@ -143,7 +143,7 @@ opencode models, OpenAI-compatible)
 
 | # | Item | Owner | Notes |
 |---|---|---|---|
-| O1 | **Public repository created: `github.com/sujalmh/intent-adaptive-hybrid-surveillance` (public, tests+harness+results, 188 green).** The paper still says the URL "is withheld from this preprint and given on acceptance" — updating the footnote/abstract/`VERIFICATION.md` to link the live repo is a paper change needing a rebuild + revalidation; author to decide. | human | Repo live; footnote link-up pending |
+| O1 | **Public repository created: `github.com/sujalmh/intent-adaptive-hybrid-surveillance` (public, tests+harness+results, 193 green).** The paper still says the URL "is withheld from this preprint and given on acceptance" — updating the footnote/abstract/`VERIFICATION.md` to link the live repo is a paper change needing a rebuild + revalidation; author to decide. | human | Repo live; footnote link-up pending |
 | O2 | **ISBN / price footer.** `INDICON2026Conference.tex` line ~38 carries the kit's placeholder `979-8-3195-2581-9/26/$31.00`. It is verbatim from the author kit, but the organisers may require it removed or replaced. | human | Template boilerplate |
 | O3 | **Single vs double blind.** The paper carries named authors. Confirm the track; if double-blind, the author block and the acknowledgements need anonymising. | human | Affects the PDF |
 | O4 | **ORCID / contact metadata** for the submission portal. | human | Not in the PDF |
@@ -168,8 +168,16 @@ These are stated as limitations in the paper, not as claims:
 
 ```powershell
 $env:PYTHONIOENCODING='utf-8'
-python -m pytest backend/tests -q                 # 188 passed
+python -m pytest backend/tests -q                 # 193 passed
 python backend/scripts/check_release.py          # 11/11 bundle checks
 # paper: 6 pages, 0 Overfull, 0 undefined
 Select-String -Path INDICON2026_submit\INDICON2026Conference.log -Pattern 'Output written on'
 ```
+
+## G. Novelty-strong-push adoption (2026-10-22) — ADOPT SUBSET
+
+| # | Item | Status |
+|---|---|---|
+| G1 | Claim reorder strong-first (C1 alert compiler, C2 fusion, C3 routing rule) with Override-Gap Lemma, C3 null sentence, refreshed C2 numbers, C3 probe rows; still 6 pages, 0 overfull, 0 undefined, 15/15 refs | **DONE** (probe branch `novelty-strong-push`, fast-forward merged, branch deleted) |
+| G2 | Adopted: C2 metadata-track bias fix, C3 denotations/validator hardening/policy/probes | **DONE** |
+| G3 | Rejected as paper claims (kept as reported code+tables): C1 confidence superiority (null), gated superiority (mixed: retrieval win, AUC null, kfold 0–5) | **DONE** |
