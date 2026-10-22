@@ -149,3 +149,31 @@ def test_clean_materializations_pass_validator():
         rule = materialize_alert_rule(text)
         if not rule.get("needs_clarification"):
             assert validate_rule(rule)[0] is True, text
+
+
+def test_two_zone_conjunction_clarifies():
+    from backend.app.services.alert_materializer import materialize_alert_rule
+
+    r = materialize_alert_rule("more than 5 people in Zone A and Zone B")
+    assert r["needs_clarification"] is True
+    assert "Zone A" in r["clarification"] and "Zone B" in r["clarification"]
+
+
+def test_until_single_materializes_window():
+    from backend.app.services.alert_materializer import materialize_alert_rule
+
+    r = materialize_alert_rule(
+        "alert me when more than five people gather in Zone A until 10 PM"
+    )
+    assert r["needs_clarification"] is False
+    assert r["time_of_day"] == {"start": "00:00", "end": "22:00"}
+    assert validate_rule(r)[0] is True
+
+
+def test_invalid_clock_clarifies():
+    from backend.app.services.alert_materializer import materialize_alert_rule
+
+    r = materialize_alert_rule(
+        "alert me when more than five people gather in Zone A between 10:70 and 12 AM"
+    )
+    assert r["needs_clarification"] is True

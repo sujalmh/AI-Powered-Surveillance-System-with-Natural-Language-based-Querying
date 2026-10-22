@@ -195,3 +195,12 @@ Select-String -Path INDICON2026_submit\INDICON2026Conference.log -Pattern 'Outpu
 | I1 | Hardening D1–D9 (robust normalization, shared semantic normaliser, CombANZ rebalancing, fail-open MMR, NaN-safe confidence/fusion, production confidence wiring + production-normaliser arm, CombANZ/MNZ baselines); 21 regression tests; end-to-end unchanged at 0.450, control family unchanged, production arm ties 0.538 | **DONE** |
 | I2 | Presentation: F→F_{5,10} rename + standard 0.289, effective weights 0.69/0.31, fuzz split (642 vs 0/200), grouped-primary protocol + Holm 0.20, action/filter levels + confound, Bruch→TOIS, Jiang-2025 survey (b36 for b35), governance (iv)+(v) with ranking effect, reconciliation, counting move, leakage (98/104) + Holm/confound/stats, calib prior-wins line | **DONE** (6 pages, 0 overfull, 0 undefined, 15/15 cited) |
 | I3 | Unadopted as drafted: unexecuted-analysis language (N1/N2/N6), CUT-1 wholesale delete, full threat-model paragraph (space) | **DONE** (documented in proposals) |
+
+## J. Section-fix rounds (2026-10-22) — disclosures converted to measurements
+
+| # | Item | Status |
+|---|---|---|
+| J1 | C1 grammar: two-zone conjunction clarifies, `until/till` windows, invalid-clock clarifies; silent drops 173/215 → 0/215, shipped metrics intact; +3 regression tests | **DONE** |
+| J2 | C2 splits: calibration/test disjoint on track IDs + row_index (faiss_id has 2 duplicates); same-moment co-occurrence disclosed; ridge seed sd 0.0010/0.0014 | **DONE** |
+| J3 | C3 segments: leak-free rerun ties (Δ=0, n=10, degenerate CIs); combMAX bounded as query-mix-dependent; n=100 Holm finding stands | **DONE** |
+| J4 | Full suite 221 green; paper 6 pages, 0 overfull, 0 undefined, 15/15 cited; public single-commit re-pushed | **DONE** |

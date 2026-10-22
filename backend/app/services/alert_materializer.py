@@ -409,7 +409,29 @@ def _time_window(text: str) -> Optional[Dict[str, str]]:
         if result:
             return result
 
+    # until/till H[:MM] [am/pm] -> 00:00 .. H (single lower bound).
+    m = re.search(
+        r"\b(?:until|till)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b", text,
+    )
+    if m:
+        h, minute, mer = m.groups()
+        pair = _parse_clock(h, minute, mer)
+        if pair:
+            hour = _apply_meridiem(pair[0], mer) if mer else pair[0]
+            mins = pair[1]
+            if 0 <= hour <= 23 and 0 <= mins <= 59:
+                result = _range((0, 0), (hour, mins))
+                if result:
+                    return result
+
     return None
+
+
+def _has_invalid_clock(text):
+    for m in re.finditer(r"\b(\d{1,2}):(\d{2})\b", text):
+        if int(m.group(2)) > 59 or int(m.group(1)) > 23:
+            return True
+    return False
 
 
 _TIME_WINDOW_COUNT_RE = re.compile(
@@ -893,10 +915,15 @@ def _conflict(text: str, objects: List[str], zones: List[str]) -> Optional[str]:
             if lo is not None and hi is not None and lo > hi:
                 return "between bounds are inverted (lower exceeds upper)"
 
+    # Multiple zones: schema holds a single zone_id, so never drop silently.
+    if len(set(zones)) > 1:
+        return f"multiple zones specified ({', '.join(zones)})"
+    # Invalid clock times must never be dropped silently.
+    if _has_invalid_clock(text):
+        return "invalid clock time"
+
     # Conflicting zones / object sets expressed as disjunctions.
     if re.search(r"\bor\b", text):
-        if len(set(zones)) > 1:
-            return f"ambiguous zone disjunction ({', '.join(zones)})"
         object_set = {name for name in objects}
         if len(object_set) > 1:
             return f"ambiguous object disjunction ({', '.join(sorted(object_set))})"

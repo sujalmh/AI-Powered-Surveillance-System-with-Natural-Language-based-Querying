@@ -97,7 +97,7 @@ Noise: 2000 utterances (1-12 tokens from grammar/filler vocabulary, seed 0xf422)
 | Crashes (materialize + validate) | 0 |
 | Soundness violations (materialized rule failing `validate_rule`) | 0 |
 | Targeted false materializations (unsupported hint + filler) | 0 |
-| Noise clarified / materialized (descriptive) | 1358 / 642 |
+| Noise clarified / materialized (descriptive) | 1601 / 399 |
 
 ## Canonical fields and defaults
 

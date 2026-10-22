@@ -1,0 +1,437 @@
+{
+  "scope": {
+    "name": "released single-camera subset, segment-disjoint (leak-free) protocol",
+    "not": "full 4-camera / 312k-descriptor deployment",
+    "note": "Segment-disjoint (temporal) proxy for camera-disjointness. Alpha selected on training segments only, scored once on the held-out segment. Released-subset numbers only."
+  },
+  "leakage_audit_shipped_split": {
+    "n_tune_queries": 50,
+    "n_test_queries": 100,
+    "n_tune_relevant_clips": 98,
+    "n_test_relevant_clips": 104,
+    "n_shared_clips": 98,
+    "shared_pct_of_test_relevant": 0.9423076923076923,
+    "n_test_queries_touching_a_tune_clip": 98,
+    "n_test_queries_total": 100,
+    "n_tune_queries_touching_a_test_clip": 50,
+    "n_tune_queries_total": 50
+  },
+  "segments": {
+    "segments": [
+      {
+        "index": 0,
+        "name": "S1 (17:01-17:08)",
+        "n_clips": 28,
+        "n_queries_single_segment": 21
+      },
+      {
+        "index": 1,
+        "name": "S2 (18:04-18:28)",
+        "n_clips": 90,
+        "n_queries_single_segment": 99
+      },
+      {
+        "index": 2,
+        "name": "S3 (18:55-18:56)",
+        "n_clips": 3,
+        "n_queries_single_segment": 10
+      }
+    ],
+    "cross_segment_queries": 20
+  },
+  "disjointness": {
+    "held_out_segment": 2,
+    "held_out_segment_name": "S3 (18:55-18:56)",
+    "train_segments": [
+      0,
+      1
+    ],
+    "train_segment_names": [
+      "S1 (17:01-17:08)",
+      "S2 (18:04-18:28)"
+    ],
+    "n_train_clips": 118,
+    "n_test_clips": 3,
+    "n_shared_clips_train_test": 0,
+    "n_tune_queries": 140,
+    "n_test_queries": 10,
+    "n_cross_segment_queries_total": 20,
+    "n_queries_dropped_for_disjointness": 0,
+    "n_tune_relevant_clips": 101,
+    "n_test_relevant_clips": 3,
+    "n_shared_relevant_clips": 0,
+    "shared_relevant_pct_of_test": 0.0,
+    "clip_disjoint": true
+  },
+  "held_out": 2,
+  "norm_modes": [
+    "minmax",
+    "zscore"
+  ],
+  "n_boot": 3000,
+  "test_queries_by_category": {
+    "count": 2,
+    "find": 1,
+    "track": 3,
+    "filter": 4
+  },
+  "tune_queries_by_category": {
+    "count": 28,
+    "find": 29,
+    "track": 27,
+    "filter": 26,
+    "action": 30
+  },
+  "best_fixed_per_norm": {
+    "minmax": "fixed_0.7",
+    "zscore": "fixed_0.9"
+  },
+  "best_fixed_tune_macro_p5": {
+    "minmax": 0.5657142857142857,
+    "zscore": 0.5657142857142857
+  },
+  "tuned_per_intent_per_norm": {
+    "minmax": {
+      "action": 0.5,
+      "count": 0.5,
+      "filter": 0.7,
+      "find": 0.7,
+      "track": 0.5
+    },
+    "zscore": {
+      "action": 0.5,
+      "count": 0.8,
+      "filter": 0.9,
+      "find": 1.0,
+      "track": 0.9
+    }
+  },
+  "summary": {
+    "minmax": {
+      "adaptive": {
+        "macro_p5": 0.35000000000000003,
+        "macro_r10": 1.0,
+        "macro_f1": 0.29545454545454547,
+        "macro_f1_paper": 0.511904761904762,
+        "macro_mrr": 1.0,
+        "per_category_p5": {
+          "count": 0.2,
+          "find": 0.4,
+          "track": 0.4000000000000001,
+          "action": 0.0,
+          "filter": 0.4
+        },
+        "n_test": 10
+      },
+      "combMAX": {
+        "macro_p5": 0.35000000000000003,
+        "macro_r10": 1.0,
+        "macro_f1": 0.29545454545454547,
+        "macro_f1_paper": 0.511904761904762,
+        "macro_mrr": 1.0,
+        "per_category_p5": {
+          "count": 0.2,
+          "find": 0.4,
+          "track": 0.4000000000000001,
+          "action": 0.0,
+          "filter": 0.4
+        },
+        "n_test": 10
+      },
+      "fixed_0.7": {
+        "macro_p5": 0.35000000000000003,
+        "macro_r10": 1.0,
+        "macro_f1": 0.29545454545454547,
+        "macro_f1_paper": 0.511904761904762,
+        "macro_mrr": 1.0,
+        "per_category_p5": {
+          "count": 0.2,
+          "find": 0.4,
+          "track": 0.4000000000000001,
+          "action": 0.0,
+          "filter": 0.4
+        },
+        "n_test": 10
+      },
+      "per_intent_tuned": {
+        "macro_p5": 0.35000000000000003,
+        "macro_r10": 1.0,
+        "macro_f1": 0.29545454545454547,
+        "macro_f1_paper": 0.511904761904762,
+        "macro_mrr": 0.9166666666666666,
+        "per_category_p5": {
+          "count": 0.2,
+          "find": 0.4,
+          "track": 0.4000000000000001,
+          "action": 0.0,
+          "filter": 0.4
+        },
+        "n_test": 10
+      },
+      "fixed_0.0": {
+        "macro_p5": 0.0,
+        "macro_r10": 0.041666666666666664,
+        "macro_f1": 0.01388888888888889,
+        "macro_f1_paper": 0.0,
+        "macro_mrr": 0.035444432191643845,
+        "per_category_p5": {
+          "count": 0.0,
+          "find": 0.0,
+          "track": 0.0,
+          "action": 0.0,
+          "filter": 0.0
+        },
+        "n_test": 10
+      },
+      "fixed_0.3": {
+        "macro_p5": 0.14583333333333334,
+        "macro_r10": 0.4270833333333333,
+        "macro_f1": 0.12342171717171718,
+        "macro_f1_paper": 0.2142857142857143,
+        "macro_mrr": 0.6159035409035409,
+        "per_category_p5": {
+          "count": 0.1,
+          "find": 0.2,
+          "track": 0.13333333333333333,
+          "action": 0.0,
+          "filter": 0.15000000000000002
+        },
+        "n_test": 10
+      },
+      "fixed_0.5": {
+        "macro_p5": 0.35000000000000003,
+        "macro_r10": 1.0,
+        "macro_f1": 0.29545454545454547,
+        "macro_f1_paper": 0.511904761904762,
+        "macro_mrr": 0.9166666666666666,
+        "per_category_p5": {
+          "count": 0.2,
+          "find": 0.4,
+          "track": 0.4000000000000001,
+          "action": 0.0,
+          "filter": 0.4
+        },
+        "n_test": 10
+      },
+      "fixed_1.0": {
+        "macro_p5": 0.35000000000000003,
+        "macro_r10": 1.0,
+        "macro_f1": 0.29545454545454547,
+        "macro_f1_paper": 0.511904761904762,
+        "macro_mrr": 1.0,
+        "per_category_p5": {
+          "count": 0.2,
+          "find": 0.4,
+          "track": 0.4000000000000001,
+          "action": 0.0,
+          "filter": 0.4
+        },
+        "n_test": 10
+      }
+    },
+    "zscore": {
+      "adaptive": {
+        "macro_p5": 0.35000000000000003,
+        "macro_r10": 1.0,
+        "macro_f1": 0.29545454545454547,
+        "macro_f1_paper": 0.511904761904762,
+        "macro_mrr": 0.96875,
+        "per_category_p5": {
+          "count": 0.2,
+          "find": 0.4,
+          "track": 0.4000000000000001,
+          "action": 0.0,
+          "filter": 0.4
+        },
+        "n_test": 10
+      },
+      "combMAX": {
+        "macro_p5": 0.35000000000000003,
+        "macro_r10": 1.0,
+        "macro_f1": 0.29545454545454547,
+        "macro_f1_paper": 0.511904761904762,
+        "macro_mrr": 1.0,
+        "per_category_p5": {
+          "count": 0.2,
+          "find": 0.4,
+          "track": 0.4000000000000001,
+          "action": 0.0,
+          "filter": 0.4
+        },
+        "n_test": 10
+      },
+      "fixed_0.9": {
+        "macro_p5": 0.35000000000000003,
+        "macro_r10": 1.0,
+        "macro_f1": 0.29545454545454547,
+        "macro_f1_paper": 0.511904761904762,
+        "macro_mrr": 0.9375,
+        "per_category_p5": {
+          "count": 0.2,
+          "find": 0.4,
+          "track": 0.4000000000000001,
+          "action": 0.0,
+          "filter": 0.4
+        },
+        "n_test": 10
+      },
+      "per_intent_tuned": {
+        "macro_p5": 0.35000000000000003,
+        "macro_r10": 1.0,
+        "macro_f1": 0.29545454545454547,
+        "macro_f1_paper": 0.511904761904762,
+        "macro_mrr": 0.9166666666666666,
+        "per_category_p5": {
+          "count": 0.2,
+          "find": 0.4,
+          "track": 0.4000000000000001,
+          "action": 0.0,
+          "filter": 0.4
+        },
+        "n_test": 10
+      },
+      "fixed_0.0": {
+        "macro_p5": 0.0,
+        "macro_r10": 0.041666666666666664,
+        "macro_f1": 0.01388888888888889,
+        "macro_f1_paper": 0.0,
+        "macro_mrr": 0.035444432191643845,
+        "per_category_p5": {
+          "count": 0.0,
+          "find": 0.0,
+          "track": 0.0,
+          "action": 0.0,
+          "filter": 0.0
+        },
+        "n_test": 10
+      },
+      "fixed_0.3": {
+        "macro_p5": 0.09583333333333334,
+        "macro_r10": 0.3020833333333333,
+        "macro_f1": 0.08175505050505051,
+        "macro_f1_paper": 0.14285714285714288,
+        "macro_mrr": 0.43652827452369525,
+        "per_category_p5": {
+          "count": 0.1,
+          "find": 0.0,
+          "track": 0.13333333333333333,
+          "action": 0.0,
+          "filter": 0.15000000000000002
+        },
+        "n_test": 10
+      },
+      "fixed_0.5": {
+        "macro_p5": 0.2,
+        "macro_r10": 0.6041666666666666,
+        "macro_f1": 0.18244949494949497,
+        "macro_f1_paper": 0.2956349206349207,
+        "macro_mrr": 0.6044871794871794,
+        "per_category_p5": {
+          "count": 0.1,
+          "find": 0.2,
+          "track": 0.20000000000000004,
+          "action": 0.0,
+          "filter": 0.30000000000000004
+        },
+        "n_test": 10
+      },
+      "fixed_0.7": {
+        "macro_p5": 0.35000000000000003,
+        "macro_r10": 1.0,
+        "macro_f1": 0.29545454545454547,
+        "macro_f1_paper": 0.511904761904762,
+        "macro_mrr": 0.8854166666666666,
+        "per_category_p5": {
+          "count": 0.2,
+          "find": 0.4,
+          "track": 0.4000000000000001,
+          "action": 0.0,
+          "filter": 0.4
+        },
+        "n_test": 10
+      },
+      "fixed_1.0": {
+        "macro_p5": 0.35000000000000003,
+        "macro_r10": 1.0,
+        "macro_f1": 0.29545454545454547,
+        "macro_f1_paper": 0.511904761904762,
+        "macro_mrr": 1.0,
+        "per_category_p5": {
+          "count": 0.2,
+          "find": 0.4,
+          "track": 0.4000000000000001,
+          "action": 0.0,
+          "filter": 0.4
+        },
+        "n_test": 10
+      }
+    }
+  },
+  "significance": {
+    "minmax": {
+      "best_fixed_method": "fixed_0.7",
+      "adaptive_vs_best_fixed": {
+        "delta_p5_pooled": 0.0,
+        "lo_pooled": 0.0,
+        "hi_pooled": 0.0,
+        "p_pooled": 1.0,
+        "delta_p5_grouped": 0.0,
+        "lo_grouped": 0.0,
+        "hi_grouped": 0.0,
+        "p_grouped": 1.0,
+        "delta_p5_macro": 0.0,
+        "lo_macro": 0.0,
+        "hi_macro": 0.0,
+        "p_macro": 1.0
+      },
+      "combMAX_vs_prior": {
+        "delta_p5_pooled": 0.0,
+        "lo_pooled": 0.0,
+        "hi_pooled": 0.0,
+        "p_pooled": 1.0,
+        "delta_p5_grouped": 0.0,
+        "lo_grouped": 0.0,
+        "hi_grouped": 0.0,
+        "p_grouped": 1.0,
+        "delta_p5_macro": 0.0,
+        "lo_macro": 0.0,
+        "hi_macro": 0.0,
+        "p_macro": 1.0
+      }
+    },
+    "zscore": {
+      "best_fixed_method": "fixed_0.9",
+      "adaptive_vs_best_fixed": {
+        "delta_p5_pooled": 0.0,
+        "lo_pooled": 0.0,
+        "hi_pooled": 0.0,
+        "p_pooled": 1.0,
+        "delta_p5_grouped": 0.0,
+        "lo_grouped": 0.0,
+        "hi_grouped": 0.0,
+        "p_grouped": 1.0,
+        "delta_p5_macro": 0.0,
+        "lo_macro": 0.0,
+        "hi_macro": 0.0,
+        "p_macro": 1.0
+      },
+      "combMAX_vs_prior": {
+        "delta_p5_pooled": 0.0,
+        "lo_pooled": 0.0,
+        "hi_pooled": 0.0,
+        "p_pooled": 1.0,
+        "delta_p5_grouped": 0.0,
+        "lo_grouped": 0.0,
+        "hi_grouped": 0.0,
+        "p_grouped": 1.0,
+        "delta_p5_macro": 0.0,
+        "lo_macro": 0.0,
+        "hi_macro": 0.0,
+        "p_macro": 1.0
+      }
+    }
+  },
+  "verdict": "adaptive_vs_best_fixed=TIE-HOLDS; combMAX_zscore_survives=False",
+  "verdict_adaptive_vs_best_fixed": "TIE-HOLDS",
+  "combMAX_zscore_survives": false
+}
