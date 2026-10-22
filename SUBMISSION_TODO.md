@@ -84,6 +84,9 @@ opencode models, OpenAI-compatible)
 | E13 | The latency provenance was moved into the table caption (the audit wanted it stated, not necessarily in the body). The substance is intact: the "Sem. only" column "mixes the 512-d scene index with the 1152-d person index (mean 108.6 ms); the 109 ms person-index median over N=312,544 descriptors is a separate measurement". | **DONE** | `INDICON2026Conference.tex` (Table caption) |
 | E14 | Numeric-multiset diff against the pre-compression revision: no value lost (the ten tokens whose count fell are duplicate occurrences and all ten still appear elsewhere). | **DONE** | verified |
 | E15 | The opencode runtime's own provider auth recovered mid-session, so a *fresh* parse is possible again. The end-to-end track could be re-measured from scratch. | **DONE** | fresh parse verified (5.5 s) |
+| E16 | The independent review's restraint check was broken by a concurrent agent: it had re-introduced the released-subset fusion ordering numbers (`0.451`, `0.484`) that the review verified as absent from both the tex and the PDF text. Reconciled: the paper now states the *fact* of the inversion and its cause (which the later evidence audit M6 requires) without quoting the numbers (which the review forbids). Both checks pass. | **DONE** | `INDICON2026Conference.tex` (§C2, Released-subset scope) |
+| E17 | Review nit n1 (the C1 competitor's feature list) resolved: the two extra binary flags in `eval_alpha_competitors.py` are exact duplicates of the intent one-hot columns, so the paper's list is complete. | **DONE** | verified numerically |
+| E18 | Review nit n2 (rule-correctness 0.91 vs zone accuracy 0.88) is reconcilable: the two are consistent whenever the zone field is named on at most 45 of the 60 utterances. Deployment data is not reproducible from the release, so no claim was changed. | **DONE** | author-awareness only, as the review intended |
 
 
 
