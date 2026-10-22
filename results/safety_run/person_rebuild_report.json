@@ -1,0 +1,33 @@
+{
+  "src_dir": "S:\\college\\ai-surveillance\\data\\index\\faiss_person",
+  "dst_dir": "S:\\college\\ai-surveillance\\data\\index\\faiss_person_nogender",
+  "n_total": 1778,
+  "n_processed": 1778,
+  "sample_only": false,
+  "weights": {
+    "visual": 0.6,
+    "text": 0.4
+  },
+  "reconstruction_max_abs_diff": 2.086162567138672e-07,
+  "reconstruction_ok_tol_1e_4": true,
+  "reconstruction_degenerate_rows": [
+    1,
+    143
+  ],
+  "gender_rows_before": 418,
+  "gender_rows_after_strip": 0,
+  "texts_changed_by_strip": 418,
+  "verify_only": false,
+  "new_degenerate_rows": [],
+  "drift": {
+    "mean_cosine_old_vs_new": 0.9967443097739199,
+    "min_cosine_old_vs_new": 0.0,
+    "mean_cosine_unchanged_text_rows": 0.9992618230943356,
+    "mean_cosine_changed_text_rows": 0.9885533573438593
+  },
+  "wrote": {
+    "index": "S:\\college\\ai-surveillance\\data\\index\\faiss_person_nogender\\index.bin",
+    "meta": "S:\\college\\ai-surveillance\\data\\index\\faiss_person_nogender\\meta.json",
+    "ntotal": 1778
+  }
+}

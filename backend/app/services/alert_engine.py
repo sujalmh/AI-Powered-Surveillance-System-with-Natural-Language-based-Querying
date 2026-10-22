@@ -221,6 +221,18 @@ def evaluate_rule(rule_doc: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             matched_count += 1
 
     if matches_count_condition(matched_count, rule.get("count")):
+        if rule_requires_approval(rule_doc) and not is_alert_approved(rule_doc):
+            return {
+                "alert_id": rule_doc["_id"],
+                "triggered_at": _now_utc_iso(),
+                "camera_id": docs[0]["camera_id"] if docs else None,
+                "event_id": None,
+                "detection_ids": [str(d["_id"]) for d in docs[:10]],
+                "snapshot": None,
+                "clip": None,
+                "status": "pending_approval",
+                "message": f"Rule '{rule_doc.get('name')}' staged for operator approval",
+            }
         return {
             "alert_id": rule_doc["_id"],
             "triggered_at": _now_utc_iso(),
@@ -334,6 +346,111 @@ def _insert_alert_log(rule_doc: Dict[str, Any], camera_id: int, payload: Dict[st
     )
 
 
+def rule_requires_approval(rule_doc: Dict[str, Any]) -> bool:
+    rule = rule_doc.get("rule", {}) or {}
+    flag = rule.get("requires_approval")
+    if flag is None:
+        try:
+            from backend.app.services.alert_validator import default_requires_approval
+        except Exception:
+            return False
+        return bool(default_requires_approval(rule.get("event")))
+    return bool(flag)
+
+
+def is_alert_approved(rule_doc: Dict[str, Any]) -> bool:
+    if rule_doc.get("approved") is True:
+        return True
+    return str(rule_doc.get("approval_status") or "").lower() == "approved"
+
+
+def _insert_pending_approval_log(
+    rule_doc: Dict[str, Any], camera_id: int, payload: Dict[str, Any]
+) -> None:
+    alert_logs_col.insert_one(
+        {
+            "alert_id": rule_doc["_id"],
+            "triggered_at": _now_utc_iso(),
+            "camera_id": camera_id,
+            "status": "pending_approval",
+            "snapshot": payload.get("snapshot"),
+            "message": payload.get("message", "staged for operator approval"),
+            "payload": payload,
+            "severity": rule_doc.get("severity", "info"),
+        }
+    )
+
+
+def _fire_or_stage(
+    rule_doc: Dict[str, Any], camera_id: int, payload: Dict[str, Any]
+) -> bool:
+    """Fire a normal alert log, or stage a pending-approval log instead.
+
+    When the rule requires approval and is not yet approved, a single
+    ``pending_approval`` log is inserted (rate-limited by the rule cooldown)
+    and no normal alert log is written, so downstream side effects
+    (snapshot/push/store) keyed off normal logs never run.  Returns True
+    only when a normal alert log was written.
+    """
+    rid = str(rule_doc.get("_id"))
+    try:
+        cooldown = float(rule_doc.get("cooldown_sec", 60))
+    except (TypeError, ValueError):
+        cooldown = 60.0
+    if rule_requires_approval(rule_doc) and not is_alert_approved(rule_doc):
+        if _cooldown_ok(rid, camera_id, cooldown):
+            _insert_pending_approval_log(rule_doc, camera_id, payload)
+        return False
+    if not _cooldown_ok(rid, camera_id, cooldown):
+        return False
+    _insert_alert_log(rule_doc, camera_id, payload)
+    return True
+
+
+def approve_alert(rule_id: Any, actor: str = "operator") -> Dict[str, Any]:
+    try:
+        res = alerts_col.update_one(
+            {"_id": rule_id},
+            {"$set": {"approved": True, "approval_status": "approved",
+                       "approved_by": actor, "approved_at": _now_utc_iso()}},
+        )
+        matched = getattr(res, "matched_count", 1)
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    if not matched:
+        return {"ok": False, "error": "alert not found"}
+    try:
+        alert_logs_col.insert_one(
+            {"alert_id": rule_id, "triggered_at": _now_utc_iso(),
+             "status": "approved", "message": f"approved by {actor}"}
+        )
+    except Exception:
+        pass
+    return {"ok": True, "alert_id": rule_id, "status": "approved"}
+
+
+def reject_alert(rule_id: Any, actor: str = "operator") -> Dict[str, Any]:
+    try:
+        res = alerts_col.update_one(
+            {"_id": rule_id},
+            {"$set": {"approved": False, "approval_status": "rejected",
+                       "approved_by": actor, "approved_at": _now_utc_iso()}},
+        )
+        matched = getattr(res, "matched_count", 1)
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    if not matched:
+        return {"ok": False, "error": "alert not found"}
+    try:
+        alert_logs_col.insert_one(
+            {"alert_id": rule_id, "triggered_at": _now_utc_iso(),
+             "status": "rejected", "message": f"rejected by {actor}"}
+        )
+    except Exception:
+        pass
+    return {"ok": True, "alert_id": rule_id, "status": "rejected"}
+
+
 # ---------------------------------------------------------------------
 # Main Evaluation Engine
 # ---------------------------------------------------------------------
@@ -414,8 +531,8 @@ def evaluate_realtime(
             cnt = presence.get(want_name.lower(), 0)
             min_count = float(rule.get("min_count", 5))
 
-            if cnt >= min_count and _cooldown_ok(rid, camera_id, cooldown):
-                _insert_alert_log(
+            if cnt >= min_count:
+                _fire_or_stage(
                     rd,
                     camera_id,
                     {
@@ -443,8 +560,8 @@ def evaluate_realtime(
                         except Exception:
                             pass
 
-            if triggered and _cooldown_ok(rid, camera_id, cooldown):
-                _insert_alert_log(
+            if triggered:
+                _fire_or_stage(
                     rd,
                     camera_id,
                     {
@@ -456,10 +573,8 @@ def evaluate_realtime(
 
         # ---------------- Fight ----------------
         if rule.get("behavior") == "fight":
-            if _fight_heuristic(_person_boxes(objects), energy_hist) and _cooldown_ok(
-                rid, camera_id, cooldown
-            ):
-                _insert_alert_log(
+            if _fight_heuristic(_person_boxes(objects), energy_hist):
+                _fire_or_stage(
                     rd,
                     camera_id,
                     {
@@ -479,9 +594,9 @@ def evaluate_realtime(
             # No specific object — sum all detected objects
             cnt = sum(presence.values())
 
-        if matches_count_condition(cnt, rule.get("count")) and _cooldown_ok(rid, camera_id, cooldown):
+        if matches_count_condition(cnt, rule.get("count")):
             label = want_name or "objects"
-            _insert_alert_log(
+            _fire_or_stage(
                 rd,
                 camera_id,
                 {

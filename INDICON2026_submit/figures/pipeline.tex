@@ -1,0 +1,48 @@
+% Figure 1 — system dataflow for INDICON 850.
+% Input this file inside a figure environment (see area report for the block).
+% Self-contained: needs \usepackage{tikz} and
+% \usetikzlibrary{arrows.meta,backgrounds,fit,positioning,shapes.geometric} in the preamble.
+% Scales itself to \columnwidth so the 6-page budget is preserved.
+\resizebox{\columnwidth}{!}{%
+\begin{tikzpicture}[
+  node distance=4mm,
+  font=\scriptsize,
+  >=Stealth,
+  box/.style={draw, rounded corners=2pt, align=center, inner sep=2.5pt, minimum height=9mm},
+  data/.style={draw, align=center, inner sep=2.5pt, minimum height=9mm},
+  lbl/.style={font=\tiny, align=center},
+]
+% --- Lane 1: capture / perceive / index ---
+\node[box] (cap) {capture\\4$\times$1080p, 2\,FPS};
+\node[box, right=of cap] (per) {perceive\\YOLOv11m-seg / OSNet\\PAR attrs + colour};
+\node[data, right=of per] (idx) {index\\scene FAISS 512-d\\person FAISS 1152-d\\MongoDB structured};
+% --- Lane 2: query / retrieve / rank ---
+\node[box, below=9mm of cap] (qry) {NL query};
+\node[box, right=of qry] (prs) {NL parser (Beam)\\$F$, $q_{\mathrm{sem}}$, $\iota$};
+\node[data, right=of prs] (br) {branches\\struct.\ $R_s$\\sem.\ $R_v$};
+\node[box, right=of br] (mrg) {adaptive merge\\$\alpha(F,\iota,n_s,n_v)$};
+\node[box, right=of mrg] (prk) {post-rank\\recency + MMR$^*$};
+\node[box, right=of prk] (top) {top-$k$ clips};
+% --- Side: alert compiler + approval gate ---
+\node[box, dashed, below=9mm of prk] (alr) {alert compiler\\9-tuple, schema-validated\\clarify/abstain};
+\node[box, dashed, right=of alr] (apv) {approval gate\{\tt requires\_approval\}\\pending queue};
+% --- Arrows ---
+\draw[->] (cap) -- (per);
+\draw[->] (per) -- (idx);
+\draw[->] (idx) -- (br);
+\draw[->] (qry) -- (prs);
+\draw[->] (prs) -- (br);
+\draw[->] (br) -- (mrg);
+\draw[->] (mrg) -- (prk);
+\draw[->] (prk) -- (top);
+\draw[->, dashed] (prs) -- (alr);
+\draw[->, dashed] (alr) -- (apv);
+\node[lbl, below=1mm of prk] {$^*$MMR off by default};
+% --- Release boundary: dashed fit around the replayed nodes ---
+\begin{scope}[on background layer]
+\node[draw, dashed, rounded corners=3pt, inner sep=3pt,
+  fit=(idx) (br) (mrg) (prk) (top),
+  label={{[font=\tiny\itshape]above:release boundary: single-camera track replays dashed nodes}}] {};	
+\end{scope}
+\end{tikzpicture}%
+}

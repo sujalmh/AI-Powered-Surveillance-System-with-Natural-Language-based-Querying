@@ -162,7 +162,7 @@ class Settings:
         self.ENABLE_ADAPTIVE_ALPHA: bool = os.getenv("ENABLE_ADAPTIVE_ALPHA", "true").lower() == "true"
         self.ENABLE_RECENCY_BOOST: bool = os.getenv("ENABLE_RECENCY_BOOST", "true").lower() == "true"
         self.ENABLE_ADAPTIVE_CONFIDENCE: bool = os.getenv("ENABLE_ADAPTIVE_CONFIDENCE", "true").lower() == "true"
-        self.ENABLE_RESULT_DIVERSITY: bool = os.getenv("ENABLE_RESULT_DIVERSITY", "true").lower() == "true"
+        self.ENABLE_RESULT_DIVERSITY: bool = os.getenv("ENABLE_RESULT_DIVERSITY", "false").lower() == "true"
         self.ENABLE_ADAPTIVE_GAPS: bool = os.getenv("ENABLE_ADAPTIVE_GAPS", "true").lower() == "true"
         self.ENABLE_TEMPORAL_OVERLAP: bool = os.getenv("ENABLE_TEMPORAL_OVERLAP", "true").lower() == "true"
         self.ENABLE_CLIP_EXPANSION: bool = os.getenv("ENABLE_CLIP_EXPANSION", "true").lower() == "true"
@@ -216,10 +216,13 @@ class Settings:
             "FACE_BLUR_ENABLED", "false"
         ).lower() == "true"
         # Gender is a soft attribute in the released detector.  Deployments
-        # that must not expose it can set INCLUDE_GENDER_ATTRIBUTES=false:
-        # captions/queries then omit it (the index itself is unchanged).
+        # must not expose it: INCLUDE_GENDER_ATTRIBUTES=false (the default)
+        # drops gender from generated captions/queries, and the released
+        # person index is rebuilt without gender text (see
+        # backend/scripts/rebuild_person_index.py) so stored attribute_text
+        # carries no gender term either.
         self.INCLUDE_GENDER_ATTRIBUTES: bool = os.getenv(
-            "INCLUDE_GENDER_ATTRIBUTES", "true"
+            "INCLUDE_GENDER_ATTRIBUTES", "false"
         ).lower() == "true"
 
     def default_model_for(self, provider: str) -> str:

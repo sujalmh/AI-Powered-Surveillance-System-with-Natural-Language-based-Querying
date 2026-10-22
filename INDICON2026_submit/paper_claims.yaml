@@ -1,0 +1,340 @@
+# Paper 850 — headline number -> evidence source map (plan E7, gate G1).
+# Every headline number in the REVISED paper must map to one measured JSON path
+# or to a deployment-table row. Deployment values (section `deployment`) are
+# RECORDED single-run measurements: they may appear ONLY inside the deployment
+# study table, never in the abstract / contributions / conclusion.
+# Schema (minimal subset, parsed without PyYAML by check_paper_numbers.py):
+#   claims: [{id, tex:[literals], kind, source:{file, path|num/den|lo/hi, round},
+#             near:<id> (same-line requirement, for CI endpoints)}]
+#   kinds: value | fraction | ci | sd (mean +/- SD rendered as "0.417 +/- < 0.001")
+version: 1
+tex: INDICON2026_submit/INDICON2026Conference.tex
+
+claims:
+  # ---- C1: deterministic alert compiler (released benchmark) ----
+  - id: C1-clean-test
+    tex: [30/30]
+    kind: fraction
+    source:
+      file: results/alert_results.json
+      num: splits.test.clean.rule_correct
+      den: splits.test.clean.n
+  - id: C1-stress-test
+    tex: [30/30]
+    kind: fraction
+    source:
+      file: results/alert_results.json
+      num: splits.test.stress.clarified
+      den: splits.test.stress.n
+  - id: C1-false-mat
+    tex: ["0"]
+    kind: value
+    source:
+      file: results/alert_results.json
+      path: splits.test.stress.false_materializations
+      round: 0
+
+  # ---- C2: heterogeneous person descriptor (released track P@5) ----
+  - id: C2-concat-p5
+    tex: [0.427]
+    kind: value
+    source:
+      file: results/fusion_results.json
+      path: test.retrieval.concat.p5
+      round: 3
+  - id: C2-concat-r10
+    tex: [0.311]
+    kind: value
+    source:
+      file: results/fusion_results.json
+      path: test.retrieval.concat.r10
+      round: 3
+  - id: C2-concat-f1
+    tex: [0.309]
+    kind: value
+    source:
+      file: results/fusion_results.json
+      path: test.retrieval.concat.f1_paper
+      round: 3
+  - id: C2-concat-ci
+    tex: ["[0.410, 0.445]"]
+    kind: ci
+    source:
+      file: results/fusion_results.json
+      lo: test.retrieval.concat.p5_ci.0
+      hi: test.retrieval.concat.p5_ci.1
+      round: 3
+  - id: C2-visual-p5
+    tex: [0.407]
+    kind: value
+    source:
+      file: results/fusion_results.json
+      path: test.retrieval.visual.p5
+      round: 3
+  - id: C2-rrf-p5
+    tex: [0.361]
+    kind: value
+    source:
+      file: results/fusion_results.json
+      path: test.retrieval.rrf.p5
+      round: 3
+  - id: C2-zeropad-p5
+    tex: [0.428]
+    kind: value
+    source:
+      file: results/fusion_results.json
+      path: test.retrieval.zero_pad.p5
+      round: 3
+  - id: C2-learned-p5
+    tex: [0.432]
+    kind: value
+    source:
+      file: results/fusion_results.json
+      path: test.retrieval.learned_proj.p5
+      round: 3
+  - id: C2-randproj-p5
+    tex: [0.417]
+    kind: value
+    source:
+      file: results/fusion_results.json
+      path: test.retrieval.randproj.p5
+      round: 3
+  - id: C2-gated-p5
+    tex: [0.444]
+    kind: value
+    source:
+      file: results/fusion_results.json
+      path: test.retrieval.gated.p5
+      round: 3
+
+  # ---- C3: released control (protocol-matched, 50 tune / 100 test) ----
+  - id: C3-adaptive
+    tex: [0.538]
+    kind: value
+    source:
+      file: results/retrieval_control_results.json
+      path: test.minmax.adaptive.macro.p5
+      round: 3
+  - id: C3-fixed07
+    tex: [0.538]
+    kind: value
+    source:
+      file: results/retrieval_control_results.json
+      path: test.minmax.fixed_0.7.macro.p5
+      round: 3
+  - id: C3-percat-count
+    tex: [0.390]
+    kind: value
+    source:
+      file: results/retrieval_control_results.json
+      path: test.minmax.adaptive.per_category.count.p5
+      round: 3
+  - id: C3-percat-find
+    tex: [0.920]
+    kind: value
+    source:
+      file: results/retrieval_control_results.json
+      path: test.minmax.adaptive.per_category.find.p5
+      round: 3
+  - id: C3-percat-track
+    tex: [0.810]
+    kind: value
+    source:
+      file: results/retrieval_control_results.json
+      path: test.minmax.adaptive.per_category.track.p5
+      round: 3
+  - id: C3-percat-action
+    tex: [0.090]
+    kind: value
+    source:
+      file: results/retrieval_control_results.json
+      path: test.minmax.adaptive.per_category.action.p5
+      round: 3
+  - id: C3-percat-filter
+    tex: [0.480]
+    kind: value
+    source:
+      file: results/retrieval_control_results.json
+      path: test.minmax.adaptive.per_category.filter.p5
+      round: 3
+  - id: C3-fixed00
+    tex: [0.048]
+    kind: value
+    source:
+      file: results/retrieval_control_results.json
+      path: test.minmax.fixed_0.0.macro.p5
+      round: 3
+  - id: C3-fixed03
+    tex: [0.380]
+    kind: value
+    source:
+      file: results/retrieval_control_results.json
+      path: test.minmax.fixed_0.3.macro.p5
+      round: 3
+  - id: C3-fixed05
+    tex: [0.534]
+    kind: value
+    source:
+      file: results/retrieval_control_results.json
+      path: test.minmax.fixed_0.5.macro.p5
+      round: 3
+  - id: C3-fixed10
+    tex: [0.520]
+    kind: value
+    source:
+      file: results/retrieval_control_results.json
+      path: test.minmax.fixed_1.0.macro.p5
+      round: 3
+  - id: C3-perintent
+    tex: [0.536]
+    kind: value
+    source:
+      file: results/retrieval_control_results.json
+      path: test.minmax.per_intent_tuned.macro.p5
+      round: 3
+  - id: C3-paperlookup
+    tex: [0.428]
+    kind: value
+    source:
+      file: results/retrieval_control_results.json
+      path: test.minmax.paper_lookup.macro.p5
+      round: 3
+  - id: C3-confab
+    tex: [0.536]
+    kind: value
+    source:
+      file: results/retrieval_control_results.json
+      path: test.minmax.conf_only.macro.p5
+      round: 3
+  - id: C3-ci
+    tex: ["[0.349, 0.692]"]
+    kind: ci
+    source:
+      file: results/retrieval_control_results.json
+      lo: test.minmax.adaptive.ci.p5_grouped_lo
+      hi: test.minmax.adaptive.ci.p5_grouped_hi
+      round: 3
+  - id: C3-zscore-adaptive
+    tex: [0.524]
+    kind: value
+    source:
+      file: results/retrieval_control_results.json
+      path: normalization_comparison.adaptive.zscore_macro_p5
+      round: 3
+  - id: C3-zscore-fixed07
+    tex: [0.522]
+    kind: value
+    source:
+      file: results/retrieval_control_results.json
+      path: normalization_comparison.fixed_0.7.zscore_macro_p5
+      round: 3
+
+  # ---- C3 end-to-end (parser-driven) ----
+  - id: C3-e2e-adaptive
+    tex: [0.450]
+    kind: value
+    source:
+      file: results/end_to_end_results.json
+      path: test.adaptive.macro
+      round: 3
+  - id: C3-e2e-fixed05
+    tex: [0.448]
+    kind: value
+    source:
+      file: results/end_to_end_results.json
+      path: test.fixed_0.5.macro
+      round: 3
+  - id: C3-e2e-p
+    tex: [0.80]
+    kind: value
+    source:
+      file: results/end_to_end_results.json
+      path: significance.p
+      round: 2
+  - id: C3-oracle
+    tex: [0.538]
+    kind: value
+    source:
+      file: results/end_to_end_results.json
+      path: oracle_delta.control_macro_p5
+      round: 3
+  - id: C3-track-gap
+    tex: ["-0.28"]
+    kind: value
+    source:
+      file: results/end_to_end_results.json
+      path: oracle_delta.per_category.track.delta
+      round: 2
+
+  # ---- Post-ranking ablation ----
+  - id: ABL-base
+    tex: [0.538]
+    kind: value
+    source:
+      file: results/ablation_results.json
+      path: [summary, "base (no recency, no MMR)", macro]
+      round: 3
+  - id: ABL-mmr
+    tex: [0.400]
+    kind: value
+    source:
+      file: results/ablation_results.json
+      path: [summary, "MMR only", macro]
+      round: 3
+
+# Deployment study rows: RECORDED single-run measurements, not re-computable.
+# Allowed ONLY inside the deployment study table (caption mentions "deployment").
+# Banned from abstract, contributions, and conclusion (gate G0).
+deployment:
+  - id: DEP-routing
+    tex: [0.828]
+    note: 4-camera adaptive macro P@5 (recorded)
+  - id: DEP-routing-base
+    tex: [0.666]
+    note: 4-camera best fixed-alpha macro P@5 (recorded)
+  - id: DEP-fusion
+    tex: [0.807]
+    kind: value
+    note: 4-camera concat F5,10 (recorded)
+  - id: DEP-fusion-rrf
+    tex: [0.785]
+    kind: value
+    note: 4-camera RRF F5,10 (recorded)
+  - id: DEP-fusion-vis
+    tex: ["0.700"]
+    kind: value
+    note: 4-camera visual F5,10 (recorded)
+  - id: DEP-alert
+    tex: [91%]
+    kind: value
+    note: 60-utterance deployment rule-correctness, LLM materializer (recorded)
+  - id: DEP-gallery
+    tex: ["312,544"]
+    kind: value
+    note: deployment person-descriptor count (recorded)
+  - id: DEP-lat-person
+    tex: ["109"]
+    kind: value
+    units: ms
+    note: person-index median ms over N=312,544 (recorded)
+  - id: DEP-lat-e2e
+    tex: ["6.0"]
+    kind: value
+    units: s
+    note: operator-in-the-loop mean latency (recorded)
+  - id: DEP-lat-find
+    tex: ["12.0"]
+    kind: value
+    units: s
+    note: Find-category latency (recorded)
+
+# Tokens the checker must never flag (section/equation numbers, years, hardware).
+# Headline claims above are NOT whitelisted. Unit-bearing deployment numbers
+# (91%, 109 ms, 6.0 s, 12.0 s) are intentionally NOT whitelisted: outside the
+# deployment table they are failures, not background numbers.
+whitelist:
+  - \b(19|20)\d{2}\b
+  - \b850\b
+  - \b1080p\b
+  - \\(sub)?section
+  - Eq\.|Table|Fig\.|Lemma|Observation

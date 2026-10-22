@@ -34,6 +34,13 @@ THRESHOLD_OPS = {">", ">=", "<", "<=", "==", "between"}
 THRESHOLD_UNITS = {"persons", "vehicles", "objects", "seconds"}
 MAX_CADENCE_HZ = 10.0
 
+CONSEQUENTIAL_EVENTS = {"crowd", "loiter", "fight", "enter", "zone"}
+APPROVAL_AUTH_FLAG = "approval_authorized"
+
+
+def default_requires_approval(event) -> bool:
+    return str(event or "").lower() in CONSEQUENTIAL_EVENTS
+
 # Denotational semantics of the 9-tuple alert grammar (C3' verified
 # compiler).  Each event denotes a predicate over the timestamped detection
 # stream; a rule fires when its predicate holds inside ``area`` during
@@ -236,6 +243,15 @@ def validate_rule(rule: Dict[str, Any]) -> Tuple[bool, List[str], List[str]]:
 
     if "threshold" not in rule and "count" in rule:
         warnings.append("legacy count-only rule; threshold inferred for validation")
+
+    requires_approval = rule.get("requires_approval")
+    if requires_approval is None:
+        pass
+    elif not isinstance(requires_approval, bool):
+        errors.append("requires_approval must be a boolean")
+    elif requires_approval is False:
+        if not rule.get(APPROVAL_AUTH_FLAG):
+            errors.append("requires_approval=false needs explicit approval_authorized flag")
 
     return (len(errors) == 0, errors, warnings)
 
