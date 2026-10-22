@@ -52,7 +52,6 @@ INCLUDE: List[Tuple[str, str]] = [
 INCLUDE_FILES: List[str] = [
     "README.md",
     "VERIFICATION.md",
-    "RESPONSE_TO_REVIEWERS.md",
     "requirements_utf8.txt",
     "backend/requirements.txt",
     "INDICON2026_submit/INDICON2026Conference.tex",

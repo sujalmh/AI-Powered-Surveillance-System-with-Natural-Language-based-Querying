@@ -100,8 +100,8 @@ An independent reviewer agent audited the finished paper in its own worktree
 |---|---|---|
 | `§C3` heading had a mojibake em-dash from a Windows encoding round-trip (rendered as "C3 A-third-party-char alert authoring") | blocker | fixed to `C3 -- alert authoring`; the PDF now renders "E. C3 – alert authoring"; a repo-wide scan of 272 tracked text files finds no remaining mojibake, and the `.tex` is pure ASCII with no BOM |
 | Limitations (iii) still asserted an LLM alert extractor and a "6-pp drop with local 7B models" that no artefact supports | major | reworded: the 0.91 deployment result is the recorded measurement of a held-out study whose per-utterance export was not preserved; the 0.91 claim itself is unchanged |
-| `RESPONSE_TO_REVIEWERS.md` R1-4 claimed the paper reports the z-score variant; the paper only states per-query min-max normalisation | major | corrected: the paired min-max/z-score deltas are reported in `results/retrieval_control_tables.md` |
-| "14 soft-weight triples" in two docs; the sweep has 16 points | major (docs) | corrected to 16 in `RESPONSE_TO_REVIEWERS.md` and `results/README.md`; the paper already said 16 |
+| Former review-response R1-4 claimed the paper reports the z-score variant; the paper only states per-query min-max normalisation | major | corrected: the paired min-max/z-score deltas are reported in `results/retrieval_control_tables.md` |
+| "14 soft-weight triples" in two docs; the sweep has 16 points | major (docs) | corrected to 16 in `results/README.md` (and the since-removed review-response letter); the paper already said 16 |
 | raw-benchmark "best fixed 0.568" was ambiguous (tune-selected vs oracle 0.578) | minor | reworded in `PAPER_CHANGES.md` |
 | conclusion said the deployment numbers "can be checked" | minor | reworded to "the code paths behind the deployment numbers can be exercised end-to-end" |
 

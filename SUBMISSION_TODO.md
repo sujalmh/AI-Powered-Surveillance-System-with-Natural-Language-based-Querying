@@ -116,7 +116,7 @@ opencode models, OpenAI-compatible)
 | F2 | Deployment CIs/p-values labelled recorded-not-recomputable; significance claimed only on released track (grouped + Holm); Statistical protocol updated | **DONE** |
 | F3 | MMR/recency 2×2 ablation (`eval_ablation.py` → `results/ablation_*`): recency Δ 0.000 (inert), production MMR −0.138 (p<0.0007); Limitations (ii) replaced | **DONE** |
 | F4 | C2: Add(proj.) illustrative single-seed + RRF margin fragile; 5-fold CV over pseudo-tracks in `eval_fusion.py`; released track rebuilt on metadata-formed tracks (pair-AUC primary) with gated reported as ablation only; (0.6,0.4) 9-point grid on 50 pairs disclosed, no CV | **DONE** |
-| F5 | Public Re-ID probe time-boxed → case-study fallback (no download, no new claim; documented in RESPONSE_TO_REVIEWERS.md) | **DONE** (fallback-2; attempt measured: official repo URL 404, only unofficial mirrors ≤9 likes, SigLIP weights uncached, CPU lower bound 0.05 s/img → 60–120 min all-in over ~30 min budget) |
+| F5 | Public Re-ID probe time-boxed → case-study fallback (no download, no new claim; documented in the fusion provenance record, `results/fusion_results.json` → `provenance`) | **DONE** (fallback-2; attempt measured: official repo URL 404, only unofficial mirrors ≤9 likes, SigLIP weights uncached, CPU lower bound 0.05 s/img → 60–120 min all-in over ~30 min budget) |
 | F6 | Counting: EM/MAE (0.10/2.20) stated as primary counting-ability measure; count-P@5 kept as supporting-clip retrieval | **DONE** |
 | F7 | C1: specified-field accuracy measured (test sev 7/7, cad 2/2, cool 1/1); 91% stays LLM-backed deployment study; 120-set closed-vocabulary regression; release probes (compositional 9/9 vs 51/51, oracle turns 1.08 vs 2.58, fuzz 0/0/0) | **DONE** |
 | F8 | Related work: +Bruch 2022 (b33), +DAT per-query-α 2025 (b34), +CLIP-ReID 2023 (b35); −b3/−b20/−b22 generics; 15 refs all cited; undemonstrated-scope narrowed | **DONE** |
@@ -135,7 +135,7 @@ opencode models, OpenAI-compatible)
 | D5 | `check_release.py` verifies all of the above (11 checks) | **DONE** |
 | D6 | Parse caches git-ignored as regenerable artefacts | **DONE** |
 | D7 | Full test suite green (193 tests) | **DONE** |
-| D8 | Response-to-reviewers letter records the audit corrections | **DONE** |
+| D8 | ~~Response-to-reviewers letter records the audit corrections~~ — removed per author instruction (2026-10-22); audit corrections live in the paper, `results/` and `VERIFICATION.md` | **DONE** |
 
 ---
 
@@ -143,12 +143,8 @@ opencode models, OpenAI-compatible)
 
 | # | Item | Owner | Notes |
 |---|---|---|---|
-| O1 | **Public repository created: `github.com/sujalmh/intent-adaptive-hybrid-surveillance` (public, tests+harness+results, 193 green).** The paper still says the URL "is withheld from this preprint and given on acceptance" — updating the footnote/abstract/`VERIFICATION.md` to link the live repo is a paper change needing a rebuild + revalidation; author to decide. | human | Repo live; footnote link-up pending |
-| O2 | **ISBN / price footer.** `INDICON2026Conference.tex` line ~38 carries the kit's placeholder `979-8-3195-2581-9/26/$31.00`. It is verbatim from the author kit, but the organisers may require it removed or replaced. | human | Template boilerplate |
-| O3 | **Single vs double blind.** The paper carries named authors. Confirm the track; if double-blind, the author block and the acknowledgements need anonymising. | human | Affects the PDF |
-| O4 | **ORCID / contact metadata** for the submission portal. | human | Not in the PDF |
 | O5 | ~~Re-run the parser tracks after the opencode app re-authenticates.~~ **DONE** — the runtime re-authenticated, and the end-to-end track was then re-measured from scratch with a *second* free model (`opencode-go/minimax-m3.1-flash-free`, 150/150 parsed, 0 failures). It reproduces every number of the primary run to three decimals, so the shipped result does not depend on one parser. | — | `results/end_to_end_minimax_results.json`; stated in the paper's End-to-end paragraph |
-| O6 | **Upload** the camera-ready PDF, the source bundle and the supplementary zip to the submission portal, then attach `RESPONSE_TO_REVIEWERS.md`. | human | — |
+| O6 | **Upload** the camera-ready PDF, the source bundle and the supplementary zip to the submission portal. | human | — |
 
 ## BLOCKED — cannot be produced from the released artefact
 
