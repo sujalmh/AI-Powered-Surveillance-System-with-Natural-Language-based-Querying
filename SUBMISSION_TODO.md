@@ -177,3 +177,13 @@ Select-String -Path INDICON2026_submit\INDICON2026Conference.log -Pattern 'Outpu
 | G1 | Claim reorder strong-first (C1 alert compiler, C2 fusion, C3 routing rule) with Override-Gap Lemma, C3 null sentence, refreshed C2 numbers, C3 probe rows; still 6 pages, 0 overfull, 0 undefined, 15/15 refs | **DONE** (probe branch `novelty-strong-push`, fast-forward merged, branch deleted) |
 | G2 | Adopted: C2 metadata-track bias fix, C3 denotations/validator hardening/policy/probes | **DONE** |
 | G3 | Rejected as paper claims (kept as reported code+tables): C1 confidence superiority (null), gated superiority (mixed: retrieval win, AUC null, kfold 0–5) | **DONE** |
+
+## H. Subagent improvement rounds 2–3 (2026-10-22) — ADOPTED (minimax workers, pre-registered, verified)
+
+| # | Item | Status |
+|---|---|---|
+| H1 | C3 materializer patch (bound conjunction → `between`, zone-alias masking, inverted-`between` conflict, validator safety gate): adversarial fuzz 6,341+2,517 violations + 172 false-mats + 20/38 reproducers → all zero, 14/14 shipped invariants intact; residuals (two-zone conjunction, silent time-drops) stated in Limitations | **DONE** (`alert_materializer.py` + 4 regression tests; 197 green) |
+| H2 | C3 policy v2 (always-ask-threshold): 90/90 vs 75/90 (McNemar p=6.1e-05), turns 1.00 vs 1.08 at 2.00 vs 1.54 questions — reported as **ablation only** (sim-conditional win, live-flow cost); `clarification_policy.py` unchanged | **DONE** |
+| H3 | C2 calibrated rank gate (PIT commensuration, λ=2, calibration-frozen): retrieval P@5 0.472 vs 0.427 (Δ=+0.0447, Holm p<0.0007), pair-AUC parity (0.734 vs 0.726, n.s.), kfold 0.721 vs 0.699 (4/5 folds); supersedes uncalibrated gate | **DONE** |
+| H4 | C1 combMAX operator ablation (tune-frozen): zscore ceiling 0.538 (Δ=+0.014, Holm p=0.0013), minmax unchanged (Δ=0); production uses minmax — reported scoped, routing rule + Lemma untouched | **DONE** |
+| H5 | Paper holds 6 pages, 0 overfull, 0 undefined, 15/15 refs; public repo re-pushed single-commit with new harness + results | **DONE** |

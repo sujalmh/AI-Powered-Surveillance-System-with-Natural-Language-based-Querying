@@ -1,0 +1,360 @@
+{
+  "stage": "test",
+  "generated_at": "2026-10-22T11:14:30.789707+00:00",
+  "command": "python backend/scripts/eval_fusion_cal.py --stage test --n-boot 3000 --seeds 5",
+  "frozen_winner": {
+    "id": "F2_lam1",
+    "family": "F2",
+    "lam": 1.0,
+    "beta": 1.0,
+    "z_stats": {
+      "qv_mean": 0.4202989955831435,
+      "qv_sd": 0.10319670760752057,
+      "qt_mean": 0.6648622047244095,
+      "qt_sd": 0.3386381083310572
+    },
+    "selection_rule": "A1+A2+S3 (CV filter relaxed)",
+    "relaxed_filters": "CV filter relaxed",
+    "n_candidates": 15,
+    "n_admissible": 2,
+    "n_feasible": 0,
+    "spec_hash": "4ef151e2257501dd580a0cce061b9baa99f05746"
+  },
+  "frozen_winner_spec_hash": "4ef151e2257501dd580a0cce061b9baa99f05746",
+  "calibration_file": "S:\\college\\ai-surveillance\\results\\cal_gate_calibration.json",
+  "data": {
+    "n_detections": 1778,
+    "n_tracks": 280,
+    "n_test_tracks": 210,
+    "n_test_queries": 1190,
+    "n_test_pairs": 1008,
+    "n_calibration_pairs": 1008,
+    "quality_info": {
+      "qt_definition": "min(1, n_attribute_phrases/4)",
+      "qv_definition": "1/sqrt(max(1, nearest_scene_frame_person_count))",
+      "mean_qv": 0.4240398545350088,
+      "mean_qt": 0.6656355455568054,
+      "frames_without_match": 0
+    },
+    "gate_stats": {
+      "gw_min": 0.11939857149359032,
+      "gw_max": 0.95,
+      "gw_mean": 0.4985630538936255,
+      "gate_deviation": 0.14851953738733967,
+      "effective_visual_weight_mean": 0.5982756646723507,
+      "effective_text_weight_mean": 0.4011495568850995,
+      "released_gate_gw_mean": 0.32468415963849057,
+      "released_gate_effective_visual_weight_mean": 0.3896209915661886,
+      "released_gate_effective_text_weight_mean": 0.5402526722892076,
+      "static_effective_visual_weight_mean": 0.6,
+      "static_effective_text_weight_mean": 0.4
+    }
+  },
+  "test": {
+    "retrieval": {
+      "concat": {
+        "p5": 0.42739495798319327,
+        "r10": 0.3109577828800518,
+        "f1": 0.28866860857606186,
+        "f1_paper": 0.3087860381311794,
+        "n_queries": 1190
+      },
+      "gated": {
+        "p5": 0.44420168067226895,
+        "r10": 0.3065067480188002,
+        "f1": 0.28892752496499446,
+        "f1_paper": 0.3150648301285605,
+        "n_queries": 1190
+      },
+      "winner": {
+        "p5": 0.4695798319327731,
+        "r10": 0.3347156105725323,
+        "f1": 0.31130670197425364,
+        "f1_paper": 0.3392356282118321,
+        "n_queries": 1190
+      },
+      "randproj": {
+        "p5": 0.4165378151260504,
+        "p5_sd": 0.0001713956139022918,
+        "r10": 0.29725063741605096,
+        "f1": 0.2780566360058984,
+        "seeds": 5,
+        "n_queries": 1190,
+        "note": "point estimate only, not part of the Holm family"
+      }
+    },
+    "pairs": {
+      "concat": {
+        "threshold": 0.929707944393158,
+        "calibration": {
+          "threshold": 0.929707944393158,
+          "auc": 0.8551902242378433,
+          "accuracy": 0.7688492063492064,
+          "precision": 0.7049924357034796,
+          "recall": 0.9246031746031746,
+          "f1": 0.7999999999999999
+        },
+        "test": {
+          "threshold": 0.929707944393158,
+          "auc": 0.7262613378684807,
+          "accuracy": 0.6686507936507936,
+          "precision": 0.6124338624338624,
+          "recall": 0.9186507936507936,
+          "f1": 0.7349206349206349
+        }
+      },
+      "gated": {
+        "threshold": 0.8679237365722656,
+        "calibration": {
+          "threshold": 0.8679237365722656,
+          "auc": 0.8192279226505417,
+          "accuracy": 0.7698412698412699,
+          "precision": 0.6931818181818182,
+          "recall": 0.9682539682539683,
+          "f1": 0.8079470198675497
+        },
+        "test": {
+          "threshold": 0.8679237365722656,
+          "auc": 0.7114591206853111,
+          "accuracy": 0.6507936507936508,
+          "precision": 0.5962025316455696,
+          "recall": 0.9345238095238095,
+          "f1": 0.7279752704791345
+        }
+      },
+      "winner": {
+        "threshold": 0.8594483733177185,
+        "calibration": {
+          "threshold": 0.8594483733177185,
+          "auc": 0.823707955404384,
+          "accuracy": 0.753968253968254,
+          "precision": 0.6772853185595568,
+          "recall": 0.9702380952380952,
+          "f1": 0.797716150081566
+        },
+        "test": {
+          "threshold": 0.8594483733177185,
+          "auc": 0.7262692113882591,
+          "accuracy": 0.6418650793650794,
+          "precision": 0.589711417816813,
+          "recall": 0.9325396825396826,
+          "f1": 0.7225211375864719
+        }
+      }
+    },
+    "temporal_halves_pair_auc": {
+      "median_gallery_ts": 1772369119.936185,
+      "halves": {
+        "early": {
+          "n_pairs": 506,
+          "concat": 0.6563633520950594,
+          "gated": 0.6318323952470294,
+          "winner": 0.6541432145090682
+        },
+        "late": {
+          "n_pairs": 502,
+          "concat": 0.7953837844707078,
+          "gated": 0.7933663743804804,
+          "winner": 0.7949866565001906
+        }
+      },
+      "median_query_ts": 1772369157.575342,
+      "retrieval_p5_by_query_half": {
+        "early": {
+          "n_queries": 595,
+          "concat": 0.38184873949579834,
+          "gated": 0.3983193277310924,
+          "winner": 0.41277310924369753
+        },
+        "late": {
+          "n_queries": 595,
+          "concat": 0.4729411764705883,
+          "gated": 0.49008403361344544,
+          "winner": 0.5263865546218487
+        }
+      }
+    }
+  },
+  "significance": {
+    "retrieval_p5_winner_vs": {
+      "concat": {
+        "delta_p5": 0.042184873949579836,
+        "lo": 0.03226890756302521,
+        "hi": 0.05243697478991596,
+        "p": 0.0,
+        "holm_adjusted_p": 0.0,
+        "holm_reject": true
+      },
+      "gated": {
+        "delta_p5": 0.0253781512605042,
+        "lo": 0.01865546218487395,
+        "hi": 0.03210084033613446,
+        "p": 0.0,
+        "holm_adjusted_p": 0.0,
+        "holm_reject": true
+      }
+    },
+    "pair_auc_winner_vs": {
+      "concat": {
+        "delta_auc": 7.87351977837858e-06,
+        "lo": -0.02352214033761657,
+        "hi": 0.02362449609473416,
+        "p": 0.9873333333333333,
+        "holm_adjusted_p": 0.9873333333333333,
+        "holm_reject": false
+      },
+      "gated": {
+        "delta_auc": 0.01481009070294792,
+        "lo": -0.004066672965482465,
+        "hi": 0.033371913580246826,
+        "p": 0.13,
+        "holm_adjusted_p": 0.26,
+        "holm_reject": false
+      }
+    },
+    "holm_family": "winner vs concat, winner vs released gated (2 per task)",
+    "track_grouped_bootstrap_retrieval_p5_winner_vs": {
+      "concat": {
+        "delta_p5": 0.042184873949579836,
+        "lo": 0.023596419853539462,
+        "hi": 0.06162790697674419,
+        "p": 0.0,
+        "note": "track-grouped paired bootstrap (secondary statistic)"
+      },
+      "gated": {
+        "delta_p5": 0.0253781512605042,
+        "lo": 0.015371621621621624,
+        "hi": 0.03744531933508311,
+        "p": 0.0,
+        "note": "track-grouped paired bootstrap (secondary statistic)"
+      }
+    }
+  },
+  "kfold_by_track": {
+    "winner": {
+      "mean": 0.7018192609461107,
+      "sd": 0.03472488016449491,
+      "min": 0.6503978779840849,
+      "max": 0.7422360248447205,
+      "per_fold": [
+        0.6503978779840849,
+        0.6957446808510639,
+        0.7383647798742139,
+        0.6823529411764705,
+        0.7422360248447205
+      ]
+    },
+    "concat": {
+      "mean": 0.6994337804097216,
+      "sd": 0.03289287535623876,
+      "min": 0.6429708222811672,
+      "max": 0.729192546583851,
+      "per_fold": [
+        0.6429708222811672,
+        0.6813829787234043,
+        0.7238993710691823,
+        0.7197231833910035,
+        0.729192546583851
+      ]
+    },
+    "released_gated": {
+      "mean": 0.6638404487353867,
+      "sd": 0.03358230237836575,
+      "per_fold": [
+        0.6127320954907162,
+        0.6680851063829788,
+        0.7031446540880502,
+        0.6408304498269897,
+        0.6944099378881987
+      ]
+    },
+    "n_tracks": 280,
+    "per_fold_table": [
+      {
+        "fold": 0,
+        "winner": 0.6503978779840849,
+        "concat": 0.6429708222811672,
+        "released_gated": 0.6127320954907162
+      },
+      {
+        "fold": 1,
+        "winner": 0.6957446808510639,
+        "concat": 0.6813829787234043,
+        "released_gated": 0.6680851063829788
+      },
+      {
+        "fold": 2,
+        "winner": 0.7383647798742139,
+        "concat": 0.7238993710691823,
+        "released_gated": 0.7031446540880502
+      },
+      {
+        "fold": 3,
+        "winner": 0.6823529411764705,
+        "concat": 0.7197231833910035,
+        "released_gated": 0.6408304498269897
+      },
+      {
+        "fold": 4,
+        "winner": 0.7422360248447205,
+        "concat": 0.729192546583851,
+        "released_gated": 0.6944099378881987
+      }
+    ]
+  },
+  "reproduction_check_vs_released_fusion_results": {
+    "checked": true,
+    "source": "results\\fusion_results.json",
+    "retrieval_p5": {
+      "concat": {
+        "recomputed": 0.42739495798319327,
+        "released": 0.42739495798319327,
+        "abs_diff": 0.0
+      },
+      "gated": {
+        "recomputed": 0.44420168067226895,
+        "released": 0.44420168067226895,
+        "abs_diff": 0.0
+      }
+    },
+    "pair_auc_test": {
+      "concat": {
+        "recomputed": 0.7262613378684807,
+        "released": 0.7262613378684807,
+        "abs_diff": 0.0
+      },
+      "gated": {
+        "recomputed": 0.7114591206853111,
+        "released": 0.7114591206853111,
+        "abs_diff": 0.0
+      }
+    },
+    "kfold_mean": {
+      "concat": {
+        "recomputed": 0.6994337804097216,
+        "released": 0.6994337804097216,
+        "abs_diff": 0.0
+      },
+      "gated": {
+        "recomputed": 0.6638404487353867,
+        "released": 0.6638404487353867,
+        "abs_diff": 0.0
+      }
+    },
+    "max_abs_diff": 0.0
+  },
+  "caveats": [
+    "The calibration split is small (70 pseudo-tracks, 492 retrieval queries): the track-grouped bootstrap on the winner's calibration delta includes zero, so the pre-registered selection was weakly resolved -- only 2 of 15 candidates were admissible under A1+A2 and the winner was the admissible one with the larger calibration retrieval delta.",
+    "The calibration and test splits disagree in sign for the released raw-quality gate (calibration dP@5 = -0.025, test dP@5 = +0.017); the z-normalised winner is the only family that improved calibration retrieval over the static baseline, which is why the pre-registered screen selected it.",
+    "The z-normalisation constants are estimated on calibration detections only and applied unchanged to every detection; no test-split label, score or threshold enters the gate.",
+    "The winner is a re-weighting of the same two branches with the same released metadata quality proxies; it does not add a new encoder, embedding or label source.",
+    "Same-track labels are deterministic pseudo-labels formed from detector/attribute metadata, not human identities; the benchmark is the released single-camera subset, not the paper's 312k-descriptor / 4-camera identity benchmark.",
+    "The Holm family per task is the 2-member head-to-head family used by eval_fusion.py (winner vs concat, winner vs released gate); the track-grouped bootstrap is a secondary statistic and is not part of the decision rule."
+  ],
+  "success_criteria": {
+    "c1_retrieval_holm_significant_win_vs_concat": true,
+    "c2_pair_auc_not_significantly_worse_than_gated": true,
+    "c3_kfold_mean_within_0.005_of_concat": true,
+    "verdict": "IMPROVED"
+  }
+}

@@ -1,0 +1,164 @@
+{
+  "integrity": {
+    "reference_file": "S:\\college\\ai-surveillance\\results\\retrieval_control_results.json",
+    "checks": [
+      {
+        "normalization": "minmax",
+        "method": "adaptive",
+        "recomputed_test_macro_p5": 0.538,
+        "reference_test_macro_p5": 0.538,
+        "match": true
+      },
+      {
+        "normalization": "minmax",
+        "method": "conf_only",
+        "recomputed_test_macro_p5": 0.5359999999999999,
+        "reference_test_macro_p5": 0.5359999999999999,
+        "match": true
+      },
+      {
+        "normalization": "minmax",
+        "method": "combined",
+        "recomputed_test_macro_p5": 0.538,
+        "reference_test_macro_p5": 0.538,
+        "match": true
+      },
+      {
+        "normalization": "zscore",
+        "method": "adaptive",
+        "recomputed_test_macro_p5": 0.524,
+        "reference_test_macro_p5": 0.524,
+        "match": true
+      },
+      {
+        "normalization": "zscore",
+        "method": "conf_only",
+        "recomputed_test_macro_p5": 0.5319999999999999,
+        "reference_test_macro_p5": 0.5319999999999999,
+        "match": true
+      },
+      {
+        "normalization": "zscore",
+        "method": "combined",
+        "recomputed_test_macro_p5": 0.526,
+        "reference_test_macro_p5": 0.526,
+        "match": true
+      }
+    ],
+    "all_match": true
+  },
+  "oracle": {
+    "minmax": {
+      "tune": {
+        "oracle_macro_p5": 0.58,
+        "oracle_per_category_p5": {
+          "count": 0.52,
+          "find": 1.0,
+          "track": 0.9,
+          "action": 0.14,
+          "filter": 0.33999999999999997
+        },
+        "prior_macro_p5": 0.58,
+        "prior_per_category_p5": {
+          "count": 0.52,
+          "find": 1.0,
+          "track": 0.9,
+          "action": 0.14,
+          "filter": 0.33999999999999997
+        },
+        "n_queries": 50
+      },
+      "test": {
+        "oracle_macro_p5": 0.538,
+        "oracle_per_category_p5": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        },
+        "prior_macro_p5": 0.538,
+        "prior_per_category_p5": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        },
+        "n_queries": 100
+      }
+    },
+    "zscore": {
+      "tune": {
+        "oracle_macro_p5": 0.58,
+        "oracle_per_category_p5": {
+          "count": 0.52,
+          "find": 1.0,
+          "track": 0.9,
+          "action": 0.14,
+          "filter": 0.33999999999999997
+        },
+        "prior_macro_p5": 0.556,
+        "prior_per_category_p5": {
+          "count": 0.52,
+          "find": 0.96,
+          "track": 0.9,
+          "action": 0.14,
+          "filter": 0.26
+        },
+        "n_queries": 50
+      },
+      "test": {
+        "oracle_macro_p5": 0.538,
+        "oracle_per_category_p5": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        },
+        "prior_macro_p5": 0.524,
+        "prior_per_category_p5": {
+          "count": 0.39,
+          "find": 0.9099999999999999,
+          "track": 0.8,
+          "action": 0.09,
+          "filter": 0.43
+        },
+        "n_queries": 100
+      }
+    }
+  },
+  "prior_alpha_by_category": {
+    "count": {
+      "mean": 1.0,
+      "min": 1.0,
+      "max": 1.0,
+      "n": 30
+    },
+    "find": {
+      "mean": 0.6521909611592807,
+      "min": 0.5960869565217392,
+      "max": 0.658888888888889,
+      "n": 30
+    },
+    "track": {
+      "mean": 0.6216312056737588,
+      "min": 0.621631205673759,
+      "max": 0.621631205673759,
+      "n": 30
+    },
+    "action": {
+      "mean": 0.10000000000000003,
+      "min": 0.1,
+      "max": 0.1,
+      "n": 30
+    },
+    "filter": {
+      "mean": 0.7192813908642541,
+      "min": 0.6460869565217391,
+      "max": 0.741631205673759,
+      "n": 30
+    }
+  }
+}

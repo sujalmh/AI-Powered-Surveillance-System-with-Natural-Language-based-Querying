@@ -1,0 +1,46 @@
+{
+  "stage": "reproduction",
+  "generated_at": "2026-10-22T12:22:07.795048+00:00",
+  "rerun_command": "python backend/scripts/eval_fusion_cal.py --stage test --n-boot 3000 --seeds 5 --out-dir C:\\Users\\sujal\\AppData\\Local\\Temp\\opencode\\cal_repro --calibration-file S:\\college\\ai-surveillance\\results\\cal_gate_calibration.json",
+  "rerun_file": "S:\\college\\ai-surveillance\\results\\cal2_f2_lam1_rerun.json",
+  "round1_file": "S:\\college\\ai-surveillance\\results\\cal_gate_results.json",
+  "n_leaf_fields_compared": 232,
+  "n_numeric_fields_differing": 0,
+  "numeric_differences": [],
+  "non_numeric_differences": [
+    {
+      "field": "/generated_at",
+      "rerun": "2026-10-22T12:07:34.909196+00:00",
+      "round1": "2026-10-22T11:14:30.789707+00:00"
+    }
+  ],
+  "verdict": "EXACT_MATCH",
+  "key_numbers": {
+    "winner_id": "F2_lam1",
+    "winner_spec_hash": "4ef151e2257501dd580a0cce061b9baa99f05746",
+    "test_retrieval_p5_winner": 0.4695798319327731,
+    "test_retrieval_p5_concat": 0.42739495798319327,
+    "test_retrieval_p5_gated": 0.44420168067226895,
+    "test_pair_auc_winner": 0.7262692113882591,
+    "test_pair_auc_concat": 0.7262613378684807,
+    "test_pair_auc_gated": 0.7114591206853111,
+    "retrieval_delta_p5_winner_vs_concat": 0.042184873949579836,
+    "retrieval_holm_p_winner_vs_concat": 0.0,
+    "pair_auc_delta_winner_vs_gated": 0.01481009070294792,
+    "pair_auc_holm_p_winner_vs_gated": 0.26,
+    "kfold_mean_winner": 0.7018192609461107,
+    "kfold_mean_concat": 0.6994337804097216,
+    "kfold_mean_released_gated": 0.6638404487353867,
+    "verdict": "IMPROVED"
+  },
+  "note": {
+    "field": "non-numeric fields that may legitimately differ",
+    "entries": [
+      {
+        "field": "/generated_at",
+        "rerun": "2026-10-22T12:07:34.909196+00:00",
+        "round1": "2026-10-22T11:14:30.789707+00:00"
+      }
+    ]
+  }
+}

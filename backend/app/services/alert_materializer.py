@@ -29,6 +29,7 @@ from backend.app.services.alert_validator import (
     KNOWN_EVENTS,
     KNOWN_ZONES,
     UNSUPPORTED_HINTS,
+    validate_rule,
 )
 
 CANONICAL_FIELDS = [
@@ -121,6 +122,14 @@ _OBJECT_PATTERNS: List[Tuple[str, str]] = [
     ("person", r"\b(?:persons?|people|someone|somebody|anyone|individuals?|intruders?|pedestrians?)\b"),
 ]
 
+# Zone aliases are masked before the object scan so that a zone phrase such
+# as "car park" does not contribute a spurious object ("car").
+_ZONE_SPAN_RE = re.compile(
+    r"\b(?:zone\s*[- ]?[abc]|gate|entrance|"
+    r"parking\s+lot|car\s+park|parking\s+area|parking)\b",
+    re.IGNORECASE,
+)
+
 _VEHICLE_OBJECTS = {"car", "truck", "bus", "van", "vehicle", "motorcycle"}
 
 _ZONE_PATTERNS: List[Tuple[str, str]] = [
@@ -189,6 +198,13 @@ _BETWEEN_COUNT_RE = re.compile(
     rf"\bbetween\s+(?P<lo>{_NUM_RE})\s+and\s+(?P<hi>{_NUM_RE})\s+"
     rf"(?P<unit>people|persons?|cars?|vehicles?|trucks?|vans?|buses?|bus|"
     rf"backpacks?|bags?|objects?)\b",
+    re.IGNORECASE,
+)
+
+# Duration bounds with their own unit, so that minutes and seconds are not
+# compared as raw numbers.
+_SECONDS_BOUND_RE = re.compile(
+    rf"\b(?P<cmp>{_COMPARATOR_RE})\s+(?P<num>{_NUM_RE})\s*(?P<unit>{_TIME_UNIT_RE})\b",
     re.IGNORECASE,
 )
 
@@ -424,8 +440,9 @@ def _time_window_count(text: str) -> int:
 
 def _objects(text: str) -> List[str]:
     hits: List[Tuple[int, str]] = []
+    scan = _ZONE_SPAN_RE.sub(" ", text)
     for name, pattern in _OBJECT_PATTERNS:
-        for match in re.finditer(pattern, text, re.IGNORECASE):
+        for match in re.finditer(pattern, scan, re.IGNORECASE):
             hits.append((match.start(), name))
     hits.sort(key=lambda item: item[0])
     out: List[str] = []
@@ -521,6 +538,43 @@ def _op_from_comparator(cmp_token: str) -> str:
     return ">="
 
 
+def _combine_bounds(bounds: List[Dict[str, Any]], unit: str) -> Optional[Dict[str, Any]]:
+    """Combine conjunctive bounds of one unit family into a single threshold.
+
+    A request may state several bounds of the same unit ("more than five but
+    fewer than ten people").  Keeping only one of them silently widens the
+    rule: the created alert then fires in configurations the user excluded.
+    This helper returns the conjunction of ``bounds`` as one threshold
+    (``between`` for a two-sided range, the strictest bound otherwise) and
+    ``None`` when the bounds cannot be combined.
+    """
+    lowers = [b for b in bounds if b["op"] in {">", ">="}]
+    uppers = [b for b in bounds if b["op"] in {"<", "<="}]
+    exact = [b for b in bounds if b["op"] == "=="]
+    if exact:
+        return {"op": "==", "value": exact[0]["value"], "unit": unit}
+    if lowers and uppers:
+        lo_b = max(lowers, key=lambda b: (b["value"], b["op"] == ">"))
+        hi_b = min(uppers, key=lambda b: (b["value"], b["op"] == "<"))
+        lo, hi = lo_b["value"], hi_b["value"]
+        # Counts and durations are integers: tighten strict bounds into
+        # inclusive integer bounds so the range is represented exactly.
+        if lo_b["op"] == ">" and isinstance(lo, int) and not isinstance(lo, bool):
+            lo += 1
+        if hi_b["op"] == "<" and isinstance(hi, int) and not isinstance(hi, bool):
+            hi -= 1
+        if lo > hi:
+            return None
+        return {"op": "between", "value": [lo, hi], "unit": unit}
+    if lowers:
+        b = max(lowers, key=lambda b: (b["value"], b["op"] == ">"))
+        return {"op": b["op"], "value": b["value"], "unit": unit}
+    if uppers:
+        b = min(uppers, key=lambda b: (b["value"], b["op"] == "<"))
+        return {"op": b["op"], "value": b["value"], "unit": unit}
+    return None
+
+
 def _quantifiers(text: str) -> List[Dict[str, Any]]:
     """All comparator+number mentions, for conflict detection and extraction."""
     out: List[Dict[str, Any]] = []
@@ -606,6 +660,14 @@ def _extract_count(text: str, objects: List[str]) -> Optional[Dict[str, Any]]:
         # A duration used as a count is not meaningful for crowd/count events;
         # keep it as seconds and let the caller reject/clarify.
         return {"op": chosen["op"], "value": value, "unit": "seconds"}
+
+    # Keep every bound stated for the same unit family: a two-sided request
+    # ("more than five but fewer than ten people") must not lose one side.
+    family = [q for q in quantifiers if (q["unit"] or unit) == unit]
+    if len(family) > 1:
+        combined = _combine_bounds(family, unit)
+        if combined is not None:
+            return combined
     return {"op": chosen["op"], "value": value, "unit": unit}
 
 
@@ -625,6 +687,29 @@ def _extract_duration(text: str) -> Optional[Dict[str, Any]]:
         seconds = int(seconds)
     cmp_token = match.group("cmp")
     op = _op_from_comparator(cmp_token) if cmp_token else ">="
+    bounds = [{"op": op, "value": seconds}]
+    for other in _SECONDS_BOUND_RE.finditer(text):
+        val = _num(other.group("num"))
+        if val is None:
+            continue
+        factor = _TIME_UNIT_SEC.get(other.group("unit").lower())
+        if not factor:
+            continue
+        secs = val * factor
+        if float(secs).is_integer():
+            secs = int(secs)
+        other_op = _op_from_comparator(other.group("cmp"))
+        if (other_op, secs) == (op, seconds):
+            continue
+        bounds.append({"op": other_op, "value": secs})
+    if len(bounds) > 1:
+        combined = _combine_bounds(bounds, "seconds")
+        if combined is not None:
+            return combined
+        lowers = [b for b in bounds if b["op"] in {">", ">="}]
+        if lowers:
+            strictest = max(lowers, key=lambda b: (b["value"], b["op"] == ">"))
+            return {"op": strictest["op"], "value": strictest["value"], "unit": "seconds"}
     return {"op": op, "value": seconds, "unit": "seconds"}
 
 
@@ -787,6 +872,26 @@ def _conflict(text: str, objects: List[str], zones: List[str]) -> Optional[str]:
             return "exact threshold below lower bound"
         if eq_values and (upper is not None and upper < next(iter(eq_values))):
             return "exact threshold above upper bound"
+
+    # An inverted "between X and Y <count-unit>" range contradicts itself.
+    match = _BETWEEN_COUNT_RE.search(text)
+    if match:
+        lo = _num(match.group("lo"))
+        hi = _num(match.group("hi"))
+        if lo is not None and hi is not None and lo > hi:
+            return "between bounds are inverted (lower exceeds upper)"
+    if re.search(r"\b(?:count|number\s+of|vehicle\s+count)\b", text):
+        match = re.search(
+            rf"\bbetween\s+(?P<lo>{_NUM_RE})\s+and\s+(?P<hi>{_NUM_RE})\b", text
+        )
+        if match and not re.search(
+            rf"\bbetween\s+{match.group('lo')}\s+and\s+{match.group('hi')}\s*(?:am|pm)\b",
+            text,
+        ):
+            lo = _num(match.group("lo"))
+            hi = _num(match.group("hi"))
+            if lo is not None and hi is not None and lo > hi:
+                return "between bounds are inverted (lower exceeds upper)"
 
     # Conflicting zones / object sets expressed as disjunctions.
     if re.search(r"\bor\b", text):
@@ -952,6 +1057,19 @@ def materialize_alert_rule(
         "clarification": _clarification_reason(kind, detail) if kind != "clean" else None,
         "clarification_kind": kind,
     }
+
+    # Safety gate: a rule the validator rejects must never be reported as
+    # "clean" (the live chat path refuses to insert it and the dialogue would
+    # assume the rule is complete).  Such a request is contradictory for the
+    # typed grammar, so it is clarified instead of materialized.
+    if kind == "clean":
+        ok, errors, _warnings = validate_rule(rule)
+        if not ok:
+            kind = "conflicting"
+            detail = "the requested rule is not representable (" + "; ".join(errors) + ")"
+            rule["needs_clarification"] = True
+            rule["clarification"] = _clarification_reason(kind, detail)
+            rule["clarification_kind"] = kind
     return rule
 
 

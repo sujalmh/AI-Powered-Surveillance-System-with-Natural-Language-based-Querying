@@ -97,3 +97,55 @@ def test_minimal_questions_policy():
     assert len(qs) == 1 and qs[0]["slot"] == "ambiguous"
     qs = minimal_questions("follow him home and alert me")
     assert len(qs) == 1 and qs[0]["slot"] == "unsupported"
+
+
+def test_conjunctive_bounds_combine():
+    from backend.app.services.alert_materializer import materialize_alert_rule
+
+    r = materialize_alert_rule(
+        "alert me when more than five fewer than ten people gather in Zone A"
+    )
+    assert r["needs_clarification"] is False
+    assert r["threshold"] == {"op": "between", "value": [6, 9], "unit": "persons"}
+    r = materialize_alert_rule(
+        "notify me if someone loiters in Zone B for more than five minutes less than ten minutes"
+    )
+    assert r["needs_clarification"] is False
+    assert r["threshold"] == {"op": "between", "value": [301, 599], "unit": "seconds"}
+    assert validate_rule(r)[0] is True
+
+
+def test_inverted_between_and_ceiling_clarify():
+    from backend.app.services.alert_materializer import materialize_alert_rule
+
+    r = materialize_alert_rule("alert when between ten and three people gather in Zone A")
+    assert r["needs_clarification"] is True
+    assert r["clarification_kind"] == "conflicting"
+    r = materialize_alert_rule("alert me 20 hz more than five people gather in Zone A")
+    assert r["needs_clarification"] is True
+    assert r["clarification_kind"] == "conflicting"
+
+
+def test_zone_alias_does_not_leak_object():
+    from backend.app.services.alert_materializer import materialize_alert_rule
+
+    r = materialize_alert_rule("alert me during the day car park")
+    assert r["objects"] == [{"name": "person"}]
+    assert validate_rule(r)[0] is True
+
+
+def test_clean_materializations_pass_validator():
+    from backend.app.services.alert_materializer import materialize_alert_rule
+
+    corpus = [
+        "alert me when more than five people gather in Zone A after 10 PM",
+        "alert me when more than five fewer than ten people gather in Zone A",
+        "warn me on a fight near the Entrance",
+        "notify me if someone loiters in Zone B",
+        "alert me if a person loiters in Zone A for at least one minute, cooldown 5 minutes",
+        "alert me when at least nine people gather in Zone A, notification only",
+    ]
+    for text in corpus:
+        rule = materialize_alert_rule(text)
+        if not rule.get("needs_clarification"):
+            assert validate_rule(rule)[0] is True, text
