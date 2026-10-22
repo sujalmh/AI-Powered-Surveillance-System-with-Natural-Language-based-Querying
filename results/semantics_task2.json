@@ -1,0 +1,268 @@
+{
+  "generated_at": "2026-10-22T19:02:55.434520+00:00",
+  "task": "per_field_accuracy_ci",
+  "n_boot": 10000,
+  "seed": 24301,
+  "splits": {
+    "dev": {
+      "n_clean": 30,
+      "per_field": {
+        "event": {
+          "n": 30,
+          "correct": 30,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ]
+        },
+        "objects": {
+          "n": 30,
+          "correct": 30,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ]
+        },
+        "area": {
+          "n": 30,
+          "correct": 30,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ]
+        },
+        "threshold": {
+          "n": 30,
+          "correct": 30,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ]
+        },
+        "time_of_day": {
+          "n": 30,
+          "correct": 30,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ]
+        },
+        "severity": {
+          "n": 30,
+          "correct": 30,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ]
+        },
+        "cooldown_sec": {
+          "n": 30,
+          "correct": 30,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ]
+        },
+        "side_effects": {
+          "n": 30,
+          "correct": 30,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ]
+        },
+        "cadence_hz": {
+          "n": 30,
+          "correct": 30,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "specified_field": {
+        "severity": {
+          "n": 2,
+          "correct": 2,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ],
+          "default_value": "info"
+        },
+        "cadence_hz": {
+          "n": 4,
+          "correct": 4,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ],
+          "default_value": 1.0
+        },
+        "cooldown_sec": {
+          "n": 4,
+          "correct": 4,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ],
+          "default_value": 60
+        }
+      }
+    },
+    "test": {
+      "n_clean": 30,
+      "per_field": {
+        "event": {
+          "n": 30,
+          "correct": 30,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ]
+        },
+        "objects": {
+          "n": 30,
+          "correct": 30,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ]
+        },
+        "area": {
+          "n": 30,
+          "correct": 30,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ]
+        },
+        "threshold": {
+          "n": 30,
+          "correct": 30,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ]
+        },
+        "time_of_day": {
+          "n": 30,
+          "correct": 30,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ]
+        },
+        "severity": {
+          "n": 30,
+          "correct": 30,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ]
+        },
+        "cooldown_sec": {
+          "n": 30,
+          "correct": 30,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ]
+        },
+        "side_effects": {
+          "n": 30,
+          "correct": 30,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ]
+        },
+        "cadence_hz": {
+          "n": 30,
+          "correct": 30,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "specified_field": {
+        "severity": {
+          "n": 7,
+          "correct": 7,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ],
+          "default_value": "info"
+        },
+        "cadence_hz": {
+          "n": 2,
+          "correct": 2,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ],
+          "default_value": 1.0
+        },
+        "cooldown_sec": {
+          "n": 1,
+          "correct": 1,
+          "point_estimate_quoted": 1.0,
+          "point_estimate_computed": 1.0,
+          "ci95": [
+            1.0,
+            1.0
+          ],
+          "default_value": 60
+        }
+      }
+    }
+  }
+}

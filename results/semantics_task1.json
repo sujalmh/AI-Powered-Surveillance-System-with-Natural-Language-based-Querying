@@ -1,0 +1,883 @@
+{
+  "generated_at": "2026-10-22T19:02:55.432522+00:00",
+  "task": "semantic_vs_syntactic_gap",
+  "seed": 24301,
+  "n_variants_total": 78,
+  "silent_to_default_total": 78,
+  "clarified_total": 0,
+  "semantic_gap_rate_silent": 1.0,
+  "classes": {
+    "D1_default_object_person_vs_intended": {
+      "n_variants": 12,
+      "silent_to_default": 12,
+      "clarified": 0,
+      "description": "Object noun dropped/omitted, so the grammar's DEFAULT_OBJECT 'person' is used even when the utterance context (parking, truck, bus, ...) implies a vehicle or other object. Syntactically valid, semantically divergent."
+    },
+    "D2_default_cooldown_60s_vs_intended_urgency": {
+      "n_variants": 55,
+      "silent_to_default": 55,
+      "clarified": 0,
+      "description": "Urgency wording (critical/high) does not change cooldown_sec, which stays at the documented 60 s default. Syntactically valid, semantically divergent."
+    },
+    "D3_night_window_20_06_vs_intended_daytime": {
+      "n_variants": 6,
+      "silent_to_default": 6,
+      "clarified": 0,
+      "description": "A daytime utterance is rewritten to 'at night', but the intended window was 06:00-20:00; the grammar maps 'night' to 20:00-06:00. Syntactically valid, semantically divergent."
+    },
+    "D3_night_window_20_06_vs_intended_evening": {
+      "n_variants": 5,
+      "silent_to_default": 5,
+      "clarified": 0,
+      "description": "'at night' is used where an evening window (18:00-22:00) was intended; the grammar maps 'night' to 20:00-06:00. Syntactically valid, semantically divergent."
+    }
+  },
+  "variants": [
+    {
+      "class": "D1_default_object_person_vs_intended",
+      "uid": "a_clean_31",
+      "intended_object": "car",
+      "defaulted_to": "person",
+      "variant_text": "alert me when a enters the Gate",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D1_default_object_person_vs_intended",
+      "uid": "a_clean_34",
+      "intended_object": "truck",
+      "defaulted_to": "person",
+      "variant_text": "alert me if a enters the Parking lot during the day",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D1_default_object_person_vs_intended",
+      "uid": "a_clean_35",
+      "intended_object": "vehicle",
+      "defaulted_to": "person",
+      "variant_text": "notify me when any enters the main gate at night at 2 Hz",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D1_default_object_person_vs_intended",
+      "uid": "a_clean_37",
+      "intended_object": "van",
+      "defaulted_to": "person",
+      "variant_text": "warn me when a enters the front entrance after 10 PM, cooldown 90 seconds",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D1_default_object_person_vs_intended",
+      "uid": "a_clean_38",
+      "intended_object": "car",
+      "defaulted_to": "person",
+      "variant_text": "alert me when more than three enter Zone A between 22:00 and 23:00",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D1_default_object_person_vs_intended",
+      "uid": "a_clean_40",
+      "intended_object": "bus",
+      "defaulted_to": "person",
+      "variant_text": "alert me when a enters the Gate with warning severity",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D1_default_object_person_vs_intended",
+      "uid": "a_clean_45",
+      "intended_object": "car",
+      "defaulted_to": "person",
+      "variant_text": "notify me if more than two are in Zone B",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D1_default_object_person_vs_intended",
+      "uid": "a_clean_49",
+      "intended_object": "car",
+      "defaulted_to": "person",
+      "variant_text": "alert me when the count of in the Parking lot exceeds ten after 9 PM",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D1_default_object_person_vs_intended",
+      "uid": "a_clean_51",
+      "intended_object": "car",
+      "defaulted_to": "person",
+      "variant_text": "notify me if the number of in the Parking lot is at least 5, send a snapshot only",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D1_default_object_person_vs_intended",
+      "uid": "a_clean_53",
+      "intended_object": "truck",
+      "defaulted_to": "person",
+      "variant_text": "alert me if the count of in Zone C is exactly four",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D1_default_object_person_vs_intended",
+      "uid": "a_clean_54",
+      "intended_object": "vehicle",
+      "defaulted_to": "person",
+      "variant_text": "notify me when the count at the Gate is between six and ten from 8 PM to 10 PM",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D1_default_object_person_vs_intended",
+      "uid": "a_clean_55",
+      "intended_object": "backpack",
+      "defaulted_to": "person",
+      "variant_text": "alert me if the number of in the Entrance is more than three, save a clip",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_01",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me when more than five people gather in Zone A after 10 PM urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_02",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "notify me if at least ten people crowd into Zone B between 9 and 11 PM urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_03",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "warn me when a group of eight or more people gathers in Zone C urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_04",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me when over twelve people congregate in the Parking lot during the day urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_05",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "notify me if exactly six people gather at the main gate at night urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_06",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me when fifteen or more people assemble in the front entrance urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_07",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "warn me if more than twenty people gather in Zone A between 22:00 and 23:30 urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_08",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me when at least seven people gather in Zone B after 11 PM with critical severity urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_10",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me when five or more people gather in the Parking lot every 30 seconds urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_11",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "warn me when more than four people gather in the Entrance, high priority urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_12",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me when at least nine people gather in Zone A, notification only urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_13",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "notify me if someone loiters in Zone B for over a minute urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_14",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me when a person loiters near the Gate for at least 2 minutes urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_15",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "warn me if someone loiters in Zone C for 90 seconds urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_16",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me when a person loiters in the front entrance for more than five minutes at night urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_17",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "notify me if someone loiters in Parking for over three minutes during the day urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_19",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "warn me when someone loiters near the main gate for more than ten minutes with high severity urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_20",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me if a person loiters in Zone B for over 45 seconds, save a clip urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_21",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "notify me when someone loiters in Zone C for at least 30 seconds every 10 seconds urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_22",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me if a person loiters in the Parking lot for over two minutes, warning severity urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_23",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "warn me on a fight near the Entrance urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_24",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me if two or more people fight in Zone A urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_25",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "notify me when a fight breaks out at the Gate after 10 PM urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_26",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me on a fight in Zone C with critical severity urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_28",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me when a fight occurs in the Parking lot during the day, save a clip urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_29",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "notify me if a fight breaks out in the front entrance every 2 seconds urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_30",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me on a fight in Zone A between 9 and 11 PM, high priority urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_31",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me when a car enters the Gate urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_32",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "notify me if someone enters Zone B after 11 PM urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_33",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "warn me when two or more people enter the Entrance urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_34",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me if a truck enters the Parking lot during the day urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_35",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "notify me when any vehicle enters the main gate at night at 2 Hz urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_36",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me if exactly one person enters Zone C urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_38",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me when more than three cars enter Zone A between 22:00 and 23:00 urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_39",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "notify me if a person enters the Parking lot every 30 seconds urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_40",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me when a bus enters the Gate with warning severity urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_41",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me if anyone is inside the Gate urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_42",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "notify me when Zone C is occupied by more than eight people urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_43",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "warn me if at least three people are present in the Entrance after 10 PM urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_44",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me when the Parking lot is occupied during the day urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_45",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "notify me if more than two cars are in Zone B urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_46",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me if someone is in Zone A at night, critical severity urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_48",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me if the front entrance is occupied by at least four people every 10 seconds urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_49",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me when the count of cars in the Parking lot exceeds ten after 9 PM urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_50",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me when the count of people in Zone A exceeds 10 urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_51",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "notify me if the number of cars in the Parking lot is at least 5, send a snapshot only urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_52",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "warn me when the number of people in Zone B is fewer than three urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_53",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me if the count of trucks in Zone C is exactly four urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_54",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "notify me when the vehicle count at the Gate is between six and ten from 8 PM to 10 PM urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_55",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me if the number of backpacks in the Entrance is more than three, save a clip urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_56",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "warn me if the number of people in Zone A is at most two at night urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_57",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me every night at the Gate urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_58",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "notify me during the day in the Parking lot urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_59",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "alert me between 9 and 11 PM in Zone A urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D2_default_cooldown_60s_vs_intended_urgency",
+      "uid": "a_clean_60",
+      "intended": "shorter cooldown implied by urgency",
+      "defaulted_to": "cooldown_sec=60",
+      "variant_text": "warn me after 10 PM in the front entrance with high severity urgent",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D3_night_window_20_06_vs_intended_daytime",
+      "uid": "a_clean_04",
+      "intended_window": {
+        "start": "06:00",
+        "end": "20:00"
+      },
+      "defaulted_to": {
+        "start": "20:00",
+        "end": "06:00"
+      },
+      "variant_text": "alert me when over twelve people congregate in the Parking lot at night",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D3_night_window_20_06_vs_intended_daytime",
+      "uid": "a_clean_17",
+      "intended_window": {
+        "start": "06:00",
+        "end": "20:00"
+      },
+      "defaulted_to": {
+        "start": "20:00",
+        "end": "06:00"
+      },
+      "variant_text": "notify me if someone loiters in Parking for over three minutes at night",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D3_night_window_20_06_vs_intended_daytime",
+      "uid": "a_clean_28",
+      "intended_window": {
+        "start": "06:00",
+        "end": "20:00"
+      },
+      "defaulted_to": {
+        "start": "20:00",
+        "end": "06:00"
+      },
+      "variant_text": "alert me when a fight occurs in the Parking lot at night, save a clip",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D3_night_window_20_06_vs_intended_daytime",
+      "uid": "a_clean_34",
+      "intended_window": {
+        "start": "06:00",
+        "end": "20:00"
+      },
+      "defaulted_to": {
+        "start": "20:00",
+        "end": "06:00"
+      },
+      "variant_text": "alert me if a truck enters the Parking lot at night",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D3_night_window_20_06_vs_intended_daytime",
+      "uid": "a_clean_44",
+      "intended_window": {
+        "start": "06:00",
+        "end": "20:00"
+      },
+      "defaulted_to": {
+        "start": "20:00",
+        "end": "06:00"
+      },
+      "variant_text": "alert me when the Parking lot is occupied at night",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D3_night_window_20_06_vs_intended_daytime",
+      "uid": "a_clean_58",
+      "intended_window": {
+        "start": "06:00",
+        "end": "20:00"
+      },
+      "defaulted_to": {
+        "start": "20:00",
+        "end": "06:00"
+      },
+      "variant_text": "notify me at night in the Parking lot",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D3_night_window_20_06_vs_intended_evening",
+      "uid": "a_clean_05",
+      "intended_window": {
+        "start": "18:00",
+        "end": "22:00"
+      },
+      "defaulted_to": {
+        "start": "20:00",
+        "end": "06:00"
+      },
+      "variant_text": "notify me if exactly six people gather at the main gate at night",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D3_night_window_20_06_vs_intended_evening",
+      "uid": "a_clean_16",
+      "intended_window": {
+        "start": "18:00",
+        "end": "22:00"
+      },
+      "defaulted_to": {
+        "start": "20:00",
+        "end": "06:00"
+      },
+      "variant_text": "alert me when a person loiters in the front entrance for more than five minutes at night",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D3_night_window_20_06_vs_intended_evening",
+      "uid": "a_clean_35",
+      "intended_window": {
+        "start": "18:00",
+        "end": "22:00"
+      },
+      "defaulted_to": {
+        "start": "20:00",
+        "end": "06:00"
+      },
+      "variant_text": "notify me when any vehicle enters the main gate at night at 2 Hz",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D3_night_window_20_06_vs_intended_evening",
+      "uid": "a_clean_46",
+      "intended_window": {
+        "start": "18:00",
+        "end": "22:00"
+      },
+      "defaulted_to": {
+        "start": "20:00",
+        "end": "06:00"
+      },
+      "variant_text": "alert me if someone is in Zone A at night, critical severity",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    },
+    {
+      "class": "D3_night_window_20_06_vs_intended_evening",
+      "uid": "a_clean_56",
+      "intended_window": {
+        "start": "18:00",
+        "end": "22:00"
+      },
+      "defaulted_to": {
+        "start": "20:00",
+        "end": "06:00"
+      },
+      "variant_text": "warn me if the number of people in Zone A is at most two at night",
+      "materialized_kind": "clean",
+      "silent_to_default": true,
+      "clarified": false
+    }
+  ]
+}

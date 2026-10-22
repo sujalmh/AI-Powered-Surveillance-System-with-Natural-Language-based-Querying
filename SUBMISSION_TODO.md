@@ -204,3 +204,12 @@ Select-String -Path INDICON2026_submit\INDICON2026Conference.log -Pattern 'Outpu
 | J2 | C2 splits: calibration/test disjoint on track IDs + row_index (faiss_id has 2 duplicates); same-moment co-occurrence disclosed; ridge seed sd 0.0010/0.0014 | **DONE** |
 | J3 | C3 segments: leak-free rerun ties (Δ=0, n=10, degenerate CIs); combMAX bounded as query-mix-dependent; n=100 Holm finding stands | **DONE** |
 | J4 | Full suite 221 green; paper 6 pages, 0 overfull, 0 undefined, 15/15 cited; public single-commit re-pushed | **DONE** |
+
+## K. Second review cascade (2026-10-22) — section fixes + presentation batch
+
+| # | Item | Status |
+|---|---|---|
+| K1 | Grammar/conjunction/clock patch applied + 3 regression tests; silent drops 173/215 → 0; shipped metrics intact | **DONE** |
+| K2 | Splits/segments/regimes/semantics paper lines (disjointness, leak-free tie with power caveat, stratum band, noise fragility, semantic gap + contradiction numbers) | **DONE** |
+| K3 | Presentation batch: F→F_{5,10}, effective weights, fuzz split, grouped-primary + Holm, Bruch TOIS, survey b36, governance (iv)+(v), reconciliation, counting move, calib line | **DONE** (6 pages, 0 overfull, 0 undefined, 15/15 cited) |
+| K4 | Page budget funded by prose cuts (no measured value dropped without artifact backup); fixed own log-grep blind spot (`!`-errors) + bare underscore | **DONE** |
