@@ -64,8 +64,8 @@ A.~Singh \emph{et~al.}, ``Agentic retrieval-augmented generation: A survey on
   agentic {RAG},'' \emph{arXiv preprint arXiv:2501.09136}, 2025.
 
 \bibitem{b20}
-{OpenAI}, ``{GPT-4o} system card,''
-  \url{https://openai.com/index/gpt-4o-system-card/}, 2024.
+{OpenAI}, ``{GPT-4o} system card,'' 2024,
+  \url{https://openai.com/index/gpt-4o-system-card/}.
 
 \bibitem{b14}
 {Ultralytics}, ``{YOLO11},'' \url{https://github.com/ultralytics/ultralytics},

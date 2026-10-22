@@ -18,36 +18,36 @@ Done.
 You've used 15 entries,
             4087 wiz_defined-function locations,
             899 strings with 9121 characters,
-and the built_in function-call counts, 10820 in all, are:
-= -- 874
+and the built_in function-call counts, 10836 in all, are:
+= -- 875
 > -- 196
 < -- 93
 + -- 124
 - -- 35
-* -- 493
-:= -- 1599
+* -- 494
+:= -- 1600
 add.period$ -- 30
 call.type$ -- 15
-change.case$ -- 15
+change.case$ -- 16
 chr.to.int$ -- 234
 cite$ -- 15
-duplicate$ -- 787
+duplicate$ -- 789
 empty$ -- 927
 format.name$ -- 42
-if$ -- 2530
+if$ -- 2533
 int.to.chr$ -- 0
 int.to.str$ -- 15
-missing$ -- 124
+missing$ -- 125
 newline$ -- 68
 num.names$ -- 15
-pop$ -- 294
+pop$ -- 297
 preamble$ -- 1
 purify$ -- 0
 quote$ -- 2
 skip$ -- 842
 stack$ -- 0
-substring$ -- 583
-swap$ -- 610
+substring$ -- 585
+swap$ -- 611
 text.length$ -- 15
 text.prefix$ -- 0
 top$ -- 5

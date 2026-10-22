@@ -62,6 +62,7 @@ Status of every item after the revision is recorded in the last column.
 | `pdflatex` + `bibtex` complete with no undefined references/citations | ✅ |
 | PDF is at most 6 pages (the conference's maximum, so no overlength charge) | ✅ 6 pages |
 | No overfull hbox | ✅ none remaining (the 35.5 pt box and the 3.1 pt author-block boxes are gone) |
+| Typesetting | ✅ 6 pages, 0 overfull, 0 undefined, 11 cosmetic underfull boxes (worst badness 5548, the OpenAI reference URL); the run-in headings print a single colon and the long inline math / path groups carry break points, so no line is stretched across the column |
 | Tables/figures fit the column width; no missing figure files | ✅ |
 | Floats and equations all numbered and referenced in the text | ✅ 3 tables (`tab:alpha_baseline`, `tab:fusion_ablation`, `tab:alpha_baseline_ci`), 6 numbered equations, 1 `Observation`; the off-the-shelf detection-and-indexing algorithm, the TikZ dataflow figure and 6 supporting tables were folded into prose to reach the 6-page limit, and every `\ref` was retargeted |
 | No measured value lost in the 6-page reduction | ✅ a distinct-value diff of the 8-page and 6-page sources (excluding the removed floats) finds **no** numeric value that disappeared; only duplicate occurrences of the same value were dropped, and every caveat survives at least once |
