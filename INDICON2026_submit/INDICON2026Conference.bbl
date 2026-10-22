@@ -45,6 +45,16 @@ G.~V. Cormack, C.~L.~A. Clarke, and S.~B{\"u}ttcher, ``Reciprocal rank fusion
 J.~Myung \emph{et~al.}, ``{HyST}: {LLM}-powered hybrid retrieval over
   semi-structured tabular data,'' \emph{arXiv preprint arXiv:2508.18048}, 2025.
 
+\bibitem{b32}
+S.~Li \emph{et~al.}, ``Person search with natural language description,'' in
+  \emph{Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2017, pp.
+  1970--1979.
+
+\bibitem{b35}
+------, ``{CLIP-ReID}: Exploiting vision-language model for image
+  re-identification without concrete text labels,'' in \emph{Proc. AAAI Conf.
+  Artif. Intell. (AAAI)}, 2023.
+
 \bibitem{b25}
 J.~Johnson \emph{et~al.}, ``Billion-scale similarity search with {GPUs},''
   \emph{IEEE Trans. Big Data}, vol.~7, no.~3, pp. 535--547, 2021.
@@ -57,16 +67,6 @@ S.~Bruch \emph{et~al.}, ``An analysis of fusion functions for hybrid
 Hsu and Tzeng, ``{DAT}: Dynamic alpha tuning for hybrid retrieval in
   retrieval-augmented generation,'' \emph{arXiv preprint arXiv:2503.23013},
   2025.
-
-\bibitem{b32}
-S.~Li \emph{et~al.}, ``Person search with natural language description,'' in
-  \emph{Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2017, pp.
-  1970--1979.
-
-\bibitem{b35}
-------, ``{CLIP-ReID}: Exploiting vision-language model for image
-  re-identification without concrete text labels,'' in \emph{Proc. AAAI Conf.
-  Artif. Intell. (AAAI)}, 2023.
 
 \bibitem{b14}
 {Ultralytics}, ``{YOLO11},'' \url{https://github.com/ultralytics/ultralytics},

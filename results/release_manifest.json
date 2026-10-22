@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-10-22T09:37:21.008708+00:00",
-  "git_commit": "13c1a62c8dbedc2477d9f6bf2bcf80cba1747eb5",
+  "generated_at_utc": "2026-10-22T10:09:29.304737+00:00",
+  "git_commit": "da3d78d3eaf6e8effbdcb7191464b49a08134d66",
   "platform": {
     "python": "3.12.4",
     "platform": "Windows-11-10.0.26300-SP0",
@@ -361,7 +361,7 @@
       {
         "name": "camera-ready PDF",
         "status": "pass",
-        "detail": "6 pages (0.37 MB, sha256 84f971d7de0d0cac)"
+        "detail": "6 pages (0.34 MB, sha256 57d330fe15dec846)"
       },
       {
         "name": "source bundle",
@@ -381,7 +381,7 @@
       {
         "name": "folder package",
         "status": "pass",
-        "detail": "INDICON2026_submit.zip carries the PDF, the source bundle and the sources (0.50 MB)"
+        "detail": "INDICON2026_submit.zip carries the PDF, the source bundle and the sources (0.47 MB)"
       },
       {
         "name": "source bundle compiles standalone",

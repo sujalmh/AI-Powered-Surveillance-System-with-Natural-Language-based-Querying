@@ -10,7 +10,7 @@ reproducibility track.
 
 ## Major-revision round 2 (2026-10-22) — Weak Reject / Major Revision fixes
 
-**C1 (intent-adaptive alpha).** The abstract and §C1 now state the full
+**C3 (intent-adaptive alpha).** The abstract and §C3 now state the full
 honest picture: the per-intent fixed-alpha lookup reaches 0.822 vs. adaptive
 0.828, so the soft terms contribute +0.006 on the deployment and +0.000 on
 the released control (all 16 soft-weight triples give 0.538); the released
@@ -18,7 +18,7 @@ control ties the best tune-selected fixed alpha (0.538 vs. 0.538, Δ 0.000,
 p = 1.0); the end-to-end track ties too (0.450 vs. 0.448, Δ +0.002,
 p = 0.80); deployment per-category gains are +0.02 (p = 0.04, find) and +0.01
 (p = 0.07, track), both marginal and not surviving Holm correction.
-Observation 1 stays empirical ("not a theorem"). Deployment CIs/p-values are
+Lemma 1 (ex-Observation 1) states the gap with explicit assumptions and subset scope ("not a theorem"). Deployment CIs/p-values are
 now labelled in the Statistical protocol paragraph as recorded single-run
 measurements, not re-computable significance; significance is claimed only on
 the released track (grouped bootstrap + Holm).
@@ -28,13 +28,13 @@ labelled illustrative single-seed and the concat-vs-RRF margin fragile (95%
 CI [+0.4,+4.1]). (b) The released track already carried both F1 variants
 (standard P@10-based first, paper P@5/R@10 second) plus 5-seed
 random-projection and a calibration-only ridge learned projection; this round
-adds 5-fold whole-track CV over the 174 pseudo-tracks (`kfold_by_track` in
+adds 5-fold whole-track CV over pseudo-tracks (`kfold_by_track` in
 `eval_fusion.py`, `results/fusion_tables.md`): visual-only beats concat on
-every fold, so the inversion is systematic bias from visual-cosine track
+every fold under the old formation, so the inversion was systematic bias from visual-cosine track
 formation, not fold noise. The deployment Table IV keeps its recorded
 paper-definition F1@10 values (the per-query export needed for the standard
 variant was not preserved, so those cells are not re-computable) and now
-points to the released track, which leads with the standard P@10-based F1.
+points to the released track, which leads with the standard P@10-based F1. The released track has since been rebuilt on metadata-formed pseudo-tracks (280 tracks, pair-AUC primary: concat 0.726 vs visual 0.686; retrieval P@5 gated 0.444 vs concat 0.427 as a reported ablation with kfold preferring static concat 5/5); the old formation survives only as a sensitivity slice.
 (c) Public Re-ID probe (CUHK-PEDES / Market-1501 frozen SigLIP+MiniLM):
 time-boxed attempt stopped without downloading, for measured reasons — the
 official CUHK-PEDES repo URL returns HTTP 404 and only unofficial mirrors
@@ -49,12 +49,12 @@ cross-dataset claim. (d) The (0.6,0.4) weights are disclosed as a 9-point
 unit-simplex grid on the 50-pair calibration split, no CV, gallery
 disjointness unlogged.
 
-**C3 (alert grammar).** The 91% stays attributed to the LLM-backed deployment
+**C1 (alert compiler).** The 91% stays attributed to the LLM-backed deployment
 study with the export-loss caveat; the released 120-set is explicitly a
 closed-vocabulary regression/coverage check. Specified-field accuracy
 (excluding severity/cadence/cooldown defaults) is now measured:
 `eval_alerts.py` reports test 7/7 severity, 2/2 cadence, 1/1 cooldown correct
-— defaults dominate the released 1.00.
+— defaults dominate the released 1.00. Release probes add: compositional held-out 9/9 vs 51/51, oracle dialogue 1.08 vs 2.58 turns (both 75/90 correct), seeded fuzz with zero crashes, zero soundness violations and zero false materializations.
 
 **Systems language.** 2 FPS is now "near-real-time" with keyframe-only VLM
 captioning outside the budget; 6 s/12 s is "operator-in-the-loop, not
@@ -101,14 +101,14 @@ explicit statement of what cannot be reproduced.
 | Item | Request | Status | Where / what changed |
 |---|---|---|---|
 | R1-1 | Reproducible benchmark (150 queries, 60 utterances) | **Fixed** | `backend/benchmarks/build_subset.py` rebuilds 150 metadata-derived queries + 2,016 track-disjoint person pairs deterministically (seed `20260301`); `build_subset_control.py` adds the protocol-matched control; `backend/benchmarks/alert_utterances.jsonl` now holds 120 unique author-constructed utterances (60 clean / 60 stress) with a 30/30 dev/test split. `backend/benchmarks/README.md` documents provenance per category. |
-| R1-2 | Justify the soft weights; add a learned per-query-$\alpha$ competitor and a per-intent lookup | **Fixed on the released track** | `backend/scripts/eval_alpha_competitors.py`: a multinomial logistic model that predicts the best fixed $\alpha$ from the intent, branch sizes and filter size, fitted on the 50 tune queries, reaches `0.534` vs. `0.538` for the training-free rule; all 16 soft-weight triples give `0.538` on the test split; the per-intent lookup (`0.428`) is reported alongside. Paper §C1 "Competitors and robustness". |
-| R1-3 | Remove the concavity-based Proposition | **Fixed as instructed** | The Proposition is replaced by an empirical *Observation* (no concavity assumed, no general lower bound claimed); the abstract and §C1 now say "we observe empirically". |
+| R1-2 | Justify the soft weights; add a learned per-query-$\alpha$ competitor and a per-intent lookup | **Fixed on the released track** | `backend/scripts/eval_alpha_competitors.py`: a multinomial logistic model that predicts the best fixed $\alpha$ from the intent, branch sizes and filter size, fitted on the 50 tune queries, reaches `0.534` vs. `0.538` for the training-free rule; all 16 soft-weight triples give `0.538` on the test split; the per-intent lookup (`0.428`) is reported alongside. Paper §C3 "Competitors and robustness". |
+| R1-3 | Remove the concavity-based Proposition | **Fixed as instructed** | The Proposition is replaced by an empirical *Observation*, now a scoped *Lemma* (explicit A1--A2 with subset scope; still no concavity, no general lower bound); the abstract and §C3 state the lemma with its scope, and "we observe empirically". |
 | R1-4 | Score normalisation (min-max vs. z-score) | **Fixed on the released track** | Both calibrations are run for every method in `eval_retrieval.py` and the paired min-max/z-score deltas are reported in `results/retrieval_control_tables.md`; the paper keeps per-query min-max as the primary normalisation and states it. |
-| R1-5 | Counting: report EM/MAE | **Fixed with a stated ceiling** | `eval_alpha_competitors.py` measures the window-mode count estimate (EM `0.10`, MAE `2.20`) and the attainable ceiling for any window-based predictor, and shows the release contains no per-frame detector count to validate against. Paper §C1 (iii) and §Evaluation protocol. |
+| R1-5 | Counting: report EM/MAE | **Fixed with a stated ceiling** | `eval_alpha_competitors.py` measures the window-mode count estimate (EM `0.10`, MAE `2.20`) and the attainable ceiling for any window-based predictor, and shows the release contains no per-frame detector count to validate against. Paper §C3 (iii) and §Evaluation protocol. |
 | R1-6 / R1-7 | Fairer fusion baselines, learned projection, 5-seed mean$\pm$SD | **Fixed on the released track** | `eval_fusion.py` adds zero-pad and norm-matched addition, a ridge text$\to$visual projection fitted on calibration tracks only, and a 5-seed random projection (`0.436$\pm$0.0004`); the deployment table keeps its original single-seed measurement and says so. |
 | R1-8 | Calibration/test independence | **Fixed on the released track** | Whole pseudo-tracks are assigned to calibration or test (`528` / `1{,}488` pairs; `174` tracks, `130` in test); every pair threshold is selected on calibration pairs only; the deployment study's 50-pair split is now explicitly flagged as unlogged for disjointness. |
 | R1-9 | Grouped resampling + multiplicity correction | **Fixed on the released track** | `backend/app/eval/stats.py` provides paired bootstrap, grouped bootstrap and Holm correction; every released comparison reports grouped CIs and Holm-adjusted p-values (3,000 resamples). The deployment per-query export was not preserved, so the deployment CIs remain query-level and this is now stated. |
-| R1-10 | Alert reliability / stress | **Fixed** | 120 utterances (60 clean / 60 stress: ambiguous, conflicting, missing, unsupported) with a deterministic materializer and a clarify/abstain validator: 30/30 clean test utterances rule-correct, 30/30 stress test utterances clarified, **0 false materializations**; the chat router no longer inserts a rule when clarification is required. Paper §C3. |
+| R1-10 | Alert reliability / stress | **Fixed** | 120 utterances (60 clean / 60 stress: ambiguous, conflicting, missing, unsupported) with a deterministic materializer and a clarify/abstain validator: 30/30 clean test utterances rule-correct, 30/30 stress test utterances clarified, **0 false materializations**; the chat router no longer inserts a rule when clarification is required. Paper §C1. |
 | R1-11 + R2-3 | 2 FPS vs. 6 s/12 s; percentiles and concurrency | **Fixed** | `measure_latency.py` measures the real components: scene retrieval core `37.4/37.4/39.7 ms` (mean/p50/p95), person core `17.2/18.5/20.4 ms`, and `26.5-39.5 queries/s` at 1-8 workers with p95 `39.6-265.4 ms`; LLM parse, clip stitching, MongoDB and ingestion are explicitly excluded and labelled. The deployment means remain the end-to-end number. |
 | R1-12 + R1-13 | Generalisation; privacy/consent | **Partially fixed** | Implemented and documented: opt-in role/camera/zone access control with audit log, 8 h retention prune, face-blur utility, gender-off output filter (`results/privacy_notes.md`), and the PAR bias discussion is restored with its per-attribute degradation detail. **Still open (needs data we do not have):** cross-site / night / rain evaluation and any demographic-bias measurement; the paper now states these as limitations. |
 | R1-14 + R1-19 + R2-2 | Release, protocol definitions, repeatability | **Fixed** | `backend/scripts/check_release.py` writes a manifest with checksums, package versions and a copy-paste reproduce block; the release contains the benchmarks, the eval harness, the alert schema, the privacy switches and the measured outputs; macro-mean, F1@10 and every threshold are defined in §Evaluation protocol. |
@@ -178,8 +178,8 @@ median are all still the primary evidence, and the PDF still builds to exactly
   them in production, and that the `α`-sweep harness scores them by a
   time-overlap proxy; the `α=1.0` column of Table II therefore must not be
   read as structured-branch noise injection. The same caveat is repeated in
-  the "Query resolution" paragraph of §VII.
-* **B2 — override-gap wording.** The "Released-subset check (C1)" paragraph no
+  the "Query resolution" paragraph of §C3.
+* **B2 — override-gap wording.** The "Released-subset check (C3)" paragraph no
   longer claims that the released subset reproduces the override gap. It now
   says that the overrides are not harmful, that the best per-category fixed
   `α` (`0.7`) happens to match the adaptive rule on all five categories of the

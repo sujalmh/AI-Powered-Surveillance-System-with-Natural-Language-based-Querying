@@ -1,7 +1,7 @@
 # Release manifest
 
-Generated: `2026-10-22T09:37:21.008708+00:00`
-Git: `13c1a62c8dbedc2477d9f6bf2bcf80cba1747eb5`
+Generated: `2026-10-22T10:09:29.304737+00:00`
+Git: `da3d78d3eaf6e8effbdcb7191464b49a08134d66`
 
 ## Subset
 
@@ -29,11 +29,11 @@ Git: `13c1a62c8dbedc2477d9f6bf2bcf80cba1747eb5`
 - **ok** -- no secrets in the release: no *.env/*.key/*.pem/credentials*/secrets* entries
 - **ok** -- no parse caches in the release: no parsed_cache/parser_cache entries
 - **ok** -- measured results shipped: all measured results present
-- **ok** -- camera-ready PDF: 6 pages (0.37 MB, sha256 84f971d7de0d0cac)
+- **ok** -- camera-ready PDF: 6 pages (0.34 MB, sha256 57d330fe15dec846)
 - **ok** -- source bundle: 4 entries (INDICON2026Conference.tex, References.bib, IEEEtran.cls, README.txt)
 - **ok** -- source bundle carries the current paper: INDICON2026Conference.tex is byte-identical to INDICON2026Conference.tex
 - **ok** -- LaTeX log clean: no errors, 6 pages reported
-- **ok** -- folder package: INDICON2026_submit.zip carries the PDF, the source bundle and the sources (0.50 MB)
+- **ok** -- folder package: INDICON2026_submit.zip carries the PDF, the source bundle and the sources (0.47 MB)
 - **ok** -- source bundle compiles standalone: rebuilt from INDICON2026_850_source.zip into a clean 6-page PDF (scratch: C:\Users\sujal\AppData\Local\Temp\opencode\check_release)
 
 ## Reproduce
