@@ -1,7 +1,7 @@
 # Release manifest
 
-Generated: `2026-10-22T02:54:01.140860+00:00`
-Git: `62d0aea62c264b6c971b69722bfb2f87aa35d64c`
+Generated: `2026-10-22T03:11:02.189345+00:00`
+Git: `009313ab0cbb47f2decc9e44c6601ed2ac61be62`
 
 ## Subset
 
@@ -24,12 +24,12 @@ Git: `62d0aea62c264b6c971b69722bfb2f87aa35d64c`
 
 ## Delivery bundles
 
-- **ok** -- release archive present: indicon2026_supplementary.zip (1.43 MB, sha256 124aa88a0f3cc905)
+- **ok** -- release archive present: indicon2026_supplementary.zip (1.43 MB, sha256 95622c0a1bb98fcf)
 - **ok** -- release archive contents: 6 required entries present (llm_client.py, eval_end_to_end.py, test_llm_client.py, ...)
 - **ok** -- no secrets in the release: no *.env/*.key/*.pem/credentials*/secrets* entries
 - **ok** -- no parse caches in the release: no parsed_cache/parser_cache entries
 - **ok** -- measured results shipped: all measured results present
-- **ok** -- camera-ready PDF: 8 pages (0.44 MB, sha256 401aa7521ad1d7ac)
+- **ok** -- camera-ready PDF: 8 pages (0.44 MB, sha256 3b0426b63f03ac56)
 - **ok** -- source bundle: 4 entries (INDICON2026Conference.tex, References.bib, IEEEtran.cls, README.txt)
 - **ok** -- source bundle carries the current paper: INDICON2026Conference.tex is byte-identical to INDICON2026Conference.tex
 - **ok** -- LaTeX log clean: no errors, 8 pages reported
