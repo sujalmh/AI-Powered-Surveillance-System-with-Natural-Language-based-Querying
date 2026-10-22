@@ -135,5 +135,9 @@ INDICON2026_submit/compile_out*.txt
 # LaTeX build logs (regenerable, not part of the submission)
 # ──────────────────────────────────────────────
 INDICON2026_submit/compile_out*.txt
+INDICON2026_submit/compile.log
+INDICON2026_submit/compile_out2.txt
+INDICON2026_submit/texput.log
+INDICON2026_submit/*.log
 INDICON2026_submit/*.out
 INDICON2026_submit/*.blg
