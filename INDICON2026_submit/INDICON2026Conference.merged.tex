@@ -15,7 +15,6 @@
 \usepackage{amsthm}
 \theoremstyle{plain}
 \newtheorem{observation}{Observation}
-\newtheorem{lemma}{Lemma}
 % Allow slightly looser inter-word spacing so that long identifiers and
 % hyphenated terms do not push a line past the column edge.
 \setlength{\emergencystretch}{1.2em}
@@ -157,7 +156,7 @@ Same-space addition needs a projection $\mathbf{P}\in\mathbb{R}^{768\times 384}$
 The released track is the primary comparison; the deployment is a recorded observation stated once below and in the deployment study table.
 
 \begin{table}[!t]
-\caption{Released single-camera person-descriptor track; metadata-formed pseudo-tracks (280 tracks, 1{,}190 queries, 1{,}778 descriptors), not identities. Paired bootstrap, 3{,}000 resamples; Holm over competitors. Concat beats visual ($\Delta{+}0.021$, $p{<}0.0007$) and RRF ($\Delta{+}0.067$, $p{<}0.0007$); zero-pad and learned projection tie; gated is $+$0.017 P@5 at pair-AUC parity.}
+\caption{Released single-camera person-descriptor track (shipped original-index measurement); metadata-formed pseudo-tracks (280 tracks, 1{,}190 queries, 1{,}778 descriptors), not identities. Paired bootstrap, 3{,}000 resamples; Holm over competitors. Concat beats visual ($\Delta{+}0.021$, $p{<}0.0007$) and RRF ($\Delta{+}0.067$, $p{<}0.0007$); zero-pad and learned projection tie; gated is $+$0.017 P@5 at pair-AUC parity.}
 \label{tab:fusion_ablation}
 \centering
 \footnotesize
@@ -322,9 +321,9 @@ On the released track, mean LLM parse time is 3.0~s and production FAISS lookup 
 
 \section{Discussion and Conclusion}
 
-\textbf{Limitations.} (i)~Observation~\ref{lem:override_gap} assumes (A1)--(A2) and is not guaranteed in general; crowded scenes, occlusion, camera-domain shifts and ambiguous action phrasing degrade both branches, unisolated here. (ii)~Concat costs $d_v+d_t$ bytes/descriptor; $N>10^7$ motivates IVF-PQ; the post-ranking ablation on the 100-query test split (\texttt{results/\allowbreak ablation\_\allowbreak tables.md}) finds recency inert and MMR at $\lambda{=}0.3$ costs 0.138 P@5, so MMR is off by default and reported as an ablation. (iii)~The deployment alert result comes from a held-out study whose per-utterance export was not preserved; the release ships a deterministic materializer with clarify/abstain validator (30/30 clarifications, no false materializations); the paths are not interchangeable, the released measure is not open-world accuracy, and no public identity baseline is reported. Known alert-grammar residuals: none on the 215-case set; open-world phrasing still clarifies. (iv)~\emph{Benchmark representativeness.} The 150-query deployment benchmark covers one premises, four cameras and one $\sim$8-h daytime capture; its per-query export, annotator roster and split were not preserved, so the macro-means in Table~\ref{tab:deployment_study} are single-run estimates with non-recomputable CIs ($n{=}30$ per category); the released single-camera control is the only re-computable benchmark and it does not reproduce the gap. (v)~\emph{Privacy and fairness.} Accuracy degrades outside adult daylight imagery. No demographic labels or second annotator exist, so no inter-annotator agreement or per-group error rate is claimed. Gender is excluded from the person descriptor by default: stored
-attribute texts are rebuilt without gender terms and new captions omit
-them; no per-group error rate is claimed. Consequential alerts are staged
+\textbf{Limitations.} (i)~Observation~\ref{lem:override_gap} assumes (A1)--(A2) and is not guaranteed in general; crowded scenes, occlusion, camera-domain shifts and ambiguous action phrasing degrade both branches, unisolated here. (ii)~Concat costs $d_v+d_t$ bytes/descriptor; $N>10^7$ motivates IVF-PQ; the post-ranking ablation on the 100-query test split (\texttt{results/\allowbreak ablation\_\allowbreak tables.md}) finds recency inert and MMR at $\lambda{=}0.3$ costs 0.138 P@5, so MMR is off by default and reported as an ablation. (iii)~The deployment alert result comes from a held-out study whose per-utterance export was not preserved; the release ships a deterministic materializer with clarify/abstain validator (30/30 clarifications, no false materializations); the paths are not interchangeable, the released measure is not open-world accuracy, and no public identity baseline is reported. Known alert-grammar residuals: none on the 215-case set; open-world phrasing still clarifies. (iv)~\emph{Benchmark representativeness.} The 150-query deployment benchmark covers one premises, four cameras and one $\sim$8-h daytime capture; its per-query export, annotator roster and split were not preserved, so the macro-means in Table~\ref{tab:deployment_study} are single-run estimates with non-recomputable CIs ($n{=}30$ per category); the released single-camera control is the only re-computable benchmark and it does not reproduce the gap. (v)~\emph{Privacy and fairness.} Accuracy degrades outside adult daylight imagery. No demographic labels or second annotator exist, so no inter-annotator agreement or per-group error rate is claimed. Gender is excluded from the person descriptor by default: new captions
+omit gender and the supplied rebuild removes gender terms from stored
+attribute texts. Consequential alerts are staged
 for operator approval by default: the rule schema carries a
 \texttt{requires\_approval} flag alongside the 9-tuple, the engine writes a
 \texttt{pending\_approval} log and runs no side effects until approval, and
