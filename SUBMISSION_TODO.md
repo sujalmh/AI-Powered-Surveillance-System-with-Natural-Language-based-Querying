@@ -65,10 +65,10 @@ opencode models, OpenAI-compatible)
 | # | Item | Status | Where |
 |---|---|---|---|
 | E1 | Locate every `0.000` in the paper and in the release | **DONE** | paper PDF: only the resolution floor `0.0002`, the genuine zero deltas (`Δ=0.000, p=1.0`), the genuine zero action P@5 (`0.090 vs. 0.000`) and `0.436 ± 0.0004` — all legitimate |
-| E2 | p-values must never be printed as a bare `0.0000`; print the bootstrap resolution floor (`< 0.0002` at 10 000 resamples, `< 0.0007` at 3 000) | **IN PROGRESS** | `backend/app/eval/stats.py` (shared `format_p` helper) + all `backend/scripts/eval_*.py` writers |
-| E3 | A non-zero standard deviation must never be printed as `± 0.000`; print `< 0.001` (true SD of the random-projection baseline is 0.00044) | **IN PROGRESS** | shared `format_sd` helper |
-| E4 | JSON keeps the raw numbers; only the human-readable markdown changes | **IN PROGRESS** | `results/*.json` |
-| E5 | Regenerate every affected result table and prove no measured value changed (`git diff`) | **IN PROGRESS** | `results/fusion_tables.md`, `results/retrieval_control_tables.md`, `results/end_to_end_tables.md`, `results/alpha_competitors.md` |
+| E2 | p-values must never be printed as a bare `0.0000`; print the bootstrap resolution floor (`< 0.0002` at 10 000 resamples, `< 0.0007` at 3 000) | **DONE** | shared `format_p` covers every p-value writer (`eval_retrieval.py`, `eval_retrieval_control.py`, `eval_fusion.py`, `eval_end_to_end.py`, `eval_ablation.py`); `eval_alpha_competitors.py` / `eval_alerts.py` / `eval_parser.py` print no p-values (verified by scan); strict repo-wide scan finds `0.0000` only in `results/README.md` documentation text, never in a data table |
+| E3 | A non-zero standard deviation must never be printed as `± 0.000`; print `< 0.001` (true SD of the random-projection baseline is 0.00044) | **DONE** | shared `format_sd` covers the only `±SD` writer (`eval_fusion.py` randproj → `0.436 ± < 0.001`); strict scan finds `± 0.000` only in `results/README.md` documentation text; all data-table dispersions are `< 0.001` or genuine non-zero values |
+| E4 | JSON keeps the raw numbers; only the human-readable markdown changes | **DONE** | verified: `fusion_results.json` keeps raw `p5_p: 0.0`, `ablation_results.json` keeps raw `p: 0.0` while the `.md` tables show `< 0.0007`; raw SDs kept in JSON |
+| E5 | Regenerate every affected result table and prove no measured value changed (`git diff`) | **DONE** | all four scripts re-run: `retrieval_control_results.json` / `end_to_end_results.json` / `alpha_competitors.json` byte-identical to HEAD (modulo `generated_at`); `fusion_results.json` adds only the `kfold_by_track` key; distinct-value diff of the four `.md` tables: 0 lost (fusion gains k-fold numbers only) |
 | E6 | No released artefact contains a bare `0.0000` p-value or a `± 0.000` SD | **DONE** | verified: 0 in the paper source and 0 across `results/*.md`; the JSON keeps the raw numbers |
 
 ## E-bis. Defects found while re-verifying the release
@@ -108,6 +108,22 @@ opencode models, OpenAI-compatible)
 
 
 
+## F. Major-revision round 2 (2026-10-22) — Weak Reject fixes
+
+| # | Item | Status |
+|---|---|---|
+| F1 | Abstract + §C1 state per-intent lookup 0.822 vs 0.828, soft +0.006 deploy / +0.000 subset, subset tie (p 1.0), end-to-end tie (p 0.80), per-cat p 0.04/0.07 not surviving Holm; Observation 1 stays empirical | **DONE** |
+| F2 | Deployment CIs/p-values labelled recorded-not-recomputable; significance claimed only on released track (grouped + Holm); Statistical protocol updated | **DONE** |
+| F3 | MMR/recency 2×2 ablation (`eval_ablation.py` → `results/ablation_*`): recency Δ 0.000 (inert), production MMR −0.138 (p<0.0007); Limitations (ii) replaced | **DONE** |
+| F4 | C2: Add(proj.) illustrative single-seed + RRF margin fragile; 5-fold CV over 174 pseudo-tracks in `eval_fusion.py` (inversion on every fold); (0.6,0.4) 9-point grid on 50 pairs disclosed, no CV | **DONE** |
+| F5 | Public Re-ID probe time-boxed → case-study fallback (no download, no new claim; documented in RESPONSE_TO_REVIEWERS.md) | **DONE** (fallback-2; attempt measured: official repo URL 404, only unofficial mirrors ≤9 likes, SigLIP weights uncached, CPU lower bound 0.05 s/img → 60–120 min all-in over ~30 min budget) |
+| F6 | Counting: EM/MAE (0.10/2.20) stated as primary counting-ability measure; count-P@5 kept as supporting-clip retrieval | **DONE** |
+| F7 | C3: specified-field accuracy measured (test sev 7/7, cad 2/2, cool 1/1); 91% stays LLM-backed deployment study; 120-set closed-vocabulary regression | **DONE** |
+| F8 | Related work: +Bruch 2022 (b33), +DAT per-query-α 2025 (b34), +CLIP-ReID 2023 (b35); −b3/−b20/−b22 generics; 15 refs all cited; undemonstrated-scope narrowed | **DONE** |
+| F9 | Systems: near-real-time 2 FPS + keyframe-only VLM; operator-in-the-loop 6 s/12 s; flat-index 109 ms median, N=312,544 | **DONE** |
+| F10 | Paper rebuilt: 6 pages, 0 overfull, 0 undefined, 0 bibtex warnings, 9 underfull; no measured value lost (distinct-value diff) | **DONE** |
+| F11 | Follow-up round (E2–E5 closure, O1 wording, MMR mirror, standard-F1 clause, unreferenced label, probe sizing) | **DONE** | E2–E5 DONE with strict-scan + regen proof; abstract 0× `releas`, no URL invented; §eval carries pre-MMR/diversity-penalty mirror; C2 scope points to released track's standard-F1 lead (Table IV keeps recorded paper-def values, standard cells not re-computable); `sec:eval_protocol` label removed; probe attempt documented |
+
 ## D. Release integrity
 
 | # | Item | Status |
@@ -127,7 +143,7 @@ opencode models, OpenAI-compatible)
 
 | # | Item | Owner | Notes |
 |---|---|---|---|
-| O1 | **Decide the public repository.** The paper now says "the public repository URL is withheld from this preprint and will be given on acceptance". If the repo is to be public under a different name, update the footnote, the abstract and `VERIFICATION.md`; the cited URL `github.com/sujalmh/intent-adaptive-hybrid-surveillance` currently returns 404. | human | Blocking for a "released" claim |
+| O1 | **Public repository created: `github.com/sujalmh/intent-adaptive-hybrid-surveillance` (public, tests+harness+results, 188 green).** The paper still says the URL "is withheld from this preprint and given on acceptance" — updating the footnote/abstract/`VERIFICATION.md` to link the live repo is a paper change needing a rebuild + revalidation; author to decide. | human | Repo live; footnote link-up pending |
 | O2 | **ISBN / price footer.** `INDICON2026Conference.tex` line ~38 carries the kit's placeholder `979-8-3195-2581-9/26/$31.00`. It is verbatim from the author kit, but the organisers may require it removed or replaced. | human | Template boilerplate |
 | O3 | **Single vs double blind.** The paper carries named authors. Confirm the track; if double-blind, the author block and the acknowledgements need anonymising. | human | Affects the PDF |
 | O4 | **ORCID / contact metadata** for the submission portal. | human | Not in the PDF |

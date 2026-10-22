@@ -804,6 +804,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "python backend/benchmarks/build_subset_control.py",
         "python backend/scripts/eval_retrieval_control.py",
         "python backend/scripts/eval_alpha_competitors.py",
+        "python backend/scripts/eval_ablation.py",
         "python backend/scripts/eval_fusion.py",
         "python backend/scripts/eval_alerts.py",
         "python backend/scripts/eval_end_to_end.py",

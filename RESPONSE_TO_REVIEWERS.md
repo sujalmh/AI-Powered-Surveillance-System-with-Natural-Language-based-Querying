@@ -6,6 +6,88 @@ numbers quoted here are produced by scripts in this repository and stored under
 evidence and reports the released single-camera subset as a separate
 reproducibility track.
 
+---
+
+## Major-revision round 2 (2026-10-22) — Weak Reject / Major Revision fixes
+
+**C1 (intent-adaptive alpha).** The abstract and §C1 now state the full
+honest picture: the per-intent fixed-alpha lookup reaches 0.822 vs. adaptive
+0.828, so the soft terms contribute +0.006 on the deployment and +0.000 on
+the released control (all 16 soft-weight triples give 0.538); the released
+control ties the best tune-selected fixed alpha (0.538 vs. 0.538, Δ 0.000,
+p = 1.0); the end-to-end track ties too (0.450 vs. 0.448, Δ +0.002,
+p = 0.80); deployment per-category gains are +0.02 (p = 0.04, find) and +0.01
+(p = 0.07, track), both marginal and not surviving Holm correction.
+Observation 1 stays empirical ("not a theorem"). Deployment CIs/p-values are
+now labelled in the Statistical protocol paragraph as recorded single-run
+measurements, not re-computable significance; significance is claimed only on
+the released track (grouped bootstrap + Holm).
+
+**C2 (heterogeneous fusion).** (a) The deployment Add(proj.) baseline is
+labelled illustrative single-seed and the concat-vs-RRF margin fragile (95%
+CI [+0.4,+4.1]). (b) The released track already carried both F1 variants
+(standard P@10-based first, paper P@5/R@10 second) plus 5-seed
+random-projection and a calibration-only ridge learned projection; this round
+adds 5-fold whole-track CV over the 174 pseudo-tracks (`kfold_by_track` in
+`eval_fusion.py`, `results/fusion_tables.md`): visual-only beats concat on
+every fold, so the inversion is systematic bias from visual-cosine track
+formation, not fold noise. The deployment Table IV keeps its recorded
+paper-definition F1@10 values (the per-query export needed for the standard
+variant was not preserved, so those cells are not re-computable) and now
+points to the released track, which leads with the standard P@10-based F1.
+(c) Public Re-ID probe (CUHK-PEDES / Market-1501 frozen SigLIP+MiniLM):
+time-boxed attempt stopped without downloading, for measured reasons — the
+official CUHK-PEDES repo URL returns HTTP 404 and only unofficial mirrors
+(≤9 likes, no verifiable file listing) remain, so dataset provenance is
+unsuitable for a paper artefact; SigLIP weights are not in the offline cache
+(+~1 GB download); CPU encode lower bound measured at 0.05 s/img
+(OpenCLIP ViT-B/32 proxy, SigLIP-base heavier), putting even a 1,000-image
+mini-split plus mirror format-debugging at 60–120 min all-in, over the
+~30 min budget. Fallback-2 stands: Table IV remains deployment case-study
+evidence and the released track a code-path check, with no new
+cross-dataset claim. (d) The (0.6,0.4) weights are disclosed as a 9-point
+unit-simplex grid on the 50-pair calibration split, no CV, gallery
+disjointness unlogged.
+
+**C3 (alert grammar).** The 91% stays attributed to the LLM-backed deployment
+study with the export-loss caveat; the released 120-set is explicitly a
+closed-vocabulary regression/coverage check. Specified-field accuracy
+(excluding severity/cadence/cooldown defaults) is now measured:
+`eval_alerts.py` reports test 7/7 severity, 2/2 cadence, 1/1 cooldown correct
+— defaults dominate the released 1.00.
+
+**Systems language.** 2 FPS is now "near-real-time" with keyframe-only VLM
+captioning outside the budget; 6 s/12 s is "operator-in-the-loop, not
+interactive"; 109 ms is the flat-index deployment median over N = 312,544.
+
+**Post-ranking ablation (new).** `backend/scripts/eval_ablation.py` runs the
+2x2 (recency on/off × MMR on/off) on the 100-query control test split
+(`results/ablation_results.json`, `results/ablation_tables.md`): recency is
+ranking-inert on the archived subset (Δ 0.000, all boosts ~1.0: ~5,000 h old
+against a 24 h half-life); production MMR (λ = 0.3) costs −0.138 macro P@5
+(p < 0.0007), so the quoted 0.538 control is pre-MMR and the production
+default scores 0.400 on this single-camera subset. Limitations (ii) reports
+this instead of "unablated".
+
+**Related work (still 15 refs, all cited).** Added Bruch et al. 2022
+convex-combination analysis (b33), DAT per-query alpha 2025 (b34, QDAP-style
+family) and CLIP-ReID AAAI 2023 (b35); dropped the three single-cite
+generics (Agentic-RAG survey b3, GPT-4o system card b20, BoT-SORT b22) with
+prose rephrased to match. Kept CUHK-PEDES b32, HyST b30, RRF b27.
+"Undemonstrated" is narrowed to override-routing + heterogeneous
+single-index fusion scope.
+
+**Counting.** EM/MAE (0.10/2.20 + label-noise ceiling) is now stated as the
+primary counting-ability measure; count-P@5 stays as supporting-clip
+retrieval with its clarifying clause.
+
+No measured value was removed: a distinct-value diff of the pre- and
+post-revision tex sources shows every headline number and caveat still
+present. The paper builds to exactly 6 pages, 0 overfull, 0 undefined, 15/15
+refs cited.
+
+---
+
 Summary of the revision in one line: **the paper's headline results are
 unchanged** (`0.666 -> 0.828` macro P@5, `0.785 -> 0.807` F1@10, `91%` alert
 rule-correctness, `6.0 s / 12.0 s` query latency), while every claim that

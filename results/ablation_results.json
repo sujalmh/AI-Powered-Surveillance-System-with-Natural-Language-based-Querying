@@ -1,0 +1,123 @@
+{
+  "scope": {
+    "benchmark": "backend/benchmarks/queries_control.jsonl (protocol-matched control, 50 tune / 100 test)",
+    "note": "2x2 post-ranking ablation on the released subset; not the 4-camera deployment."
+  },
+  "production_flags": {
+    "ENABLE_RECENCY_BOOST": true,
+    "RECENCY_HALFLIFE_HOURS": 24.0,
+    "ENABLE_RESULT_DIVERSITY": true,
+    "MMR_DIVERSITY_LAMBDA": 0.3
+  },
+  "n_boot": 3000,
+  "summary": {
+    "base (no recency, no MMR)": {
+      "macro": 0.538,
+      "per_category": {
+        "count": 0.38999999999999996,
+        "find": 0.9199999999999999,
+        "track": 0.8100000000000002,
+        "action": 0.09,
+        "filter": 0.4800000000000001
+      },
+      "n_test": 100
+    },
+    "recency only": {
+      "macro": 0.538,
+      "per_category": {
+        "count": 0.38999999999999996,
+        "find": 0.9199999999999999,
+        "track": 0.8100000000000002,
+        "action": 0.09,
+        "filter": 0.4800000000000001
+      },
+      "n_test": 100
+    },
+    "MMR only": {
+      "macro": 0.4,
+      "per_category": {
+        "count": 0.37,
+        "find": 0.5799999999999998,
+        "track": 0.5499999999999999,
+        "action": 0.09000000000000001,
+        "filter": 0.41000000000000003
+      },
+      "n_test": 100
+    },
+    "both (production default)": {
+      "macro": 0.4,
+      "per_category": {
+        "count": 0.37,
+        "find": 0.5799999999999998,
+        "track": 0.5499999999999999,
+        "action": 0.09000000000000001,
+        "filter": 0.41000000000000003
+      },
+      "n_test": 100
+    },
+    "both (archive-anchored now, sensitivity)": {
+      "macro": 0.4,
+      "per_category": {
+        "count": 0.37,
+        "find": 0.5799999999999998,
+        "track": 0.5499999999999999,
+        "action": 0.09000000000000001,
+        "filter": 0.41000000000000003
+      },
+      "n_test": 100
+    }
+  },
+  "significance_vs_base": {
+    "recency only": {
+      "delta_p5": 0.0,
+      "lo": 0.0,
+      "hi": 0.0,
+      "p": 1.0
+    },
+    "MMR only": {
+      "delta_p5": -0.138,
+      "lo": -0.17200000000000004,
+      "hi": -0.10000000000000002,
+      "p": 0.0
+    },
+    "both (production default)": {
+      "delta_p5": -0.138,
+      "lo": -0.17200000000000004,
+      "hi": -0.10000000000000002,
+      "p": 0.0
+    }
+  },
+  "recency_diagnostics": {
+    "wall_clock_now": "2026-10-22T07:07:01.253768",
+    "archive_anchored_now": "2026-03-01T19:56:17.989377",
+    "sample_factors_wall_clock": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "sample_factors_archive_anchored": [
+      1.459548958034146,
+      1.4596055093602844,
+      1.4596620830013598,
+      1.4597177191610828,
+      1.4597758795886167,
+      1.4598328600093287,
+      1.4598895714700375,
+      1.4599481893001758,
+      1.4600043975225936,
+      1.4600672043319651
+    ]
+  },
+  "limitations": [
+    "Single camera (camera_0), 100 test queries; cross-camera and deployment-scale effects are untestable.",
+    "Recency uses production wall-clock semantics; on the archived subset every boost is ~1.0 by construction (age saturation), so recency is ranking-inert here, not necessarily in deployment.",
+    "MMR (lambda=0.3) penalises same-(camera, hour-bucket) candidates; on this single-camera subset the relevant clips share the query window bucket, so MMR demotes them (-0.138 macro P@5). The 0.538 control is therefore pre-MMR; the production default scores 0.400 on this subset. Multi-camera deployment effects are untestable here."
+  ]
+}

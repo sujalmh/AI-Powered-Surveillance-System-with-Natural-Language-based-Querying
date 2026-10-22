@@ -31,6 +31,16 @@
 | `side_effects` | 30/30 | 100.0% |
 | `cadence_hz` | 30/30 | 100.0% |
 
+### Specified-field accuracy (test clean rows, defaults excluded)
+
+Severity `info`, cadence `1.0` Hz and cooldown `60` s score 1.00 by construction when the utterance does not state them. The rows below score only the utterances whose reference does NOT use the default.
+
+| Field | Specified n | Correct | Accuracy |
+|---|---:|---:|---:|
+| `severity` | 7 | 7 | 100.0% |
+| `cadence_hz` | 2 | 2 | 100.0% |
+| `cooldown_sec` | 1 | 1 | 100.0% |
+
 ### Per-stress-kind breakdown (test)
 
 | Kind | n | Clarified | Rate | False mat. | Kind match |
@@ -59,6 +69,35 @@ The 0.91 figure reported in the manuscript comes from the deployment study (a se
 ## Failing test cases
 
 None on the test split. All 30 clean rules were materialized with all nine fields exact, and all 30 stress utterances requested clarification.
+
+## Compositional held-out (one (event, zone) combo per event)
+
+The grammar has no learned parameters, so this is a coverage-uniformity check across the product space, not a test of learned compositionality. Held-out combos: (crowd, Zone A), (loiter, Entrance), (fight, Parking), (enter, Zone A), (zone, Zone B), (count, Gate), (time, Entrance).
+
+| Slice | n | Correct | Accuracy |
+|---|---:|---:|---:|
+| Held-out combos | 9 | 9 | 100.0% |
+| Seen combos | 51 | 51 | 100.0% |
+
+## Simulated-oracle-user dialogue (clean test rows, masked slots)
+
+Episodes: 90 (30 clean test rows x 3 reps, k=rep+1 masked required slots from {event, zone, threshold}, seed 0xc3a1). A truthful oracle fills exactly the slots asked; unasked masked slots fall back to the documented event defaults. Final rules are checked with `validate_rule` and against the reference.
+
+| Policy | Mean turns | Max turns | Correct | Valid |
+|---|---:|---:|---:|---:|
+| Minimal-question policy | 1.08 | 2 | 75/90 = 83.3% | 90/90 |
+| Naive per-field (9 fields, fixed order) | 2.58 | 4 | 75/90 = 83.3% | 90/90 |
+
+## Fuzz property tests (stdlib `random`, seeded)
+
+Noise: 2000 utterances (1-12 tokens from grammar/filler vocabulary, seed 0xf422); targeted: 200 utterances embedding one unsupported hint in filler.
+
+| Property | Result |
+|---|---:|
+| Crashes (materialize + validate) | 0 |
+| Soundness violations (materialized rule failing `validate_rule`) | 0 |
+| Targeted false materializations (unsupported hint + filler) | 0 |
+| Noise clarified / materialized (descriptive) | 1358 / 642 |
 
 ## Canonical fields and defaults
 

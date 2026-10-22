@@ -45,35 +45,37 @@ G.~V. Cormack, C.~L.~A. Clarke, and S.~B{\"u}ttcher, ``Reciprocal rank fusion
 J.~Myung \emph{et~al.}, ``{HyST}: {LLM}-powered hybrid retrieval over
   semi-structured tabular data,'' \emph{arXiv preprint arXiv:2508.18048}, 2025.
 
-\bibitem{b22b}
-K.~Zhou \emph{et~al.}, ``Omni-scale feature learning for person
-  re-identification,'' in \emph{Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV)},
-  2019, pp. 3702--3712.
+\bibitem{b25}
+J.~Johnson \emph{et~al.}, ``Billion-scale similarity search with {GPUs},''
+  \emph{IEEE Trans. Big Data}, vol.~7, no.~3, pp. 535--547, 2021.
+
+\bibitem{b33}
+S.~Bruch \emph{et~al.}, ``An analysis of fusion functions for hybrid
+  retrieval,'' \emph{arXiv preprint arXiv:2210.11934}, 2022.
+
+\bibitem{b34}
+Hsu and Tzeng, ``{DAT}: Dynamic alpha tuning for hybrid retrieval in
+  retrieval-augmented generation,'' \emph{arXiv preprint arXiv:2503.23013},
+  2025.
 
 \bibitem{b32}
 S.~Li \emph{et~al.}, ``Person search with natural language description,'' in
   \emph{Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2017, pp.
   1970--1979.
 
-\bibitem{b25}
-J.~Johnson \emph{et~al.}, ``Billion-scale similarity search with {GPUs},''
-  \emph{IEEE Trans. Big Data}, vol.~7, no.~3, pp. 535--547, 2021.
-
-\bibitem{b3}
-A.~Singh \emph{et~al.}, ``Agentic retrieval-augmented generation: A survey on
-  agentic {RAG},'' \emph{arXiv preprint arXiv:2501.09136}, 2025.
-
-\bibitem{b20}
-{OpenAI}, ``{GPT-4o} system card,'' 2024,
-  \url{https://openai.com/index/gpt-4o-system-card/}.
+\bibitem{b35}
+------, ``{CLIP-ReID}: Exploiting vision-language model for image
+  re-identification without concrete text labels,'' in \emph{Proc. AAAI Conf.
+  Artif. Intell. (AAAI)}, 2023.
 
 \bibitem{b14}
 {Ultralytics}, ``{YOLO11},'' \url{https://github.com/ultralytics/ultralytics},
   2024.
 
-\bibitem{b22}
-N.~Aharon \emph{et~al.}, ``{BoT-SORT}: Robust associations multi-pedestrian
-  tracking,'' \emph{arXiv preprint arXiv:2206.14651}, 2022.
+\bibitem{b22b}
+K.~Zhou \emph{et~al.}, ``Omni-scale feature learning for person
+  re-identification,'' in \emph{Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV)},
+  2019, pp. 3702--3712.
 
 \bibitem{b18b}
 G.~Ilharco \emph{et~al.}, ``{OpenCLIP},''

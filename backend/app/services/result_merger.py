@@ -298,11 +298,44 @@ def compute_adaptive_alpha(
     has_action: bool,
     n_structured: int,
     n_semantic: int,
+    struct_scores: Optional[List[float]] = None,
+    sem_scores: Optional[List[float]] = None,
+    confidence_blend: float = 0.5,
 ) -> float:
     """
     Compute *alpha* (structured weight) adaptively from query and result
     characteristics.  Falls back to a fixed intent-based alpha when disabled.
+
+    Score-vector path (C1'): when per-candidate ``struct_scores`` and
+    ``sem_scores`` are supplied, the metadata prior below is blended 50/50
+    with the score-driven confidence weight
+    ``cs/(cs+ce)`` from ``backend.app.eval.confidence`` (top-1 margin +
+    top-k concentration per branch).  When either vector is missing the
+    metadata-only prior is returned unchanged (backward compatible).
     """
+    prior = _metadata_prior_alpha(
+        parsed_filter, intent, has_count_constraint, has_action,
+        n_structured, n_semantic,
+    )
+    if struct_scores is None or sem_scores is None:
+        return prior
+    try:
+        from backend.app.eval.confidence import combined_alpha
+
+        return float(combined_alpha(prior, struct_scores, sem_scores, blend=confidence_blend))
+    except Exception:
+        logger.opt(exception=True).debug("Confidence blend failed, using metadata prior")
+        return prior
+
+
+def _metadata_prior_alpha(
+    parsed_filter: Dict[str, Any],
+    intent: str,
+    has_count_constraint: bool,
+    has_action: bool,
+    n_structured: int,
+    n_semantic: int,
+) -> float:
     if not getattr(settings, "ENABLE_ADAPTIVE_ALPHA", True):
         return _fixed_alpha(intent, has_count_constraint, has_action)
     try:

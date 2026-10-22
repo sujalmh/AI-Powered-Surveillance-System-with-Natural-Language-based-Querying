@@ -104,9 +104,22 @@ numbers.
   makes the two tracks comparable: the difference between 0.538 and the
   end-to-end 0.450 is the filter's origin, not the harness.
 - `fusion_results.json` / `fusion_tables.md` / `fusion_queries.csv`:
-  person-pair/track fusion baselines on the subset.
+  person-pair/track fusion baselines on the subset, now with a 5-fold
+  whole-track cross-validation (`kfold_by_track`, k=5 over the 174
+  pseudo-tracks, gallery restricted to the held-out fold) that keeps the
+  visual-only > concat inversion on every fold.
 - `alert_results.json` / `alert_results.md`: alert-authoring test split and
-  stress/clarify evaluation.
+  stress/clarify evaluation, now also reporting specified-field accuracy
+  (severity / cadence / cooldown scored only on rows whose reference does
+  not use the default): test 7/7, 2/2 and 1/1 correct — defaults dominate
+  the 1.00.
+- `ablation_results.json` / `ablation_tables.md`: 2x2 post-ranking
+  ablation (recency on/off x MMR on/off) on the 100-query control test
+  split, produced by `backend/scripts/eval_ablation.py`. Recency is
+  ranking-inert on the archived subset (all boosts ~1.0: ~5,000 h old
+  against a 24 h half-life); production MMR (lambda=0.3) costs -0.138
+  macro P@5 (p < 0.0007), so the 0.538 control is pre-MMR and the
+  production default scores 0.400 on this single-camera subset.
 - `latency_results.json` / `latency_results.md`: real component timings,
   p50/p95, and concurrency on the subset.
 - `privacy_notes.md`: implemented safeguards and their deployment switches.

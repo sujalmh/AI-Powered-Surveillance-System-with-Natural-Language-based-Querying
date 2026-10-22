@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-21T15:54:17.135358+00:00",
+  "generated_at": "2026-10-22T09:33:32.752578+00:00",
   "command": "$env:PYTHONIOENCODING='utf-8'; python backend/scripts/eval_alerts.py",
   "python": "3.12.4",
   "dataset": {
@@ -58,6 +58,23 @@
   },
   "splits": {
     "dev": {
+      "specified_field_accuracy": {
+        "severity": {
+          "n": 2,
+          "correct": 2,
+          "accuracy": 1.0
+        },
+        "cadence_hz": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 1.0
+        },
+        "cooldown_sec": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 1.0
+        }
+      },
       "clean": {
         "n": 30,
         "materialized": 30,
@@ -158,6 +175,23 @@
       }
     },
     "test": {
+      "specified_field_accuracy": {
+        "severity": {
+          "n": 7,
+          "correct": 7,
+          "accuracy": 1.0
+        },
+        "cadence_hz": {
+          "n": 2,
+          "correct": 2,
+          "accuracy": 1.0
+        },
+        "cooldown_sec": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 1.0
+        }
+      },
       "clean": {
         "n": 30,
         "materialized": 30,
@@ -259,6 +293,23 @@
     }
   },
   "overall": {
+    "specified_field_accuracy": {
+      "severity": {
+        "n": 9,
+        "correct": 9,
+        "accuracy": 1.0
+      },
+      "cadence_hz": {
+        "n": 6,
+        "correct": 6,
+        "accuracy": 1.0
+      },
+      "cooldown_sec": {
+        "n": 5,
+        "correct": 5,
+        "accuracy": 1.0
+      }
+    },
     "clean": {
       "n": 60,
       "materialized": 60,
@@ -357,5 +408,1252 @@
       "recall": 1.0,
       "f1": 1.0
     }
+  },
+  "compositional_heldout": {
+    "held_out_combos": [
+      [
+        "crowd",
+        "Zone A"
+      ],
+      [
+        "loiter",
+        "Entrance"
+      ],
+      [
+        "fight",
+        "Parking"
+      ],
+      [
+        "enter",
+        "Zone A"
+      ],
+      [
+        "zone",
+        "Zone B"
+      ],
+      [
+        "count",
+        "Gate"
+      ],
+      [
+        "time",
+        "Entrance"
+      ]
+    ],
+    "held_out": {
+      "n": 9,
+      "correct": 9,
+      "accuracy": 1.0,
+      "failures": []
+    },
+    "seen": {
+      "n": 51,
+      "correct": 51,
+      "accuracy": 1.0,
+      "failures": []
+    }
+  },
+  "oracle_turns": {
+    "n_episodes": 90,
+    "seed": 50081,
+    "masking": "k=rep+1 required slots sampled per clean test row",
+    "policy": {
+      "mean_turns": 1.0778,
+      "max_turns": 2,
+      "correct": 75,
+      "correct_rate": 0.833333,
+      "valid": 90
+    },
+    "naive_per_field": {
+      "mean_turns": 2.5778,
+      "max_turns": 4,
+      "correct": 75,
+      "correct_rate": 0.833333,
+      "valid": 90
+    },
+    "episodes": [
+      {
+        "uid": "a_clean_02",
+        "masked": [
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_02",
+        "masked": [
+          "event",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_02",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 2,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 4,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_04",
+        "masked": [
+          "threshold"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 4,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_04",
+        "masked": [
+          "event",
+          "threshold"
+        ],
+        "policy_turns": 2,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 4,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_04",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 2,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 4,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_06",
+        "masked": [
+          "event"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 1,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_06",
+        "masked": [
+          "event",
+          "threshold"
+        ],
+        "policy_turns": 2,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 4,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_06",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 2,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 4,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_08",
+        "masked": [
+          "threshold"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 4,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_08",
+        "masked": [
+          "event",
+          "threshold"
+        ],
+        "policy_turns": 2,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 4,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_08",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 2,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 4,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_10",
+        "masked": [
+          "event"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 1,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_10",
+        "masked": [
+          "event",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_10",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 2,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 4,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_12",
+        "masked": [
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_12",
+        "masked": [
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 4,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_12",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 2,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 4,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_14",
+        "masked": [
+          "event"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 1,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_14",
+        "masked": [
+          "event",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_14",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": false,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": false,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_16",
+        "masked": [
+          "event"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 1,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_16",
+        "masked": [
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": false,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": false,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_16",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": false,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": false,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_18",
+        "masked": [
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_18",
+        "masked": [
+          "event",
+          "threshold"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 1,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_18",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_20",
+        "masked": [
+          "event"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 1,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_20",
+        "masked": [
+          "event",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_20",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": false,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": false,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_22",
+        "masked": [
+          "threshold"
+        ],
+        "policy_turns": 0,
+        "policy_correct": false,
+        "policy_valid": true,
+        "naive_turns": 0,
+        "naive_correct": false,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_22",
+        "masked": [
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": false,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": false,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_22",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": false,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": false,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_24",
+        "masked": [
+          "threshold"
+        ],
+        "policy_turns": 0,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 0,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_24",
+        "masked": [
+          "event",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_24",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_26",
+        "masked": [
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_26",
+        "masked": [
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_26",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_28",
+        "masked": [
+          "threshold"
+        ],
+        "policy_turns": 0,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 0,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_28",
+        "masked": [
+          "event",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_28",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_30",
+        "masked": [
+          "threshold"
+        ],
+        "policy_turns": 0,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 0,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_30",
+        "masked": [
+          "event",
+          "threshold"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 1,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_30",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_32",
+        "masked": [
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_32",
+        "masked": [
+          "event",
+          "threshold"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 1,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_32",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_34",
+        "masked": [
+          "threshold"
+        ],
+        "policy_turns": 0,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 0,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_34",
+        "masked": [
+          "event",
+          "threshold"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 1,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_34",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_36",
+        "masked": [
+          "threshold"
+        ],
+        "policy_turns": 0,
+        "policy_correct": false,
+        "policy_valid": true,
+        "naive_turns": 0,
+        "naive_correct": false,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_36",
+        "masked": [
+          "event",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_36",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": false,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": false,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_38",
+        "masked": [
+          "threshold"
+        ],
+        "policy_turns": 0,
+        "policy_correct": false,
+        "policy_valid": true,
+        "naive_turns": 0,
+        "naive_correct": false,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_38",
+        "masked": [
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": false,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": false,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_38",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": false,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": false,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_40",
+        "masked": [
+          "event"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 1,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_40",
+        "masked": [
+          "event",
+          "threshold"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 1,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_40",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_42",
+        "masked": [
+          "threshold"
+        ],
+        "policy_turns": 0,
+        "policy_correct": false,
+        "policy_valid": true,
+        "naive_turns": 0,
+        "naive_correct": false,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_42",
+        "masked": [
+          "event",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_42",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": false,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": false,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_44",
+        "masked": [
+          "threshold"
+        ],
+        "policy_turns": 0,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 0,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_44",
+        "masked": [
+          "event",
+          "threshold"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 1,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_44",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_46",
+        "masked": [
+          "event"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 1,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_46",
+        "masked": [
+          "event",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_46",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_48",
+        "masked": [
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_48",
+        "masked": [
+          "event",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_48",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": false,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": false,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_50",
+        "masked": [
+          "event"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 1,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_50",
+        "masked": [
+          "event",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_50",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 2,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 4,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_52",
+        "masked": [
+          "event"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 1,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_52",
+        "masked": [
+          "event",
+          "threshold"
+        ],
+        "policy_turns": 2,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 4,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_52",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 2,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 4,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_54",
+        "masked": [
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_54",
+        "masked": [
+          "event",
+          "threshold"
+        ],
+        "policy_turns": 2,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 4,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_54",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 2,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 4,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_56",
+        "masked": [
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_56",
+        "masked": [
+          "event",
+          "threshold"
+        ],
+        "policy_turns": 2,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 4,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_56",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 2,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 4,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_58",
+        "masked": [
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_58",
+        "masked": [
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_58",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_60",
+        "masked": [
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_60",
+        "masked": [
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      },
+      {
+        "uid": "a_clean_60",
+        "masked": [
+          "event",
+          "threshold",
+          "zone"
+        ],
+        "policy_turns": 1,
+        "policy_correct": true,
+        "policy_valid": true,
+        "naive_turns": 3,
+        "naive_correct": true,
+        "naive_valid": true
+      }
+    ]
+  },
+  "fuzz": {
+    "seed": 62498,
+    "n_noise": 2000,
+    "n_targeted": 200,
+    "crashes": 0,
+    "clarified_noise": 1358,
+    "materialized_noise": 642,
+    "soundness_violations": [],
+    "n_soundness_violations": 0,
+    "targeted_false_materializations": [],
+    "n_targeted_false": 0
   }
 }

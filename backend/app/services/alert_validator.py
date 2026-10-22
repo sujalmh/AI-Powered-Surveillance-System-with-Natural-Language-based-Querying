@@ -32,6 +32,43 @@ SEVERITIES = {"info", "warning", "high", "critical"}
 SIDE_EFFECTS = {"store_clip", "snapshot", "push_ws"}
 THRESHOLD_OPS = {">", ">=", "<", "<=", "==", "between"}
 THRESHOLD_UNITS = {"persons", "vehicles", "objects", "seconds"}
+MAX_CADENCE_HZ = 10.0
+
+# Denotational semantics of the 9-tuple alert grammar (C3' verified
+# compiler).  Each event denotes a predicate over the timestamped detection
+# stream; a rule fires when its predicate holds inside ``area`` during
+# ``time_of_day``, subject to ``threshold`` and ``cooldown_sec``.  ``count``
+# is a derived compatibility view of ``threshold``, not a tenth field.
+RULE_DENOTATIONS = {
+    "crowd": (
+        "∃ window W in area: |{persons in W}| satisfies threshold(persons). "
+        "Default objects=[person]."
+    ),
+    "loiter": (
+        "∃ person track in area with dwell time satisfying threshold(seconds). "
+        "Default threshold >= 60 s."
+    ),
+    "fight": (
+        "∃ group in area classified as fighting with size satisfying "
+        "threshold(persons). Default threshold >= 2 persons."
+    ),
+    "enter": (
+        "∃ crossing event into area by a matching object. "
+        "Default threshold >= 1 matching object."
+    ),
+    "zone": (
+        "∃ matching object present in area (occupancy). "
+        "Default threshold >= 1 matching object."
+    ),
+    "count": (
+        "The number of matching objects in area satisfies threshold; "
+        "reported as a count answer."
+    ),
+    "time": (
+        "Time-of-day window holds (optionally with >= 1 matching object in "
+        "area); used for scheduled watches."
+    ),
+}
 
 SUPPORTED_VERBS = {
     "alert", "notify", "warn", "detect", "count", "find",
@@ -140,8 +177,20 @@ def validate_rule(rule: Dict[str, Any]) -> Tuple[bool, List[str], List[str]]:
                 and all(isinstance(v, (int, float)) for v in value)
             ):
                 errors.append("between threshold value must be [low, high]")
+            else:
+                lo_v, hi_v = value
+                if lo_v > hi_v:
+                    errors.append(
+                        f"between threshold lower bound exceeds upper bound: {value!r}"
+                    )
+                if lo_v < 0 or hi_v < 0:
+                    errors.append(
+                        f"between threshold bounds must be >= 0: {value!r}"
+                    )
         elif not isinstance(value, (int, float)):
             errors.append("threshold value must be numeric")
+        elif value < 0:
+            errors.append(f"threshold value must be >= 0: {value!r}")
         if unit not in THRESHOLD_UNITS:
             errors.append(f"invalid threshold unit: {unit!r}")
 
@@ -155,6 +204,11 @@ def validate_rule(rule: Dict[str, Any]) -> Tuple[bool, List[str], List[str]]:
             for key in ("start", "end"):
                 if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", str(tod[key])):
                     errors.append(f"time_of_day.{key} must be HH:MM")
+            if (
+                str(tod.get("start")) == str(tod.get("end"))
+                and re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", str(tod.get("start")))
+            ):
+                errors.append("time_of_day window is degenerate (start == end)")
 
     severity = rule.get("severity", "info")
     if severity not in SEVERITIES:
@@ -169,10 +223,14 @@ def validate_rule(rule: Dict[str, Any]) -> Tuple[bool, List[str], List[str]]:
     effects = rule.get("side_effects", ["snapshot", "push_ws"])
     if not isinstance(effects, list) or any(e not in SIDE_EFFECTS for e in effects):
         errors.append(f"invalid side_effects: {effects!r}")
+    elif len(effects) == 0:
+        errors.append("side_effects must contain at least one action (rule would never notify)")
 
     try:
         if float(rule.get("cadence_hz", 1.0)) <= 0:
             errors.append("cadence_hz must be > 0")
+        elif float(rule.get("cadence_hz", 1.0)) > MAX_CADENCE_HZ:
+            errors.append(f"cadence_hz above the {MAX_CADENCE_HZ:g} Hz evaluation ceiling")
     except (TypeError, ValueError):
         errors.append("cadence_hz must be numeric")
 

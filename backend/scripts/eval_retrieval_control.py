@@ -37,6 +37,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from backend.app.eval import subset
+from backend.app.eval import confidence as _confidence
 from backend.app.eval.baselines import (
     FIXED_ALPHAS,
     per_intent_lookup_alpha,
@@ -414,11 +415,18 @@ def method_alpha(
     q: Dict[str, Any],
     qctx: Dict[str, Any],
     tuned: Dict[str, float],
+    conf_extra: Optional[Dict[str, Tuple[float, float]]] = None,
 ) -> float:
     if method.startswith("fixed_"):
         return float(method.split("_", 1)[1])
     if method == "adaptive":
         return float(qctx["alpha"])
+    if method == "conf_only":
+        assert conf_extra is not None
+        return float(conf_extra[q["qid"]][0])
+    if method == "combined":
+        assert conf_extra is not None
+        return float(conf_extra[q["qid"]][1])
     if method == "paper_lookup":
         return float(per_intent_lookup_alpha(q["category"]))
     if method == "per_intent_tuned":
@@ -434,13 +442,67 @@ def build_fused(
     method: str,
     tuned: Dict[str, float],
     contexts: Dict[str, Dict[str, Any]],
+    conf_extra: Optional[Dict[str, Tuple[float, float]]] = None,
 ) -> Dict[str, Tuple[np.ndarray, List[str]]]:
     out = {}
     for q in queries:
-        a = method_alpha(method, q, contexts[q["qid"]], tuned)
+        a = method_alpha(method, q, contexts[q["qid"]], tuned, conf_extra)
         fused = a * struct_norm[q["qid"]] + (1.0 - a) * sem_norm[q["qid"]]
         out[q["qid"]] = (fused, rank_clips(fused, clip_ids))
     return out
+
+
+def build_confidence_alphas(
+    queries: Sequence[Dict[str, Any]],
+    clip_ids: Sequence[str],
+    sem_norm: Dict[str, np.ndarray],
+    struct_norm: Dict[str, np.ndarray],
+    contexts: Dict[str, Dict[str, Any]],
+    k: int = 5,
+) -> Tuple[Dict[str, Tuple[float, float]], Dict[str, float]]:
+    """C1' ablation alphas + label-free diagnostics.
+
+    Returns ``({qid: (conf_only, combined)}, diagnostics)`` where the
+    diagnostics are means over queries of the per-branch margins,
+    concentrations and the top-k branch overlap.
+    """
+    extra: Dict[str, Tuple[float, float]] = {}
+    margins_s: List[float] = []
+    margins_e: List[float] = []
+    conc_s: List[float] = []
+    conc_e: List[float] = []
+    overlaps: List[float] = []
+    for q in queries:
+        qid = q["qid"]
+        sn = np.asarray(sem_norm[qid], dtype=np.float64)
+        tn = np.asarray(struct_norm[qid], dtype=np.float64)
+        prior = float(contexts[qid]["alpha"])
+        conf = float(_confidence.confidence_alpha(tn, sn, k=k))
+        comb = float(_confidence.combined_alpha(prior, tn, sn, k=k))
+        extra[qid] = (conf, comb)
+        diag = _confidence.confidence_diagnostics(tn, sn)
+        margins_s.append(diag["struct_margin"])
+        margins_e.append(diag["sem_margin"])
+        conc_s.append(diag["struct_conc"])
+        conc_e.append(diag["sem_conc"])
+        order_s = np.argsort(-tn, kind="stable")
+        order_e = np.argsort(-sn, kind="stable")
+        ids = list(clip_ids)
+        overlaps.append(
+            _confidence.overlap_at_k(
+                [ids[int(i)] for i in order_s],
+                [ids[int(i)] for i in order_e],
+                k=k,
+            )
+        )
+    diagnostics = {
+        "mean_struct_margin": float(np.mean(margins_s)),
+        "mean_sem_margin": float(np.mean(margins_e)),
+        "mean_struct_conc": float(np.mean(conc_s)),
+        "mean_sem_conc": float(np.mean(conc_e)),
+        "mean_overlap_at_5": float(np.mean(overlaps)),
+    }
+    return extra, diagnostics
 
 
 def tune_per_intent(
@@ -552,13 +614,15 @@ def main() -> None:
     norm_modes = ["minmax"] + ([] if args.no_zscore else ["zscore"])
     systems = (
         [f"fixed_{a:.1f}" for a in FIXED_ALPHAS]
-        + ["adaptive", "per_intent_tuned", "paper_lookup"]
+        + ["adaptive", "conf_only", "combined", "per_intent_tuned", "paper_lookup"]
     )
 
     all_rows: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
     tune_metrics: Dict[str, Dict[str, Any]] = {}
     per_intent_alphas: Dict[str, Dict[str, float]] = {}
     per_intent_grid: Dict[str, Dict[str, List[Dict[str, float]]]] = {}
+    conf_diagnostics: Dict[str, Dict[str, float]] = {}
+    conf_alpha_mean: Dict[str, Dict[str, float]] = {}
 
     for norm in norm_modes:
         sem_norm = {qid: normalize_branch(sem_raw_max[qid], norm) for qid in sem_raw_max}
@@ -566,14 +630,22 @@ def main() -> None:
         tuned, grid = tune_per_intent(queries, clip_ids, sem_norm, struct_norm, contexts)
         per_intent_alphas[norm] = tuned
         per_intent_grid[norm] = grid
+        conf_extra, conf_diag = build_confidence_alphas(
+            queries, clip_ids, sem_norm, struct_norm, contexts
+        )
+        conf_diagnostics[norm] = conf_diag
+        conf_alpha_mean[norm] = {
+            "conf_only": float(np.mean([v[0] for v in conf_extra.values()])),
+            "combined": float(np.mean([v[1] for v in conf_extra.values()])),
+        }
         all_rows[norm] = {}
         tune_metrics[norm] = {}
         for method in systems:
-            fused = build_fused(queries, clip_ids, sem_norm, struct_norm, method, tuned, contexts)
+            fused = build_fused(queries, clip_ids, sem_norm, struct_norm, method, tuned, contexts, conf_extra)
             rows = score_rows(queries, fused, clips, sem_norm, struct_norm, clip_index)
             for r, q in zip(rows, queries):
                 r["group"] = q.get("group")
-                r["alpha"] = method_alpha(method, q, contexts[q["qid"]], tuned)
+                r["alpha"] = method_alpha(method, q, contexts[q["qid"]], tuned, conf_extra)
             all_rows[norm][method] = rows
             tune_rows = [r for r in rows if r["split"] == "tune"]
             tune_metrics[norm][method] = aggregate(tune_rows, "p5")
@@ -672,6 +744,48 @@ def main() -> None:
         dm, dlo, dhi, dp = paired_bootstrap_ci(cv, a_vals, n_boot=args.n_boot, seed=23)
         significance[norm]["per_intent_tuned_vs_adaptive"] = {
             "delta_p5": float(dm), "lo": float(dlo), "hi": float(dhi), "p": float(dp)
+        }
+
+    # C1' ablation: prior-only (adaptive) vs confidence-only vs combined.
+    # Three paired comparisons, Holm-corrected as a family; each reports
+    # query-level and grouped (cluster) bootstrap.
+    ablation: Dict[str, Any] = {}
+    for norm in norm_modes:
+        base = best_fixed[norm]["method"]
+        rows_of = {
+            m: {r["qid"]: r for r in all_rows[norm][m] if r["split"] == "test"}
+            for m in ("adaptive", "conf_only", "combined", base)
+        }
+        qids = [q["qid"] for q in queries if q["split"] == "test"]
+        groups = [rows_of["adaptive"][qid]["group"] for qid in qids]
+        comparisons = [
+            ("combined_vs_prior", "combined", "adaptive", 41),
+            ("conf_only_vs_prior", "conf_only", "adaptive", 43),
+            ("combined_vs_best_fixed", "combined", base, 47),
+        ]
+        fam_p: Dict[str, float] = {}
+        comp_out: Dict[str, Any] = {}
+        for name, ma, mb, seed in comparisons:
+            av = [rows_of[ma][qid]["p5"] for qid in qids]
+            bv = [rows_of[mb][qid]["p5"] for qid in qids]
+            dm, dlo, dhi, dp = paired_bootstrap_ci(av, bv, n_boot=args.n_boot, seed=seed)
+            gm, glo, ghi, gp = paired_grouped_bootstrap_ci(
+                av, bv, groups, n_boot=args.n_boot, seed=seed
+            )
+            fam_p[name] = dp
+            comp_out[name] = {
+                "a": ma, "b": mb,
+                "delta_p5": float(dm), "lo": float(dlo), "hi": float(dhi),
+                "p": float(dp),
+                "grouped_delta_p5": float(gm), "grouped_lo": float(glo),
+                "grouped_hi": float(ghi), "grouped_p": float(gp),
+            }
+        rejects = holm_correction(fam_p, alpha=0.05)
+        adjusted = holm_adjusted(fam_p)
+        ablation[norm] = {
+            "comparisons": comp_out,
+            "holm_reject": {k: bool(v) for k, v in rejects.items()},
+            "holm_adjusted_p": {k: float(v) for k, v in adjusted.items()},
         }
 
     # Normalisation comparison (same method, different branch calibration).
@@ -786,6 +900,9 @@ def main() -> None:
         "per_intent_alphas": per_intent_alphas,
         "per_intent_tuning_grid": per_intent_grid,
         "significance": significance,
+        "ablation_confidence": ablation,
+        "confidence_diagnostics": conf_diagnostics,
+        "confidence_alpha_means": conf_alpha_mean,
         "normalization_comparison": norm_comparison,
         "aggregation_sensitivity": agg_sensitivity,
         "count_estimate": count_est,
@@ -853,7 +970,7 @@ def main() -> None:
     lines.append("| Method | P@5 | R@10 | F1@10 (P@10,R@10) | F1@10 paper (P@5,R@10) | MRR | P@5 grouped 95% CI |")
     lines.append("|---|---:|---:|---:|---:|---:|---|")
     for m in ["fixed_0.0", "fixed_0.3", "fixed_0.5", "fixed_0.7", "fixed_1.0",
-              "adaptive", "per_intent_tuned", "paper_lookup"]:
+              "adaptive", "conf_only", "combined", "per_intent_tuned", "paper_lookup"]:
         s = summary["minmax"][m]
         ci = s["ci"]
         lines.append(
@@ -871,7 +988,7 @@ def main() -> None:
     lines.append("| Method | Count | Find | Track | Action | Filter | Macro |")
     lines.append("|---|---:|---:|---:|---:|---:|---:|")
     for m in ["fixed_0.0", "fixed_0.3", "fixed_0.5", "fixed_0.7", "fixed_1.0",
-              "adaptive", "per_intent_tuned", "paper_lookup"]:
+              "adaptive", "conf_only", "combined", "per_intent_tuned", "paper_lookup"]:
         s = summary["minmax"][m]
         pc = s["per_category"]
         lines.append(
@@ -895,7 +1012,7 @@ def main() -> None:
         lines.append("| Method | min-max | z-score | Δ (z - mm) |")
         lines.append("|---|---:|---:|---:|")
         for m in ["fixed_0.0", "fixed_0.3", "fixed_0.5", "fixed_0.7", "fixed_1.0",
-                  "adaptive", "per_intent_tuned", "paper_lookup"]:
+                  "adaptive", "conf_only", "combined", "per_intent_tuned", "paper_lookup"]:
             c = norm_comparison[m]
             lines.append(
                 f"| {m} | {c['minmax_macro_p5']:.3f} | {c['zscore_macro_p5']:.3f} | "
@@ -938,6 +1055,42 @@ def main() -> None:
             f"[{s2['lo']:+.3f}, {s2['hi']:+.3f}], p={format_p(s2['p'], args.n_boot)}"
         )
 
+    lines.append("\n## C1' confidence ablation (prior-only vs confidence-only vs combined)\n")
+    lines.append(
+        "`adaptive` is the metadata prior-only rule; `conf_only` is the pure "
+        "score-driven weight cs/(cs+ce) from per-branch top-1 margin and top-k "
+        "concentration; `combined` is the 50/50 blend. Holm correction is over "
+        "the three paired comparisons as one family.\n"
+    )
+    lines.append("| Normalisation | Method | Macro P@5 | Mean alpha |")
+    lines.append("|---|---:|---:|---:|")
+    for norm in norm_modes:
+        for m in ["adaptive", "conf_only", "combined"]:
+            s = summary[norm][m]
+            ma = conf_alpha_mean[norm].get(m, float(np.mean(
+                [r["alpha"] for r in all_rows[norm][m] if r["split"] == "test"])))
+            lines.append(f"| {norm} | {m} | {s['macro']['p5']:.3f} | {ma:.3f} |")
+    for norm in norm_modes:
+        d = conf_diagnostics[norm]
+        lines.append(
+            f"\n- **{norm}** score diagnostics: mean struct margin "
+            f"{d['mean_struct_margin']:.3f}, mean sem margin "
+            f"{d['mean_sem_margin']:.3f}; mean struct concentration "
+            f"{d['mean_struct_conc']:.3f}, mean sem concentration "
+            f"{d['mean_sem_conc']:.3f}; mean top-5 branch overlap "
+            f"{d['mean_overlap_at_5']:.3f}."
+        )
+        for name, c in ablation[norm]["comparisons"].items():
+            lines.append(
+                f"  - {name} (`{c['a']}` vs `{c['b']}`): ΔP@5 = {c['delta_p5']:+.3f} "
+                f"[{c['lo']:+.3f}, {c['hi']:+.3f}], p={format_p(c['p'], args.n_boot)}; "
+                f"grouped Δ = {c['grouped_delta_p5']:+.3f} "
+                f"[{c['grouped_lo']:+.3f}, {c['grouped_hi']:+.3f}], "
+                f"p={format_p(c['grouped_p'], args.n_boot)} "
+                f"(Holm p={format_p(ablation[norm]['holm_adjusted_p'][name], args.n_boot)}), "
+                f"Holm-reject={ablation[norm]['holm_reject'][name]}"
+            )
+
     lines.append("\n## Per-intent alpha selected on the tune split\n")
     lines.append("| Normalisation | Count | Find | Track | Action | Filter |")
     lines.append("|---|---:|---:|---:|---:|---:|")
@@ -973,11 +1126,13 @@ def main() -> None:
     print(f"adaptive alpha source: {ADAPTIVE_SOURCE}")
     print(f"best fixed on tune: {best_fixed['minmax']}")
     for m in ["fixed_0.0", "fixed_0.3", "fixed_0.5", "fixed_0.7", "fixed_1.0",
-              "adaptive", "per_intent_tuned", "paper_lookup"]:
+              "adaptive", "conf_only", "combined", "per_intent_tuned", "paper_lookup"]:
         s = summary["minmax"][m]
         print(f"{m:18s} macro P@5={s['macro']['p5']:.3f} R@10={s['macro']['r10']:.3f} "
               f"F1={s['macro']['f1']:.3f} countEM={s['count']['em']:.3f}")
     print(f"adaptive vs best fixed: {significance['minmax']['overall']}")
+    print(f"C1' ablation (minmax): {ablation['minmax']['comparisons']}")
+    print(f"C1' confidence diagnostics (minmax): {conf_diagnostics['minmax']}")
     print(f"wrote {RESULTS / 'retrieval_control_results.json'}")
     print(f"wrote {RESULTS / 'retrieval_control_tables.md'}")
     print(f"wrote {RESULTS / 'retrieval_control_per_query.csv'}")

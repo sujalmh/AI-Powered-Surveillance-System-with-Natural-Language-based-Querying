@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,6 +42,11 @@ from backend.app.services.alert_materializer import (  # noqa: E402
     materialize_alert_rule,
 )
 from backend.app.services.alert_validator import KNOWN_EVENTS, KNOWN_ZONES  # noqa: E402
+from backend.app.services.alert_validator import validate_rule  # noqa: E402
+from backend.app.services.clarification_policy import (  # noqa: E402
+    NAIVE_BASELINE_FIELDS,
+    minimal_questions,
+)
 
 BENCH = ROOT / "backend" / "benchmarks" / "alert_utterances.jsonl"
 RESULTS_DIR = ROOT / "results"
@@ -49,6 +55,24 @@ OUT_MD = RESULTS_DIR / "alert_results.md"
 COMMAND = "$env:PYTHONIOENCODING='utf-8'; python backend/scripts/eval_alerts.py"
 STRESS_KINDS = ["ambiguous", "conflicting", "missing", "unsupported"]
 SPLITS = ["dev", "test"]
+
+# Compositional held-out: one attested singleton (event, zone) combo per
+# event.  The grammar has no learned parameters, so this measures coverage
+# uniformity across the product space, not learned compositionality.
+HELD_OUT_COMBOS = [
+    ("crowd", "Zone A"),
+    ("loiter", "Entrance"),
+    ("fight", "Parking"),
+    ("enter", "Zone A"),
+    ("zone", "Zone B"),
+    ("count", "Gate"),
+    ("time", "Entrance"),
+]
+ORACLE_SEED = 0xC3A1
+ORACLE_REPS = 3
+FUZZ_SEED = 0xF422
+FUZZ_N = 2000
+FUZZ_TARGETED_N = 200
 
 
 def _load_rows() -> List[Dict[str, Any]]:
@@ -214,7 +238,23 @@ def _score(rows: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
                 )
 
     clarified_stress = sum(1 for r in stress if r["_got"]["needs_clarification"])
+    # Specified-field accuracy: severity / cadence / cooldown scored only on
+    # the clean rows whose reference does NOT use the documented default, so
+    # the 1.00 defaults-by-construction do not inflate the figure.
+    def _specified(rows_clean: List[Dict[str, Any]], field: str,
+                   default: Any) -> Dict[str, Any]:
+        spec = [r for r in rows_clean if r["expected"].get(field) != default]
+        ok = sum(1 for r in spec if r["_got"].get(field) == r["expected"].get(field))
+        return {"n": len(spec), "correct": ok,
+                "accuracy": _accuracy(ok, len(spec)) if spec else 1.0}
+
+    specified = {
+        "severity": _specified(clean, "severity", DEFAULT_SEVERITY),
+        "cadence_hz": _specified(clean, "cadence_hz", DEFAULT_CADENCE_HZ),
+        "cooldown_sec": _specified(clean, "cooldown_sec", DEFAULT_COOLDOWN_SEC),
+    }
     return {
+        "specified_field_accuracy": specified,
         "clean": {
             "n": len(clean),
             "materialized": materialized,
@@ -248,9 +288,336 @@ def _fmt_pct(value: float) -> str:
     return f"{value * 100:.1f}%"
 
 
+def _combo_of(row: Dict[str, Any]) -> Tuple[Any, Any]:
+    expected = row.get("expected") or {}
+    return (expected.get("event"), (expected.get("area") or {}).get("zone_id"))
+
+
+def compositional_heldout(
+    clean_rows: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Rule correctness on held-out vs seen (event, zone) combos.
+
+    Every clean row is materialized from its utterance; rows whose reference
+    combo is in ``HELD_OUT_COMBOS`` form the held-out slice.  Fails loudly
+    if the benchmark no longer covers every held-out combo (the slice would
+    silently shrink to zero).
+    """
+    missing = [
+        combo for combo in HELD_OUT_COMBOS
+        if not any(_combo_of(r) == combo for r in clean_rows)
+    ]
+    if missing:
+        raise SystemExit(f"held-out combos missing from benchmark: {missing}")
+    held = [r for r in clean_rows if _combo_of(r) in HELD_OUT_COMBOS]
+    seen = [r for r in clean_rows if _combo_of(r) not in HELD_OUT_COMBOS]
+
+    def _correct(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+        ok = 0
+        failures = []
+        for r in rows:
+            got = materialize_alert_rule(r["text"])
+            expected = r["expected"]
+            field_ok = all(
+                got.get(f) == expected.get(f) for f in CANONICAL_FIELDS
+            )
+            if not bool(got.get("needs_clarification")) and field_ok:
+                ok += 1
+            else:
+                failures.append(r["uid"])
+        return {
+            "n": len(rows),
+            "correct": ok,
+            "accuracy": _accuracy(ok, len(rows)),
+            "failures": failures,
+        }
+
+    return {
+        "held_out_combos": [list(c) for c in HELD_OUT_COMBOS],
+        "held_out": _correct(held),
+        "seen": _correct(seen),
+    }
+
+
+def _required_slots() -> List[str]:
+    return ["event", "zone", "threshold"]
+
+
+def _partial_complete(partial: Dict[str, Any]) -> bool:
+    event = partial.get("event")
+    zone = (partial.get("area") or {}).get("zone_id")
+    if event not in KNOWN_EVENTS:
+        return False
+    if not zone or zone not in KNOWN_ZONES:
+        return False
+    if event in {"crowd", "count"} and partial.get("threshold") is None:
+        return False
+    return True
+
+
+def _fill_from_expected(
+    partial: Dict[str, Any], expected: Dict[str, Any], slot: str
+) -> None:
+    if slot == "event":
+        partial["event"] = expected["event"]
+    elif slot == "zone":
+        partial["area"] = {"zone_id": (expected.get("area") or {}).get("zone_id")}
+    elif slot == "threshold":
+        partial["threshold"] = expected["threshold"]
+        partial["count"] = expected.get("count")
+
+
+def _default_threshold_for(event: Optional[str], expected: Dict[str, Any]) -> Dict[str, Any]:
+    """Documented default threshold for events that have one (mirrors grammar)."""
+    if event == "loiter":
+        return {"op": ">=", "value": 60, "unit": "seconds"}
+    if event == "fight":
+        return {"op": ">=", "value": 2, "unit": "persons"}
+    names = [
+        o.get("name") for o in (expected.get("objects") or []) if isinstance(o, dict)
+    ]
+    if any(n in {"car", "truck", "bus", "van", "vehicle"} for n in names):
+        unit = "vehicles"
+    elif names and all(n in {"bag", "backpack"} for n in names):
+        unit = "objects"
+    else:
+        unit = "persons"
+    return {"op": ">=", "value": 1, "unit": unit}
+
+
+def _fresh_partial(expected: Dict[str, Any], masked: List[str]) -> Dict[str, Any]:
+    return {
+        "event": None if "event" in masked else expected["event"],
+        "area": (
+            {} if "zone" in masked
+            else {"zone_id": (expected.get("area") or {}).get("zone_id")}
+        ),
+        "threshold": None if "threshold" in masked else expected["threshold"],
+        "count": None if "threshold" in masked else expected.get("count"),
+        "clarification_kind": "missing",
+        "clarification": "simulated masked slots",
+    }
+
+
+def _assemble_for_validation(
+    expected: Dict[str, Any], partial: Dict[str, Any]
+) -> Dict[str, Any]:
+    rule = dict(expected)
+    rule["event"] = partial.get("event") or expected["event"]
+    rule["area"] = partial.get("area") or expected["area"]
+    if partial.get("threshold") is not None:
+        rule["threshold"] = partial["threshold"]
+        rule["count"] = partial.get("count")
+    else:
+        rule["threshold"] = _default_threshold_for(rule["event"], expected)
+    return rule
+
+
+def _dialogue_correct(
+    partial: Dict[str, Any], expected: Dict[str, Any], masked: List[str]
+) -> bool:
+    if not _partial_complete(partial):
+        return False
+    if partial.get("event") != expected["event"]:
+        return False
+    if (partial.get("area") or {}).get("zone_id") != (
+        expected.get("area") or {}
+    ).get("zone_id"):
+        return False
+    if "threshold" in masked and partial.get("threshold") is None:
+        return _default_threshold_for(
+            partial.get("event"), expected
+        ) == expected["threshold"]
+    if partial.get("threshold") is not None and "threshold" in masked:
+        return partial["threshold"] == expected["threshold"]
+    return True
+
+
+def oracle_turns_simulation(
+    clean_test_rows: List[Dict[str, Any]],
+    seed: int = ORACLE_SEED,
+    reps: int = ORACLE_REPS,
+) -> Dict[str, Any]:
+    """Simulated-oracle-user mean turns to a correct rule.
+
+    For each clean test row and ``reps`` repetitions, ``k = rep + 1`` required
+    slots of ``{event, zone, threshold}`` are masked (seeded); a truthful
+    oracle fills exactly the slots each policy asks for, and unasked masked
+    slots fall back to the documented event defaults.  The policy iterates
+    ``minimal_questions`` until the partial rule is complete; the naive
+    baseline asks all 9 canonical fields one per turn in fixed order until
+    completion.  Both final rules are checked with ``validate_rule`` and
+    against the reference.
+    """
+    rng = random.Random(seed)
+    episodes = []
+    for r in clean_test_rows:
+        expected = r["expected"]
+        for rep in range(reps):
+            k = rep + 1
+            masked = rng.sample(_required_slots(), k)
+            # Policy dialogue.
+            partial = _fresh_partial(expected, masked)
+            policy_turns = 0
+            while not _partial_complete(partial) and policy_turns < 10:
+                qs = minimal_questions(r["text"], rule=partial)
+                if not qs:
+                    break
+                policy_turns += 1
+                for q in qs:
+                    if q["slot"] in ("event", "zone", "threshold"):
+                        _fill_from_expected(partial, expected, q["slot"])
+            assembled = _assemble_for_validation(expected, partial)
+            ok_policy, _, _ = validate_rule(assembled)
+            # Naive per-field baseline dialogue.
+            naive_partial = _fresh_partial(expected, masked)
+            naive_turns = 0
+            for field in NAIVE_BASELINE_FIELDS:
+                if _partial_complete(naive_partial):
+                    break
+                naive_turns += 1
+                slot = {"area": "zone"}.get(field, field)
+                if slot in ("event", "zone", "threshold") and slot in masked:
+                    _fill_from_expected(naive_partial, expected, slot)
+            naive_assembled = _assemble_for_validation(expected, naive_partial)
+            ok_naive, _, _ = validate_rule(naive_assembled)
+            episodes.append(
+                {
+                    "uid": r["uid"],
+                    "masked": sorted(masked),
+                    "policy_turns": policy_turns,
+                    "policy_correct": bool(
+                        _dialogue_correct(partial, expected, masked)
+                    ),
+                    "policy_valid": bool(ok_policy),
+                    "naive_turns": naive_turns,
+                    "naive_correct": bool(
+                        _dialogue_correct(naive_partial, expected, masked)
+                    ),
+                    "naive_valid": bool(ok_naive),
+                }
+            )
+    policy_turns = [e["policy_turns"] for e in episodes]
+    naive_turns = [e["naive_turns"] for e in episodes]
+    return {
+        "n_episodes": len(episodes),
+        "seed": seed,
+        "masking": "k=rep+1 required slots sampled per clean test row",
+        "policy": {
+            "mean_turns": round(sum(policy_turns) / len(policy_turns), 4),
+            "max_turns": max(policy_turns),
+            "correct": sum(1 for e in episodes if e["policy_correct"]),
+            "correct_rate": _accuracy(
+                sum(1 for e in episodes if e["policy_correct"]), len(episodes)
+            ),
+            "valid": sum(1 for e in episodes if e["policy_valid"]),
+        },
+        "naive_per_field": {
+            "mean_turns": round(sum(naive_turns) / len(naive_turns), 4),
+            "max_turns": max(naive_turns),
+            "correct": sum(1 for e in episodes if e["naive_correct"]),
+            "correct_rate": _accuracy(
+                sum(1 for e in episodes if e["naive_correct"]), len(episodes)
+            ),
+            "valid": sum(1 for e in episodes if e["naive_valid"]),
+        },
+        "episodes": episodes,
+    }
+
+
+_FUZZ_ZONES = ["zone a", "zone b", "zone c", "gate", "entrance", "parking"]
+_FUZZ_EVENTS = [
+    "gather", "crowd", "loiter", "linger", "fight", "enter", "enters",
+    "count", "inside", "present",
+]
+_FUZZ_NUMS = ["one", "two", "five", "ten", "3", "7", "12"]
+_FUZZ_CMP = ["more than", "at least", "fewer than", "exactly", "over"]
+_FUZZ_FILLER = [
+    "alert", "notify", "please", "when", "if", "the", "a", "people",
+    "person", "night", "evening", "xkq", "zzz", "...", "!!!", "123",
+]
+_FUZZ_UNSUPPORTED = [
+    "follow him home",
+    "identify the person",
+    "face recognition",
+    "delete footage",
+    "disable camera",
+    "unlock the door",
+    "license plate",
+]
+
+
+def fuzz_property_tests(
+    n: int = FUZZ_N,
+    targeted_n: int = FUZZ_TARGETED_N,
+    seed: int = FUZZ_SEED,
+) -> Dict[str, Any]:
+    """Stdlib-random fuzz properties (seeded, no new dependencies).
+
+    Properties:
+    - crash-freedom: materialize + validate never raise on noise;
+    - soundness: every materialized (non-clarified) rule passes
+      ``validate_rule`` (zero violations required);
+    - targeted: utterances embedding an unsupported hint inside filler must
+      all clarify (zero false materializations required).
+    The clarify rate on pure noise is reported descriptively, not asserted:
+    noise that happens to state a complete rule may legitimately materialize.
+    """
+    rng = random.Random(seed)
+    pool = _FUZZ_ZONES + _FUZZ_EVENTS + _FUZZ_NUMS + _FUZZ_CMP + _FUZZ_FILLER
+    crashes = 0
+    soundness_violations: List[str] = []
+    materialized = 0
+    clarified = 0
+    for i in range(n):
+        width = rng.randint(1, 12)
+        text = " ".join(rng.choice(pool) for _ in range(width))
+        try:
+            rule = materialize_alert_rule(text)
+            if rule.get("needs_clarification"):
+                clarified += 1
+            else:
+                materialized += 1
+                ok, errors, _ = validate_rule(rule)
+                if not ok:
+                    soundness_violations.append(f"#{i} {text!r}: {errors}")
+        except Exception as exc:  # noqa: BLE001 - the property is crash-freedom
+            crashes += 1
+            soundness_violations.append(f"#{i} {text!r}: CRASH {type(exc).__name__}")
+    targeted_false = []
+    for i in range(targeted_n):
+        hint = _FUZZ_UNSUPPORTED[i % len(_FUZZ_UNSUPPORTED)]
+        filler = " ".join(
+            rng.choice(pool) for _ in range(rng.randint(0, 6))
+        )
+        text = f"{filler} {hint} {filler}".strip()
+        try:
+            rule = materialize_alert_rule(text)
+            if not rule.get("needs_clarification"):
+                targeted_false.append(text)
+        except Exception as exc:  # noqa: BLE001
+            crashes += 1
+            targeted_false.append(f"CRASH {type(exc).__name__}: {text}")
+    return {
+        "seed": seed,
+        "n_noise": n,
+        "n_targeted": targeted_n,
+        "crashes": crashes,
+        "clarified_noise": clarified,
+        "materialized_noise": materialized,
+        "soundness_violations": soundness_violations,
+        "n_soundness_violations": len(soundness_violations),
+        "targeted_false_materializations": targeted_false,
+        "n_targeted_false": len(targeted_false),
+    }
+
+
 def _write_markdown(
     results: Dict[str, Any], dataset: Dict[str, Any], test: Dict[str, Any], dev: Dict[str, Any]
 ) -> str:
+    compositional = results["compositional_heldout"]
+    oracle = results["oracle_turns"]
+    fuzz = results["fuzz"]
     lines: List[str] = []
     lines.append("# Alert-authoring evaluation (C3)")
     lines.append("")
@@ -307,6 +674,22 @@ def _write_markdown(
     for field in CANONICAL_FIELDS:
         item = test["clean"]["per_field"][field]
         lines.append(f"| `{field}` | {item['correct']}/{test['clean']['n']} | {_fmt_pct(item['accuracy'])} |")
+    lines.append("")
+    lines.append("### Specified-field accuracy (test clean rows, defaults excluded)")
+    lines.append("")
+    lines.append(
+        "Severity `info`, cadence `1.0` Hz and cooldown `60` s score 1.00 by "
+        "construction when the utterance does not state them. The rows below "
+        "score only the utterances whose reference does NOT use the default."
+    )
+    lines.append("")
+    lines.append("| Field | Specified n | Correct | Accuracy |")
+    lines.append("|---|---:|---:|---:|")
+    for field in ("severity", "cadence_hz", "cooldown_sec"):
+        item = test["specified_field_accuracy"][field]
+        lines.append(
+            f"| `{field}` | {item['n']} | {item['correct']} | "
+            f"{_fmt_pct(item['accuracy'])} |")
     lines.append("")
     lines.append("### Per-stress-kind breakdown (test)")
     lines.append("")
@@ -388,6 +771,85 @@ def _write_markdown(
         for uid in test["stress"]["false_materialization_uids"]:
             lines.append(f"- Stress `{uid}` was incorrectly materialized.")
     lines.append("")
+    lines.append("## Compositional held-out (one (event, zone) combo per event)")
+    lines.append("")
+    lines.append(
+        "The grammar has no learned parameters, so this is a coverage-uniformity "
+        "check across the product space, not a test of learned compositionality. "
+        "Held-out combos: "
+        + ", ".join(f"({e}, {z})" for e, z in compositional["held_out_combos"])
+        + "."
+    )
+    lines.append("")
+    lines.append("| Slice | n | Correct | Accuracy |")
+    lines.append("|---|---:|---:|---:|")
+    for key, label in (("held_out", "Held-out combos"), ("seen", "Seen combos")):
+        item = compositional[key]
+        lines.append(
+            f"| {label} | {item['n']} | {item['correct']} | {_fmt_pct(item['accuracy'])} |"
+        )
+    if compositional["held_out"]["failures"] or compositional["seen"]["failures"]:
+        lines.append("")
+        lines.append(
+            "Failures: held-out "
+            + ", ".join(f"`{u}`" for u in compositional["held_out"]["failures"])
+            + "; seen "
+            + ", ".join(f"`{u}`" for u in compositional["seen"]["failures"])
+            + "."
+        )
+    lines.append("")
+    lines.append("## Simulated-oracle-user dialogue (clean test rows, masked slots)")
+    lines.append("")
+    lines.append(
+        f"Episodes: {oracle['n_episodes']} (30 clean test rows x 3 reps, k=rep+1 "
+        f"masked required slots from {{event, zone, threshold}}, seed {oracle['seed']:#x}). "
+        "A truthful oracle fills exactly the slots asked; unasked masked slots "
+        "fall back to the documented event defaults. Final rules are checked "
+        "with `validate_rule` and against the reference."
+    )
+    lines.append("")
+    lines.append("| Policy | Mean turns | Max turns | Correct | Valid |")
+    lines.append("|---|---:|---:|---:|---:|")
+    for key, label in (("policy", "Minimal-question policy"), ("naive_per_field", "Naive per-field (9 fields, fixed order)")):
+        item = oracle[key]
+        lines.append(
+            f"| {label} | {item['mean_turns']:.2f} | {item['max_turns']} | "
+            f"{item['correct']}/{oracle['n_episodes']} = "
+            f"{_fmt_pct(item['correct_rate'])} | {item['valid']}/{oracle['n_episodes']} |"
+        )
+    lines.append("")
+    lines.append("## Fuzz property tests (stdlib `random`, seeded)")
+    lines.append("")
+    lines.append(
+        f"Noise: {fuzz['n_noise']} utterances (1-12 tokens from grammar/filler "
+        f"vocabulary, seed {fuzz['seed']:#x}); targeted: {fuzz['n_targeted']} "
+        "utterances embedding one unsupported hint in filler."
+    )
+    lines.append("")
+    lines.append("| Property | Result |")
+    lines.append("|---|---:|")
+    lines.append(f"| Crashes (materialize + validate) | {fuzz['crashes']} |")
+    lines.append(
+        f"| Soundness violations (materialized rule failing `validate_rule`) | "
+        f"{fuzz['n_soundness_violations']} |"
+    )
+    lines.append(
+        f"| Targeted false materializations (unsupported hint + filler) | "
+        f"{fuzz['n_targeted_false']} |"
+    )
+    lines.append(
+        f"| Noise clarified / materialized (descriptive) | "
+        f"{fuzz['clarified_noise']} / {fuzz['materialized_noise']} |"
+    )
+    if fuzz["soundness_violations"]:
+        lines.append("")
+        for v in fuzz["soundness_violations"][:10]:
+            lines.append(f"- {v}")
+    if fuzz["targeted_false_materializations"]:
+        lines.append("")
+        for v in fuzz["targeted_false_materializations"][:10]:
+            lines.append(f"- FALSE-MAT: {v}")
+    lines.append("")
     lines.append("## Canonical fields and defaults")
     lines.append("")
     lines.append(
@@ -433,6 +895,12 @@ def main() -> None:
     scored = {split: _score(by_split[split]) for split in SPLITS}
     overall = _score(rows)
 
+    clean_all = [r for r in rows if r["stress"] == "clean"]
+    clean_test = [r for r in by_split["test"] if r["stress"] == "clean"]
+    compositional = compositional_heldout(clean_all)
+    oracle = oracle_turns_simulation(clean_test)
+    fuzz = fuzz_property_tests()
+
     raw = BENCH.read_bytes()
     dataset = {
         "path": str(BENCH.relative_to(ROOT)).replace("\\", "/"),
@@ -470,6 +938,9 @@ def main() -> None:
         },
         "splits": scored,
         "overall": overall,
+        "compositional_heldout": compositional,
+        "oracle_turns": oracle,
+        "fuzz": fuzz,
     }
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -499,6 +970,24 @@ def main() -> None:
             )
     print(f"test clean rule correctness: {test['clean']['rule_correctness']:.3f}")
     print(f"test stress clarification rate: {test['stress']['clarification_rate']:.3f}")
+    comp = compositional
+    print(
+        f"compositional held-out: {comp['held_out']['correct']}/{comp['held_out']['n']} "
+        f"({comp['held_out']['accuracy']:.3f}); seen "
+        f"{comp['seen']['correct']}/{comp['seen']['n']} ({comp['seen']['accuracy']:.3f})"
+    )
+    ora = oracle
+    print(
+        f"oracle turns: policy mean {ora['policy']['mean_turns']:.2f} "
+        f"(correct {ora['policy']['correct']}/{ora['n_episodes']}) vs naive mean "
+        f"{ora['naive_per_field']['mean_turns']:.2f} "
+        f"(correct {ora['naive_per_field']['correct']}/{ora['n_episodes']})"
+    )
+    fz = fuzz
+    print(
+        f"fuzz: crashes {fz['crashes']}, soundness violations "
+        f"{fz['n_soundness_violations']}, targeted false-mats {fz['n_targeted_false']}"
+    )
     print(f"wrote {OUT_JSON.relative_to(ROOT)} and {OUT_MD.relative_to(ROOT)}")
 
 
