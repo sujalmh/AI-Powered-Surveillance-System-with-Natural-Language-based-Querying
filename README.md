@@ -1,8 +1,13 @@
 # AI-Powered Surveillance & Crowd Management with Natural Language Querying
 
-![Status](https://img.shields.io/badge/Status-Active-success?style=for-the-badge&logo=activity)
-![Version](https://img.shields.io/badge/Version-1.0.0-blue?style=for-the-badge&logo=git)
-![Platform](https://img.shields.io/badge/Platform-Cross%20Platform-lightgrey?style=for-the-badge&logo=linux)
+![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.111+-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.3+-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
+![MongoDB](https://img.shields.io/badge/MongoDB-6+-47A248?style=for-the-badge&logo=mongodb&logoColor=white)
+![FAISS](https://img.shields.io/badge/FAISS-vector%20search-0467DF?style=for-the-badge&logo=meta&logoColor=white)
+![YOLO](https://img.shields.io/badge/YOLO-segmentation-00FFFF?style=for-the-badge&logoColor=black)
+![Tests](https://img.shields.io/badge/tests-250%20passing-3fb950?style=for-the-badge&logo=pytest&logoColor=white)
 
 Turn passive CCTV footage into a searchable intelligence asset. Ask in plain
 language — *"show people in red near the entrance after 6 PM"*, *"how many people
