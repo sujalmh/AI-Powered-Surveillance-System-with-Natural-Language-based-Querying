@@ -47,6 +47,15 @@ class Settings:
             "OPENVINO_MODEL_XML",
             "intel/person-attributes-recognition-crossroad-0238/FP32/person-attributes-recognition-crossroad-0238.xml",
         )
+        # COCO classes kept by the detection pipeline.  An unrestricted YOLO
+        # pass emits scene props ("bowl", "tv", "frisbee" on retail shelves)
+        # that pollute retrieval and alert counts, so detection is restricted
+        # to objects a surveillance deployment can act on.  Comma-separated;
+        # set DETECTION_CLASSES="all" to keep every model class.
+        self.DETECTION_CLASSES: str = os.getenv(
+            "DETECTION_CLASSES",
+            "person,bicycle,car,motorcycle,bus,truck",
+        )
 
         # LLM / NLP (optional; wire later)
         # Providers: "opencode" (local opencode runtime, default), "openai" /
@@ -162,6 +171,13 @@ class Settings:
         self.ENABLE_ADAPTIVE_ALPHA: bool = os.getenv("ENABLE_ADAPTIVE_ALPHA", "true").lower() == "true"
         self.ENABLE_RECENCY_BOOST: bool = os.getenv("ENABLE_RECENCY_BOOST", "true").lower() == "true"
         self.ENABLE_ADAPTIVE_CONFIDENCE: bool = os.getenv("ENABLE_ADAPTIVE_CONFIDENCE", "true").lower() == "true"
+        # Hard floor applied after the adaptive threshold.  CLIP text/image
+        # similarities for attribute phrases ("person wearing black clothing")
+        # cluster around 0.20-0.26, so a floor above that silently zeroes the
+        # semantic branch on otherwise valid corpus.  0.25 preserves the
+        # tuned deployment behaviour; lower it for small/attribute-heavy
+        # corpora to keep hybrid retrieval actually hybrid.
+        self.SEMANTIC_CONF_FLOOR: float = float(os.getenv("SEMANTIC_CONF_FLOOR", "0.25"))
         self.ENABLE_RESULT_DIVERSITY: bool = os.getenv("ENABLE_RESULT_DIVERSITY", "false").lower() == "true"
         self.ENABLE_ADAPTIVE_GAPS: bool = os.getenv("ENABLE_ADAPTIVE_GAPS", "true").lower() == "true"
         self.ENABLE_TEMPORAL_OVERLAP: bool = os.getenv("ENABLE_TEMPORAL_OVERLAP", "true").lower() == "true"

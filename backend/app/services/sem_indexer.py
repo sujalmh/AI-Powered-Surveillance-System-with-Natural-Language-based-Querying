@@ -225,13 +225,39 @@ def _object_captions_from_detections(camera_id: int, frame_ts: Optional[str], li
         pass
     return out
 
-def sample_frames_from_clip(clip_path: str, every_sec: float = 1.0) -> Iterator[FrameBundle]:
+def sample_frames_from_clip(
+    clip_path: str,
+    every_sec: float = 1.0,
+    start_iso: Optional[str] = None,
+) -> Iterator[FrameBundle]:
     cap = cv2.VideoCapture(clip_path)
     if not cap.isOpened():
         return
     fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
     frame_step = max(1, int(round(fps * every_sec))) if fps > 0 else 1
-    start_dt, _ = _parse_start_end_from_clip_path(clip_path)
+
+    # Frame timestamps drive every time-windowed query.  A clip whose name does
+    # not encode a timestamp (uploaded files, generated clips) used to index
+    # with frame_ts=None, which made the semantic branch invisible to any
+    # "last N minutes" / explicit-window query -- structured hits survived but
+    # every semantic hit was silently filtered out.  Fall back to an explicit
+    # start time, then to the file mtime, matching clip_builder's behaviour.
+    start_dt: Optional[datetime] = None
+    if start_iso:
+        try:
+            start_dt = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
+            if start_dt.tzinfo is not None:
+                start_dt = start_dt.astimezone(timezone.utc).replace(tzinfo=None)
+        except Exception:
+            start_dt = None
+    if start_dt is None:
+        parsed_start, _ = _parse_start_end_from_clip_path(clip_path)
+        start_dt = parsed_start
+    if start_dt is None:
+        try:
+            start_dt = datetime.fromtimestamp(Path(clip_path).stat().st_mtime, tz=timezone.utc).replace(tzinfo=None)
+        except Exception:
+            start_dt = None
 
     try:
         idx = 0
@@ -322,6 +348,7 @@ def index_clip(
     clip_url: Optional[str] = None,
     every_sec: float = 1.0,
     with_captions: bool = False,
+    start_iso: Optional[str] = None,
 ) -> Dict[str, object]:
     """
     Index a clip by sampling frames every `every_sec`, deduplicating via phash,
@@ -342,7 +369,7 @@ def index_clip(
             captioner = None
 
     # Sample all frames first so we can batch-check DB existence (one query instead of N)
-    bundles_list = list(sample_frames_from_clip(clip_path, every_sec=every_sec))
+    bundles_list = list(sample_frames_from_clip(clip_path, every_sec=every_sec, start_iso=start_iso))
     if not bundles_list:
         return {"ok": True, "indexed_frames": 0, "model": settings.SEMANTIC_MODEL, "backend": settings.VECTOR_BACKEND}
     frame_indices = [int(b.frame_index) for b in bundles_list]

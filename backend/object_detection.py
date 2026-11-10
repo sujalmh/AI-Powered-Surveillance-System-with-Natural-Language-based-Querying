@@ -114,6 +114,25 @@ CONF_THRESHOLD = 0.5
 NUM_CLUSTERS = 5
 MIN_PERSON_WIDTH_PIXELS = 60  # Minimum width of a person to trigger attribute recognition
 
+
+def _parse_detection_classes(raw: str) -> Optional[set[str]]:
+    """Parse DETECTION_CLASSES into a set, or None when everything is kept."""
+    value = (raw or "").strip()
+    if not value or value.lower() in {"all", "*"}:
+        return None
+    return {c.strip().lower() for c in value.split(",") if c.strip()}
+
+
+# None means "keep every class the model emits".
+ALLOWED_DETECTION_CLASSES = _parse_detection_classes(getattr(settings, "DETECTION_CLASSES", ""))
+
+
+def is_allowed_class(obj_name: str) -> bool:
+    """True when *obj_name* survives the DETECTION_CLASSES allowlist."""
+    if ALLOWED_DETECTION_CLASSES is None:
+        return True
+    return obj_name.strip().lower() in ALLOWED_DETECTION_CLASSES
+
 # Zones cache for crowd/ROI counts: camera_id -> (list of zone docs, cache_time)
 _ZONES_CACHE: Dict[int, Tuple[List[Dict[str, Any]], float]] = {}
 _ZONES_CACHE_TTL_SEC = 60.0
@@ -195,6 +214,7 @@ SURVEILLANCE_COLORS = {
     'White': '#FFFFFF',
     'Gray': '#A0A0A0',      # Shifted lighter to capture silvers/light grays correctly
     'Brown': '#8B4513',
+    'Olive': '#6B8E23',     # Covers olive/khaki/army greens (distinct from Green)
     'Cyan': '#00BBBB',      # Covers teal, turquoise, aqua — distinct from blue/green
 }
 
@@ -1339,6 +1359,11 @@ def process_live_stream(
                     cls_idx = int(cls_arr[i]) if np.ndim(cls_arr) == 1 else int(cls_arr[i][0])
                     obj_name = model.names[cls_idx]
                     
+                    # DETECTION_CLASSES allowlist: scene props are not
+                    # surveillance objects and must not reach storage.
+                    if not is_allowed_class(str(obj_name)):
+                        continue
+                    
                     roi = frame[y1:y2, x1:x2]
                     
                     # Handle possible mismatch between boxes and masks length
@@ -1687,6 +1712,12 @@ def process_video_file(
 
                     cls_idx = int(cls_arr[i]) if np.ndim(cls_arr) == 1 else int(cls_arr[i][0])
                     obj_name = model.names[cls_idx]
+
+                    # DETECTION_CLASSES allowlist: scene props are not
+                    # surveillance objects and must not reach storage.
+                    if not is_allowed_class(str(obj_name)):
+                        continue
+
                     roi = frame[y1:y2, x1:x2]
 
                     if isinstance(masks, np.ndarray) and masks.ndim >= 1 and i < masks.shape[0]:

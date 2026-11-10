@@ -47,6 +47,10 @@ class IndexClipRequest(BaseModel):
     clip_url: Optional[str] = Field(default=None, description="Public URL path (e.g., /media/clips/...)")
     every_sec: float = Field(default=1.0, ge=0.1, le=10.0)
     with_captions: Optional[bool] = Field(default=False, description="Generate BLIP-2 captions for frames if enabled")
+    start_iso: Optional[str] = Field(
+        default=None,
+        description="Optional capture start time (ISO); used as the frame-timestamp origin when the file name has none",
+    )
     respect_mode: Optional[bool] = Field(default=True, description="Honor backend indexing-mode setting")
 
 
@@ -78,6 +82,7 @@ async def api_index_clip(req: IndexClipRequest) -> IndexClipResponse:
                 req.clip_url,
                 every_sec=req.every_sec,
                 with_captions=bool(req.with_captions),
+                start_iso=req.start_iso,
             )
             return IndexClipResponse(
                 ok=bool(result.get("ok", False)),

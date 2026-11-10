@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -332,18 +332,26 @@ def filter_docs_by_count_constraint(
 # ---------------------------------------------------------------------------
 def aggregate_objects(objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Aggregate multiple detection object dicts into a representative list
-    grouped by ``object_name`` with averaged confidence and collected colors.
+    Aggregate repeated observations of the *same* object into one entry.
+
+    Grouping is by ``(object_name, track_id)``, not by class alone: a clip
+    routinely contains several people, and collapsing them into a single
+    ``person`` entry fuses distinct individuals -- their colours, confidences
+    and track ids bleed together, so a "brown" match displays as "black".
+    Objects without a usable track id fall back to class grouping.
     """
     if not objects:
         return []
 
-    by_name: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    by_identity: Dict[Tuple[Any, Any], List[Dict[str, Any]]] = defaultdict(list)
     for obj in objects:
-        by_name[obj.get("object_name", "unknown")].append(obj)
+        track_id = obj.get("track_id")
+        usable_tid = track_id if isinstance(track_id, (int, float)) and track_id >= 0 else None
+        key = (obj.get("object_name", "unknown"), usable_tid)
+        by_identity[key].append(obj)
 
     aggregated: List[Dict[str, Any]] = []
-    for _name, instances in by_name.items():
+    for _key, instances in by_identity.items():
         representative = instances[0].copy()
 
         confidences = [
@@ -358,7 +366,17 @@ def aggregate_objects(objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         colors: List[str] = [str(o.get("color")) for o in instances if o.get("color")]
         colors = list(dict.fromkeys(colors))  # dedupe preserving order
         if colors:
-            representative["color"] = colors[0] if len(colors) == 1 else ", ".join(colors)
+            # Per-frame colour extraction is noisy (lighting, occlusion), so a
+            # track usually reports several colours.  ``color`` must stay a
+            # single representative value -- clients filter and compare on it,
+            # and a comma-joined string ("black, brown, blue") matches nothing.
+            # Keep the dominant colour (first-seen wins ties) and expose the
+            # full set separately in ``colors``.
+            counts = Counter(str(o.get("color")) for o in instances if o.get("color"))
+            first_seen = {c: i for i, c in enumerate(colors)}
+            representative["color"] = max(
+                counts.items(), key=lambda kv: (kv[1], -first_seen.get(kv[0], 0))
+            )[0]
             representative["colors"] = colors
 
         aggregated.append(representative)

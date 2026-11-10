@@ -229,13 +229,15 @@ def search_unstructured(
         entry["frames"] = frames[:5]
         clip_scores.append(max_score)
     # Adaptive threshold from distribution (or use fixed min_confidence)
+    conf_floor = float(getattr(settings, "SEMANTIC_CONF_FLOOR", 0.25) or 0.25)
     if getattr(settings, "ENABLE_ADAPTIVE_CONFIDENCE", True) and clip_scores:
         threshold = _adaptive_min_confidence(clip_scores, has_action=has_action, base=min_confidence)
-        # Hard floor: lower for action queries (e.g. "running") whose CLIP
-        # similarities are inherently weaker; higher for object queries.
-        threshold = max(threshold, 0.15 if has_action else 0.25)
+        # Floor: lower for action queries (e.g. "running") whose CLIP
+        # similarities are inherently weaker.  Configurable because the right
+        # floor is corpus-dependent (see SEMANTIC_CONF_FLOOR).
+        threshold = max(threshold, 0.15 if has_action else conf_floor)
     else:
-        threshold = 0.18 if has_action else max(min_confidence, 0.25)
+        threshold = 0.18 if has_action else max(min_confidence, conf_floor)
     results = [entry for entry in by_clip.values() if entry["score"] >= threshold]
 
     # Normalize scores for consistent merging later

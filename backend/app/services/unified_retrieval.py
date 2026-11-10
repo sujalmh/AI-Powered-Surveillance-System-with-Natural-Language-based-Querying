@@ -257,6 +257,10 @@ class UnifiedRetrieval:
             self.max_gap_seconds,
             self.join_gap_seconds,
         )
+        # Semantic-only entries carry captions but no object list.  Attach the
+        # detections that fall inside the clip window so the UI can show what
+        # was actually seen (and so colour/object filters remain auditable).
+        self._attach_objects_to_semantic(merged)
         steps[-1]["status"] = "complete"
         steps[-1]["details"] = f"{len(merged)} unified results"
         logger.info("Merged results: {}", len(merged))
@@ -389,6 +393,40 @@ class UnifiedRetrieval:
                 "Person-index search failed; using scene fallback"
             )
             return [], f"person search error ({type(exc).__name__})"
+
+    @staticmethod
+    def _attach_objects_to_semantic(results: List[Dict[str, Any]], max_docs: int = 20) -> None:
+        """Populate ``objects`` on semantic-only results from nearby detections.
+
+        Scene matches are caption-driven and carry no object list; without
+        this the UI shows a clip with no detected objects and object/colour
+        filters cannot be audited against the result.
+        """
+        try:
+            from backend.app.db.mongo import detections as detections_col
+            from backend.app.services.retrieval_utils import aggregate_objects
+        except Exception:  # pragma: no cover - import guard
+            return
+
+        for r in results:
+            if r.get("source") != "semantic" or r.get("objects"):
+                continue
+            start, end = r.get("start"), r.get("end")
+            cam = r.get("camera_id")
+            if not start or not end or cam is None:
+                continue
+            try:
+                docs = list(
+                    detections_col.find(
+                        {"camera_id": cam, "timestamp": {"$gte": str(start), "$lte": str(end)}},
+                        {"_id": 0, "objects": 1},
+                    ).limit(max_docs)
+                )
+            except Exception:
+                continue
+            objs = [o for d in docs for o in (d.get("objects") or [])]
+            if objs:
+                r["objects"] = aggregate_objects(objs)
 
     def _execute_semantic_query(
         self,

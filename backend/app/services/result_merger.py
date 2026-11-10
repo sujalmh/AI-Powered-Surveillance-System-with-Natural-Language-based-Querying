@@ -791,10 +791,17 @@ def merge_results(
                             break
             if not matched:
                 key = f"sem_{sem.get('camera_id')}_{sem.get('clip_path', '')}"
+                # Carry the clip's temporal extent onto the merged entry: the
+                # UI shows it, the recency boost uses it, and the temporal
+                # overlap check above needs it to fuse semantic and structured
+                # evidence for the same moment (source becomes "hybrid").
+                sem_start, sem_end = _semantic_time_range(sem)
                 results_map[key] = {
                     "camera_id": sem.get("camera_id"),
                     "clip_url": sem.get("clip_url"),
                     "clip_path": sem.get("clip_path"),
+                    "start": sem_start.isoformat() if sem_start else None,
+                    "end": sem_end.isoformat() if sem_end else None,
                     "score_struct": 0.0,
                     "score_semantic": sem_norm,
                     "score_raw_semantic": sem_raw,

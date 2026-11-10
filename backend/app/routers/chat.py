@@ -41,33 +41,59 @@ from loguru import logger
 
 router = APIRouter()
 
-# Minimal color vocabulary for NL parsing (should align with detection color names)
-KNOWN_COLORS = {
-    "red": "Red",
-    "green": "Green",
-    "blue": "Blue",
-    "yellow": "Yellow",
+# Colour vocabulary for the regex NL parser.  Values MUST be names the
+# detector can actually emit (see SURVEILLANCE_COLORS in object_detection.py):
+# a query for a colour the extractor never produces can only ever return zero
+# results, and a colour missing here silently degrades to an unfiltered query.
+# Keys are lower-case surface forms; order matters (first match wins).
+COLOR_ALIASES: Dict[str, str] = {
+    # neutral
     "black": "Black",
+    "charcoal": "Black",
     "white": "White",
-    "purple": "Purple",
-    "orange": "Orange",
-    "pink": "Pink",
-    "brown": "Brown",
+    "off-white": "White",
+    "cream": "White",
+    "ivory": "White",
     "gray": "Gray",
     "grey": "Gray",
+    "silver": "Gray",
+    # warm
+    "red": "Red",
+    "crimson": "Red",
+    "maroon": "Red",
+    "burgundy": "Red",
+    "scarlet": "Red",
+    "orange": "Orange",
+    "amber": "Orange",
+    "yellow": "Yellow",
+    "gold": "Yellow",
+    "mustard": "Yellow",
+    "pink": "Pink",
+    "coral": "Pink",
+    "salmon": "Pink",
+    "brown": "Brown",
+    "tan": "Brown",
+    "khaki": "Brown",
+    "beige": "Brown",
+    # cool
+    "blue": "Blue",
+    "navy": "Blue",
+    "azure": "Blue",
+    "cobalt": "Blue",
+    "denim": "Blue",
+    "green": "Green",
+    "olive": "Olive",
+    "lime": "Green",
+    "emerald": "Green",
     "cyan": "Cyan",
-    "magenta": "Magenta",
-    "lime": "Lime",
-    "navy": "Navy",
-    "teal": "Teal",
-    "violet": "Violet",
-    "maroon": "Maroon",
-    "silver": "Silver",
-    "gold": "Gold",
-    "coral": "Coral",
-    "turquoise": "Turquoise",
-    "salmon": "Salmon",
-    "indigo": "Indigo",
+    "teal": "Cyan",
+    "turquoise": "Cyan",
+    "aqua": "Cyan",
+    "purple": "Purple",
+    "violet": "Purple",
+    "magenta": "Purple",
+    "indigo": "Purple",
+    "lavender": "Purple",
 }
 
 
@@ -210,7 +236,20 @@ def parse_simple_nl_to_filter(nl: str) -> Dict[str, Any]:
             except Exception:
                 return None
         return number_words.get(tok)
-    ask_color = bool(re.search(r"\b(color|colour|clothes|clothing|wearing|shirt|jacket|dress|pants|backpack|bag)\b", txt))
+    # Colour questions only: accessories ("bag", "backpack") are object
+    # attributes, not colours.  Treating them as colour questions used to
+    # force the 60-minute default window on "person carrying a bag", which
+    # silently excluded every older clip.
+    ask_color = bool(
+        re.search(r"\b(color|colour|clothes|clothing|wearing|shirt|jacket|dress|pants)\b", txt)
+    )
+
+    # Visual accessories worth putting in the CLIP text ("person carrying bag").
+    accessory = None
+    for _kw in ("backpack", "handbag", "bag", "suitcase", "helmet", "hat"):
+        if re.search(rf"\b{_kw}\b", txt):
+            accessory = _kw
+            break
 
     # time: last X minutes/hours
     last_minutes = None
@@ -329,10 +368,11 @@ def parse_simple_nl_to_filter(nl: str) -> Dict[str, Any]:
 
     # color
     color = None
-    for k, v in KNOWN_COLORS.items():
-        if re.search(rf"\b{k}\b", txt):
+    for k, v in COLOR_ALIASES.items():
+        if re.search(rf"\b{re.escape(k)}\b", txt):
             color = v
             break
+    color_unresolved = bool(ask_color and color is None)
 
     # camera: "camera 1"
     camera_id = None
@@ -419,10 +459,17 @@ def parse_simple_nl_to_filter(nl: str) -> Dict[str, Any]:
 
     if ask_color:
         f["__ask_color"] = True
+        if color_unresolved:
+            # The user asked about a colour but no alias matched.  Do not let
+            # the pipeline (or the answer) pretend a colour filter was applied.
+            f["__color_unresolved"] = True
 
     # Build a concise CLIP-optimized embedding text for vector search.
     # This is critical: CLIP works best with short visual descriptions.
     from backend.app.services.nl_parser import build_embedding_text
+    if accessory:
+        carrying = "bag" if accessory in {"bag", "handbag", "backpack"} else accessory
+        f["__visual_attributes"] = [f"carrying {carrying}"] if carrying == "bag" else [carrying]
     f["__embedding_text"] = build_embedding_text(f, nl)
 
     # Run query expansion so downstream recall-improvement works even in

@@ -109,14 +109,19 @@ def build_embedding_text(parsed_filter: Dict[str, Any], fallback_text: str) -> s
     obj = parsed_filter.get("objects.object_name") or ""
     col = parsed_filter.get("objects.color")
     action = parsed_filter.get("action")
+    extras = " ".join(str(x) for x in (parsed_filter.get("__visual_attributes") or []) if x)
 
-    # Build from structured fields (preferred - most accurate for CLIP)
+    # Build from structured fields (preferred - most accurate for CLIP).
+    # Accessories ("carrying bag") are part of the visual description, so they
+    # are appended rather than dropped.
     if col and action and obj:
-        return f"{obj} wearing {str(col).lower()} clothing {action}"
+        return f"{obj} wearing {str(col).lower()} clothing {action} {extras}".strip()
     if col and obj:
-        return f"{obj} wearing {str(col).lower()} clothing"
+        return f"{obj} wearing {str(col).lower()} clothing {extras}".strip()
     if action and obj:
-        return f"{obj} {action}"
+        return f"{obj} {action} {extras}".strip()
+    if obj and extras:
+        return f"{obj} {extras}"
     if obj:
         count_constraint = parsed_filter.get("count_constraint")
         if count_constraint:
