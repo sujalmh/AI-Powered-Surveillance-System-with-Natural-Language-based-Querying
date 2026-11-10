@@ -125,3 +125,22 @@ Desktop.ini
 .coverage
 coverage/
 htmlcov/
+
+# ──────────────────────────────────────────────
+# Paper / submission artifacts (live in the paper-support repo)
+# ──────────────────────────────────────────────
+INDICON2026_submit/
+arxiv/
+research_paper*.tex
+research_paper*.aux
+research_paper*.out
+research_paper*.pdf
+references.bib
+IEEE-conference-template-*.tex
+IEEE__INDICON_2026.zip
+INDICON2026_submit.zip
+Intent_Adaptive_Hybrid_Retrieval*.pdf
+Intent-Adaptive_Hybrid_Retrieval*.zip
+INSP26001708_Numeronauts.pptx*
+reviewer_fix_plan.html
+architecture_diagram.mmd
