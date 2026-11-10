@@ -1,0 +1,214 @@
+{
+  "generated_at": "2026-10-22T16:08:07.270314+00:00",
+  "canonical_id_note": "subset.load_person_meta assigns row_index 0..N-1 in sidecar order; row_index and faiss_id are unique per released subset; detection_id is explicitly non-unique in the release (duplicates). Canonical detection identity is therefore row_index/faiss_id, not detection_id.",
+  "audits": {
+    "fusion_metadata_tracks": {
+      "n_tracks": 280,
+      "n_calibration_tracks": 70,
+      "n_test_tracks": 210,
+      "track_id_overlap_count": 0,
+      "calibration_detections": 508,
+      "test_detections": 1270,
+      "detection_row_index_overlap_count": 0,
+      "detection_faiss_id_overlap_count": 0,
+      "calibration_unique_detection_ids": 507,
+      "test_unique_detection_ids": 1145,
+      "detection_id_string_overlap_count": 187,
+      "test_detections_whose_detection_id_appears_in_cal": 187,
+      "cal_detections_whose_detection_id_appears_in_test": 187,
+      "distinct_timestamps_calibration": 507,
+      "distinct_timestamps_test": 1145,
+      "exact_timestamp_value_overlap_count": 187,
+      "test_detections_with_timestamp_in_cal": 187,
+      "cal_detections_with_timestamp_in_test": 187,
+      "timestamp_range": {
+        "calibration": [
+          "2026-03-01T17:01:00.052839",
+          "2026-03-01T18:56:03.179961"
+        ],
+        "test": [
+          "2026-03-01T17:01:17.655889",
+          "2026-03-01T18:56:17.989377"
+        ]
+      },
+      "temporal_buckets_5min": {
+        "calibration": {
+          "17:00": 35,
+          "18:00": 20,
+          "18:05": 23,
+          "18:10": 106,
+          "18:15": 174,
+          "18:20": 100,
+          "18:25": 43,
+          "18:55": 7
+        },
+        "test": {
+          "17:00": 106,
+          "17:05": 1,
+          "18:00": 18,
+          "18:05": 108,
+          "18:10": 280,
+          "18:15": 365,
+          "18:20": 205,
+          "18:25": 167,
+          "18:55": 20
+        }
+      },
+      "calibration_threshold_tuning_mask": {
+        "definition": "timestamp < 2026-03-01T17:09:00 OR timestamp >= 2026-03-01T18:55:00",
+        "n_detections": 169,
+        "n_main_burst_detections": 1609,
+        "buckets": {
+          "17:00": 141,
+          "17:05": 1,
+          "18:55": 27
+        }
+      },
+      "cal_test_overlapping_5min_buckets": [
+        "17:00",
+        "18:00",
+        "18:05",
+        "18:10",
+        "18:15",
+        "18:20",
+        "18:25",
+        "18:55"
+      ]
+    },
+    "person_pairs_visual_tracks": {
+      "source_file": "backend/benchmarks/person_pairs.jsonl",
+      "n_pairs": 2016,
+      "calibration_pairs": 528,
+      "test_pairs": 1488,
+      "n_calibration_tracks": 39,
+      "n_test_tracks": 116,
+      "track_string_overlap_count": 0,
+      "calibration_detections": 357,
+      "test_detections": 1010,
+      "detection_row_index_overlap_count": 0,
+      "detection_faiss_id_overlap_count": 0,
+      "calibration_unique_detection_ids": 356,
+      "test_unique_detection_ids": 904,
+      "detection_id_string_overlap_count": 94,
+      "test_detections_whose_detection_id_appears_in_cal": 95,
+      "distinct_timestamps_calibration": 356,
+      "distinct_timestamps_test": 904,
+      "exact_timestamp_value_overlap_count": 94,
+      "test_detections_with_timestamp_in_cal": 95,
+      "timestamp_range": {
+        "calibration": [
+          "2026-03-01T17:01:00.052839",
+          "2026-03-01T18:56:12.215454"
+        ],
+        "test": [
+          "2026-03-01T17:01:20.128877",
+          "2026-03-01T18:56:17.989377"
+        ]
+      },
+      "temporal_buckets_5min": {
+        "calibration": {
+          "17:00": 27,
+          "18:05": 46,
+          "18:10": 72,
+          "18:15": 103,
+          "18:20": 51,
+          "18:25": 47,
+          "18:55": 11
+        },
+        "test": {
+          "17:00": 84,
+          "18:00": 29,
+          "18:05": 58,
+          "18:10": 199,
+          "18:15": 323,
+          "18:20": 185,
+          "18:25": 119,
+          "18:55": 13
+        }
+      },
+      "pair_tuple_overlap_count": 0,
+      "reversed_pair_tuple_overlap_count": 0,
+      "unique_pid_count": 2016,
+      "overlapping_5min_buckets": [
+        "17:00",
+        "18:05",
+        "18:10",
+        "18:15",
+        "18:20",
+        "18:25",
+        "18:55"
+      ]
+    },
+    "fusion_metadata_pairs": {
+      "total_pairs": 2016,
+      "calibration_pairs": 1008,
+      "test_pairs": 1008,
+      "calibration_same": 504,
+      "calibration_different": 504,
+      "test_same": 504,
+      "test_different": 504,
+      "pair_tuple_overlap_count": 0,
+      "reversed_pair_tuple_overlap_count": 0,
+      "unique_pid_count": 2016,
+      "calibration_track_ids_in_pairs": 58,
+      "test_track_ids_in_pairs": 126,
+      "track_string_overlap_between_cal_and_test_pairs": 0
+    }
+  },
+  "verdict": {
+    "track_ids": "DISJOINT (0 overlap) for both visual and metadata pseudo-tracks",
+    "unique_detection_keys_row_index_faiss_id": "DISJOINT (0 overlap)",
+    "detection_id_strings": "NOT disjoint: aliasing only (non-unique IDs in release); metadata=187, person_pairs=94 overlapping unique strings",
+    "timestamps": "OVERLAPPING: cal and test detections co-occur in the same 5-min buckets (metadata exact-ts-values=187, instances test-in-cal=187; person_pairs exact-ts-values=94, instances=95). This is a property of the whole-track (round-robin) split, not identity leakage.",
+    "pairs": "DISJOINT by (query_row_index, gallery_row_index) and by track strings (fusion pairs track-string overlap=0)",
+    "overall": "CLEAN on canonical unique keys (track_id, row_index, faiss_id) and on pair tuples; no identity-level leakage. Non-unique detection_id aliasing and temporal co-occurrence are quantified above and are not identity leakage."
+  },
+  "leakage_quantification": {
+    "metadata": {
+      "track_id_overlap": 0,
+      "row_index_overlap": 0,
+      "faiss_id_overlap": 0,
+      "detection_id_string_overlap_unique": 187,
+      "detection_id_instances_test_in_cal": 187,
+      "exact_timestamp_values_overlap": 187,
+      "test_detection_instances_with_timestamp_in_cal": 187,
+      "cal_test_overlapping_5min_buckets": [
+        "17:00",
+        "18:00",
+        "18:05",
+        "18:10",
+        "18:15",
+        "18:20",
+        "18:25",
+        "18:55"
+      ]
+    },
+    "person_pairs": {
+      "track_string_overlap": 0,
+      "row_index_overlap": 0,
+      "faiss_id_overlap": 0,
+      "detection_id_string_overlap_unique": 94,
+      "detection_id_instances_test_in_cal": 95,
+      "exact_timestamp_values_overlap": 94,
+      "test_detection_instances_with_timestamp_in_cal": 95,
+      "overlapping_5min_buckets": [
+        "17:00",
+        "18:05",
+        "18:10",
+        "18:15",
+        "18:20",
+        "18:25",
+        "18:55"
+      ]
+    },
+    "pairs": {
+      "fusion_pair_tuple_overlap": 0,
+      "person_pairs_pair_tuple_overlap": 0
+    }
+  },
+  "minimal_resplit_fix_if_holes": {
+    "detection_id_aliasing": "No data change: canonicalize on row_index/faiss_id in all downstream code and manifests; report detection_id as a non-unique alias. Optionally add an assertion in build_subset/eval that calibration and test row_index sets are disjoint (already true).",
+    "temporal_cooccurrence": "Do NOT convert to a time-block split: calibration would be limited to the early (17:01-17:09) and late (18:55-18:56) bursts (<=46 detections) with no main-burst coverage, destroying power. Keep the whole-track round-robin split (track-disjoint) which is the unit of generalisation, keep threshold tuning on the time-disjoint early+late bursts (already), and report temporal co-occurrence as a limitation. Alternative (if a time-disjoint eval is required): hold out whole tracks whose entire span falls in a held-out time block; quantify the resulting cal/test sizes before adopting.",
+    "ridge_single_run": "Addressed by Task 2 of this script: 5 seeded 80%% calibration-track subsamples, lambda fixed at 1.0."
+  }
+}

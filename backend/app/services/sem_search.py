@@ -12,6 +12,7 @@ import numpy as np
 from backend.app.config import settings
 from backend.app.services.sem_embedder import get_embedder
 from backend.app.services.sem_store import get_faiss_store
+from backend.app.services.retrieval_utils import normalize_scores
 
 
 @lru_cache(maxsize=128)
@@ -23,21 +24,13 @@ def _cached_text_embed(query_tuple: Tuple[str, ...]) -> np.ndarray:
 
 
 def _norm_scores(scores: List[float]) -> List[float]:
-    """Normalize semantic scores to [0, 1].
+    """Per-query min-max with the degenerate case mapped to 0.0.
 
-    When all scores are identical (mx - mn ≈ 0) we return 0.5 instead of 1.0
-    because mapping a cluster of mediocre scores to perfect 1.0 inflates
-    their weight during result merging (alpha blending with structured scores).
+    A constant score vector (FAISS ties after thresholding, or a single
+    surviving clip) carries no evidence; returning 1.0 for every element
+    would hand the semantic branch full confidence it has not earned.
     """
-    if not scores:
-        return []
-    mn = min(scores)
-    mx = max(scores)
-    if mx - mn < 1e-9:
-        # All scores are the same — return a neutral value rather than
-        # the maximum so that uniform mediocre results are not promoted.
-        return [0.5 for _ in scores]
-    return [(s - mn) / (mx - mn) for s in scores]
+    return normalize_scores(scores, min_val=0.0, mode="minmax")
 
 
 def _adaptive_min_confidence(

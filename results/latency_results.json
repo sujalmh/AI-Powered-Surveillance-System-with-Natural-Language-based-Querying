@@ -1,0 +1,301 @@
+{
+  "generated_at": "2026-10-21T15:36:28.998478+00:00",
+  "command": "python backend/scripts/measure_latency.py",
+  "environment": {
+    "platform": "Windows-11-10.0.26300-SP0",
+    "cpu": "Intel64 Family 6 Model 186 Stepping 2, GenuineIntel",
+    "cpu_count": 12,
+    "python": "3.12.4",
+    "torch": "2.10.0+cpu",
+    "faiss": "1.12.0",
+    "open_clip": "3.2.0",
+    "sentence_transformers": "5.0.0",
+    "gpu_available": false,
+    "device": "cpu"
+  },
+  "subset": {
+    "source": "released repository subset",
+    "cameras": [
+      0
+    ],
+    "clips": 123,
+    "scene_vectors": 242,
+    "person_vectors": 1778,
+    "time_range": "2026-03-01T17:01:00-18:56:18 (camera_0)",
+    "note": "Single-camera subset. These are component measurements, not full 4-camera/312k-deployment latency percentiles."
+  },
+  "cold_loads": {
+    "openclip_vit_b32": {
+      "n": 1,
+      "ms": 10386.387000000468,
+      "note": "in-process cold load from local cache; includes module import"
+    },
+    "minilm_l12_v2": {
+      "n": 1,
+      "ms": 15953.432700000121,
+      "note": "in-process cold load from local cache; includes module import"
+    },
+    "scene_faiss_index": {
+      "n": 1,
+      "ms": 0.4246000007697148,
+      "note": "242 vectors, d=512"
+    },
+    "person_faiss_store": {
+      "n": 1,
+      "ms": 12.385800000629388,
+      "note": "1778 descriptors, d=1152; includes meta.json load"
+    }
+  },
+  "components": {
+    "scene_text_encode": {
+      "n": 24,
+      "mean_ms": 36.836645833394265,
+      "p50_ms": 37.164549999033625,
+      "p95_ms": 40.45073000052071,
+      "min_ms": 31.857899999522488,
+      "max_ms": 40.740799999184674
+    },
+    "scene_faiss_search_k10": {
+      "n": 24,
+      "mean_ms": 0.07231249977242744,
+      "p50_ms": 0.06784999914088985,
+      "p95_ms": 0.0919250001970795,
+      "min_ms": 0.05850000161444768,
+      "max_ms": 0.10730000030889641
+    },
+    "scene_encode_plus_faiss": {
+      "n": 24,
+      "mean_ms": 36.90895833316669,
+      "p50_ms": 37.231299997984024,
+      "p95_ms": 40.51344000172321,
+      "min_ms": 31.949899999744957,
+      "max_ms": 40.79930000079912
+    },
+    "scene_clip_aggregate_normalize": {
+      "n": 24,
+      "mean_ms": 0.03574166688243471,
+      "p50_ms": 0.033150000490422826,
+      "p95_ms": 0.04813000014110001,
+      "min_ms": 0.02970000059576705,
+      "max_ms": 0.06399999983841553
+    },
+    "scene_pipeline_search": {
+      "n": 12,
+      "mean_ms": 37.157399999917594,
+      "p50_ms": 37.07539999959408,
+      "p95_ms": 39.401429999452375,
+      "min_ms": 30.522500001097796,
+      "max_ms": 39.569399999891175
+    },
+    "scene_merge": {
+      "n": 12,
+      "mean_ms": 0.30155833322472364,
+      "p50_ms": 0.3143499998259358,
+      "p95_ms": 0.4011950000858633,
+      "min_ms": 0.17389999993611127,
+      "max_ms": 0.42380000013508834
+    },
+    "scene_merge_raw_candidates": {
+      "n": 24,
+      "mean_ms": 0.21816249962588094,
+      "p50_ms": 0.2172999993490521,
+      "p95_ms": 0.24745500004428322,
+      "min_ms": 0.19439999960013665,
+      "max_ms": 0.26049999905808363
+    },
+    "adaptive_alpha": {
+      "n": 50,
+      "mean_ms": 0.0017920000027515925,
+      "p50_ms": 0.0017000002117129043,
+      "p95_ms": 0.0022099994566815435,
+      "min_ms": 0.0015999994502635673,
+      "max_ms": 0.004200001058052294
+    },
+    "person_text_encode": {
+      "n": 24,
+      "mean_ms": 14.08019166668358,
+      "p50_ms": 13.047099999312195,
+      "p95_ms": 18.60526500031483,
+      "min_ms": 9.470499999224558,
+      "max_ms": 19.037000000025728
+    },
+    "person_zero_visual_fusion": {
+      "n": 24,
+      "mean_ms": 0.04464999991190174,
+      "p50_ms": 0.0426500000685337,
+      "p95_ms": 0.06204500095918773,
+      "min_ms": 0.028000000384054147,
+      "max_ms": 0.07709999954386149
+    },
+    "person_faiss_search_k50": {
+      "n": 24,
+      "mean_ms": 0.8864458334301162,
+      "p50_ms": 0.6776000009267591,
+      "p95_ms": 1.7057499993825327,
+      "min_ms": 0.5037000009906478,
+      "max_ms": 1.749799999743118
+    },
+    "person_encode_plus_faiss": {
+      "n": 24,
+      "mean_ms": 15.011287500025597,
+      "p50_ms": 13.760650000222086,
+      "p95_ms": 19.877919999998994,
+      "min_ms": 10.086399997817352,
+      "max_ms": 19.95859999806271
+    },
+    "person_search_meta_to_clip": {
+      "n": 12,
+      "mean_ms": 16.575049999876985,
+      "p50_ms": 17.892099999698985,
+      "p95_ms": 19.55128999952649,
+      "min_ms": 12.311999998928513,
+      "max_ms": 19.675699999424978
+    },
+    "person_merge": {
+      "n": 12,
+      "mean_ms": 0.5899916667052215,
+      "p50_ms": 0.6030000013197423,
+      "p95_ms": 0.8190950005882768,
+      "min_ms": 0.31519999902229756,
+      "max_ms": 0.9384999993926613
+    }
+  },
+  "end_to_end": {
+    "scene_retrieval_core": {
+      "n": 12,
+      "mean_ms": 37.45895833314231,
+      "p50_ms": 37.360649998845474,
+      "p95_ms": 39.68373999932737,
+      "min_ms": 30.696400001033908,
+      "max_ms": 39.76139999940642
+    },
+    "scene_core_definition": "search_unstructured (OpenCLIP text encode + FAISS + clip aggregation + adaptive threshold) + merge_results, per query",
+    "person_retrieval_core": {
+      "n": 12,
+      "mean_ms": 17.16504166658221,
+      "p50_ms": 18.532500000219443,
+      "p95_ms": 20.346364999113575,
+      "min_ms": 12.832199998229044,
+      "max_ms": 20.387999999002204
+    },
+    "person_core_definition": "person search_meta (MiniLM encode + zero-visual fusion + person FAISS + timestamp-to-scene-clip mapping + aggregation) + merge_results, per query",
+    "scene_component_sum_ms": 37.16286249967501,
+    "scene_production_component_sum_ms": 37.24625833327385,
+    "person_component_sum_ms": 17.165041666582205,
+    "excluded_components": [
+      "LLM answer generation (live chat answer path)",
+      "clip stitching / ffmpeg clip generation",
+      "MongoDB structured detection retrieval (MongoDB is not running)",
+      "detection + embedding ingestion (YOLO/OpenVINO/SigLIP indexing)",
+      "frontend/network round-trip",
+      "4-camera, ~312k-descriptor full deployment; 123-clip camera_0 subset only"
+    ]
+  },
+  "concurrency": [
+    {
+      "workers": 1,
+      "jobs": 8,
+      "wall_seconds": 0.30164850000073784,
+      "throughput_jobs_per_s": 26.52093413353765,
+      "job_latency": {
+        "n": 8,
+        "mean_ms": 37.54194999987703,
+        "p50_ms": 37.345649999224406,
+        "p95_ms": 39.562170000408514,
+        "min_ms": 35.27769999891461,
+        "max_ms": 40.03320000083477
+      }
+    },
+    {
+      "workers": 2,
+      "jobs": 8,
+      "wall_seconds": 0.23208720000002359,
+      "throughput_jobs_per_s": 34.469802729315475,
+      "job_latency": {
+        "n": 8,
+        "mean_ms": 56.50146250013677,
+        "p50_ms": 55.32300000049872,
+        "p95_ms": 63.45322499973918,
+        "min_ms": 52.588700000342214,
+        "max_ms": 65.89569999960077
+      }
+    },
+    {
+      "workers": 4,
+      "jobs": 16,
+      "wall_seconds": 0.41016060000038124,
+      "throughput_jobs_per_s": 39.0091100900114,
+      "job_latency": {
+        "n": 16,
+        "mean_ms": 95.76194999988275,
+        "p50_ms": 93.67919999931473,
+        "p95_ms": 117.15480000020762,
+        "min_ms": 56.520099999033846,
+        "max_ms": 123.79169999985606
+      }
+    },
+    {
+      "workers": 8,
+      "jobs": 32,
+      "wall_seconds": 0.8107022999993205,
+      "throughput_jobs_per_s": 39.47194919766087,
+      "job_latency": {
+        "n": 32,
+        "mean_ms": 193.55057812504128,
+        "p50_ms": 211.50459999989835,
+        "p95_ms": 265.42616500000804,
+        "min_ms": 95.66810000069381,
+        "max_ms": 272.8987999998935
+      }
+    }
+  ],
+  "live_llm": {
+    "requested": 0,
+    "calls": [],
+    "summary": null,
+    "note": "excluded from component composition unless --live-llm > 0"
+  },
+  "diagnostics": {
+    "scene_queries": 12,
+    "reps": 24,
+    "merged_scene_counts": [
+      0,
+      0,
+      0,
+      7,
+      6,
+      0,
+      5,
+      0,
+      6,
+      7,
+      0,
+      0
+    ],
+    "person_clip_counts": [
+      2,
+      13,
+      10,
+      10,
+      12,
+      10,
+      14,
+      19,
+      3,
+      9,
+      11,
+      13
+    ],
+    "person_score_raw_min": 0.0918077901005745,
+    "person_score_raw_max": 0.5490982532501221,
+    "warnings": []
+  },
+  "excluded": [
+    "LLM answer generation (live chat answer path)",
+    "clip stitching / ffmpeg clip generation",
+    "MongoDB structured detection retrieval (MongoDB is not running)",
+    "detection + embedding ingestion (YOLO/OpenVINO/SigLIP indexing)",
+    "frontend/network round-trip",
+    "4-camera, ~312k-descriptor full deployment; 123-clip camera_0 subset only"
+  ]
+}

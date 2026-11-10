@@ -1,0 +1,208 @@
+{
+  "dataset": "released single-camera subset",
+  "camera_ids": [
+    0
+  ],
+  "scene_frames": 242,
+  "scene_clips": 121,
+  "scene_vector_dim": 512,
+  "scene_model": "OpenCLIP ViT-B/32 laion2b_s34b_b79k",
+  "person_descriptors": 1778,
+  "person_vector_dim": 1152,
+  "person_visual_dim": 768,
+  "person_text_dim": 384,
+  "person_models": "SigLIP-base-patch16-224 + all-MiniLM-L12-v2",
+  "time_start": "2026-03-01T17:01:00.052839",
+  "time_end": "2026-03-01T18:56:01.940526",
+  "clips_on_disk": 123,
+  "clips_indexed": 121,
+  "clips_not_indexed": [
+    "2026-03-01T17-05-52-200570__to__2026-03-01T17-06-10-554787",
+    "2026-03-01T18-19-16-506171__to__2026-03-01T18-19-32-505051"
+  ],
+  "person_detections_outside_indexed_clips": 9,
+  "counts_per_category": {
+    "count": 30,
+    "find": 30,
+    "track": 30,
+    "filter": 30,
+    "action": 30
+  },
+  "label_sources": {
+    "caption_person_count": 30,
+    "person_attribute_metadata": 30,
+    "single_camera_color_continuity_proxy": 30,
+    "scene_zone_and_person_color_metadata": 30,
+    "vlm_caption_event_weak_label": 15,
+    "motion_energy_proxy": 15
+  },
+  "relevant_clip_count": {
+    "min": 1,
+    "median": 3.0,
+    "mean": 4.906666666666666,
+    "max": 25
+  },
+  "splits": {
+    "tune": 50,
+    "test": 100,
+    "by_category": {
+      "count": {
+        "tune": 10,
+        "test": 20
+      },
+      "find": {
+        "tune": 10,
+        "test": 20
+      },
+      "track": {
+        "tune": 10,
+        "test": 20
+      },
+      "action": {
+        "tune": 10,
+        "test": 20
+      },
+      "filter": {
+        "tune": 10,
+        "test": 20
+      }
+    }
+  },
+  "track_proxy": {
+    "method": "greedy visual-only cosine on normalized SigLIP 768-d + max gap 3 s + max duration 60 s + max size 20",
+    "calibration_block": "2026-03-01T17:01:00.000000..2026-03-01T17:09:00.000000 and 2026-03-01T18:55:00.000000..",
+    "threshold_grid": [
+      {
+        "threshold": 0.85,
+        "separation": 0.23786427017028744,
+        "within": 0.9717559770839971,
+        "between": 0.7338917069137096,
+        "coverage": 0.9408284023668639,
+        "objective": 0.22378946128447164,
+        "n_tracks": 24.0,
+        "n_multi": 14.0
+      },
+      {
+        "threshold": 0.88,
+        "separation": 0.21919946215009,
+        "within": 0.9729086156991812,
+        "between": 0.7537091535490912,
+        "coverage": 0.9349112426035503,
+        "objective": 0.20493204153677053,
+        "n_tracks": 25.0,
+        "n_multi": 14.0
+      },
+      {
+        "threshold": 0.9,
+        "separation": 0.23674861818879522,
+        "within": 0.973816811488225,
+        "between": 0.7370681932994297,
+        "coverage": 0.9349112426035503,
+        "objective": 0.22133894481556002,
+        "n_tracks": 25.0,
+        "n_multi": 14.0
+      },
+      {
+        "threshold": 0.92,
+        "separation": 0.17390330076217653,
+        "within": 0.9750842332839966,
+        "between": 0.8011809325218201,
+        "coverage": 0.9230769230769231,
+        "objective": 0.16052612378047065,
+        "n_tracks": 28.0,
+        "n_multi": 15.0
+      },
+      {
+        "threshold": 0.94,
+        "separation": 0.1657277173064775,
+        "within": 0.9763271293856881,
+        "between": 0.8105994120792106,
+        "coverage": 0.9112426035502958,
+        "objective": 0.151018156598802,
+        "n_tracks": 30.0,
+        "n_multi": 15.0
+      },
+      {
+        "threshold": 0.95,
+        "separation": 0.13194639913296446,
+        "within": 0.9782115235561277,
+        "between": 0.8462651244231633,
+        "coverage": 0.8994082840236687,
+        "objective": 0.11867368442728166,
+        "n_tracks": 34.0,
+        "n_multi": 17.0
+      },
+      {
+        "threshold": 0.96,
+        "separation": 0.11936461024468747,
+        "within": 0.979477380891498,
+        "between": 0.8601127706468106,
+        "coverage": 0.8757396449704142,
+        "objective": 0.10453232139771448,
+        "n_tracks": 38.0,
+        "n_multi": 17.0
+      },
+      {
+        "threshold": 0.97,
+        "separation": 0.09377987623214723,
+        "within": 0.9807402062416076,
+        "between": 0.8869603300094604,
+        "coverage": 0.8165680473372781,
+        "objective": 0.07657765041441608,
+        "n_tracks": 52.0,
+        "n_multi": 21.0
+      },
+      {
+        "threshold": 0.98,
+        "separation": 0.021280637252219625,
+        "within": 0.9852466539281314,
+        "between": 0.9639660166759118,
+        "coverage": 0.6094674556213018,
+        "objective": 0.012969855840110185,
+        "n_tracks": 95.0,
+        "n_multi": 29.0
+      },
+      {
+        "threshold": 0.99,
+        "separation": 0.021210129060542204,
+        "within": 0.9918158019290251,
+        "between": 0.9706056728684829,
+        "coverage": 0.11834319526627218,
+        "objective": 0.00251007444503458,
+        "n_tracks": 157.0,
+        "n_multi": 8.0
+      }
+    ],
+    "selected_threshold": 0.9,
+    "selected_rule": "strictest threshold within 5% of best calibration objective",
+    "tracks": 174,
+    "tracks_with_ge2": 126,
+    "track_link_edges": 1604,
+    "threshold": 0.9,
+    "calibration_tracks": 44,
+    "test_tracks": 130,
+    "calibration_detections": 486,
+    "test_detections": 1292,
+    "positives": 1008,
+    "negatives": 1008
+  },
+  "motion_energy": {
+    "definition": "mean absolute grayscale difference between consecutive released snapshots (96x96), averaged per clip",
+    "calibration_threshold": 0.0031981536683613537,
+    "calibration_quantile": 0.75,
+    "clips_above_threshold": 40,
+    "clips_scored": 121
+  },
+  "cannot_reproduce": [
+    "4 cameras / 312k person descriptors",
+    "human-annotated relevance and inter-annotator agreement",
+    "cross-camera identity tracking or generalisation",
+    "the paper's full-deployment P@5/F1 values",
+    "semantic running/fighting labels beyond the released VLM captions"
+  ],
+  "notes": [
+    "All labels are derived from released metadata; none are human annotations.",
+    "Action queries use VLM caption event labels (fighting/smoke) and a motion-energy proxy; no running/fighting label is invented.",
+    "Track queries use single-camera colour-continuity proxies; cross-camera tracking is untestable."
+  ]
+}

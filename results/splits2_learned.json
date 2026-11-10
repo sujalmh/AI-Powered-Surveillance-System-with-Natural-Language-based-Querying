@@ -1,0 +1,120 @@
+{
+  "generated_at": "2026-10-22T16:08:17.153046+00:00",
+  "pre_registration": {
+    "choice": "vary calibration-track subsample (80% of calibration tracks, seeded without replacement), ridge lambda fixed at 1.0 (as in eval_fusion.py).",
+    "n_seeds": 5,
+    "subsample_fraction": 0.8,
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "ridge_lambda": 1.0,
+    "metric_primary": "test pair AUC (threshold-free) and retrieval P@5"
+  },
+  "full_data_learned_proj_reference": {
+    "n_cal_tracks": 70,
+    "n_cal_detections": 508,
+    "retrieval_p5": 0.4324369747899159,
+    "retrieval_r10": 0.31070310746062624,
+    "retrieval_f1": 0.29018947180808136,
+    "pair_auc": 0.7090695074326027
+  },
+  "concat_reference_recomputed": {
+    "retrieval_p5": 0.42739495798319327,
+    "retrieval_r10": 0.3109577828800518,
+    "retrieval_f1": 0.28866860857606186,
+    "pair_auc": 0.7262613378684807
+  },
+  "concat_reference_fusion_results_json": {
+    "retrieval_p5": 0.42739495798319327,
+    "pair_auc": 0.7262613378684807
+  },
+  "grank_frozen_winner_cal2_results_json": {
+    "id": "Grank_lam2",
+    "retrieval_p5": 0.4721008403361344,
+    "pair_auc": 0.734123047367095
+  },
+  "per_seed": [
+    {
+      "seed": 0,
+      "n_cal_tracks": 56,
+      "n_cal_detections": 395,
+      "retrieval_p5": 0.43344537815126044,
+      "retrieval_r10": 0.3106213733192946,
+      "retrieval_f1": 0.2898314728501425,
+      "pair_auc": 0.7091639896699421
+    },
+    {
+      "seed": 1,
+      "n_cal_tracks": 56,
+      "n_cal_detections": 372,
+      "retrieval_p5": 0.4336134453781513,
+      "retrieval_r10": 0.31092410329363,
+      "retrieval_f1": 0.2904510583677346,
+      "pair_auc": 0.7068294910556815
+    },
+    {
+      "seed": 2,
+      "n_cal_tracks": 56,
+      "n_cal_detections": 385,
+      "retrieval_p5": 0.4354621848739496,
+      "retrieval_r10": 0.31102683528324837,
+      "retrieval_f1": 0.2917789375693505,
+      "pair_auc": 0.7074259101788863
+    },
+    {
+      "seed": 3,
+      "n_cal_tracks": 56,
+      "n_cal_detections": 415,
+      "retrieval_p5": 0.4361344537815126,
+      "retrieval_r10": 0.3116163924163703,
+      "retrieval_f1": 0.29091930126057564,
+      "pair_auc": 0.7090813177122701
+    },
+    {
+      "seed": 4,
+      "n_cal_tracks": 56,
+      "n_cal_detections": 399,
+      "retrieval_p5": 0.4347899159663866,
+      "retrieval_r10": 0.3119115249461335,
+      "retrieval_f1": 0.2916543963515269,
+      "pair_auc": 0.7106146856890905
+    }
+  ],
+  "spread": {
+    "retrieval_p5": {
+      "mean": 0.4346890756302521,
+      "sd_ddof0": 0.0010393025098313002,
+      "sd_ddof1": 0.0011619755305844655,
+      "min": 0.43344537815126044,
+      "max": 0.4361344537815126,
+      "range": 0.002689075630252169
+    },
+    "retrieval_r10": {
+      "mean": 0.31122004585173535,
+      "sd_ddof0": 0.0004729809847889422,
+      "sd_ddof1": 0.0005288088170264343,
+      "min": 0.3106213733192946,
+      "max": 0.3119115249461335
+    },
+    "pair_auc": {
+      "mean": 0.708623078861174,
+      "sd_ddof0": 0.0013504988096671078,
+      "sd_ddof1": 0.0015099035709741017,
+      "min": 0.7068294910556815,
+      "max": 0.7106146856890905,
+      "range": 0.0037851946334089837
+    }
+  },
+  "comparison": {
+    "learned_proj_multiseed_mean_p5": 0.4346890756302521,
+    "concat_p5": 0.42739495798319327,
+    "grank_winner_p5": 0.4721008403361344,
+    "learned_proj_multiseed_mean_pair_auc": 0.708623078861174,
+    "concat_pair_auc": 0.7262613378684807,
+    "grank_winner_pair_auc": 0.734123047367095
+  }
+}

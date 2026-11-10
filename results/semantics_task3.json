@@ -1,0 +1,2159 @@
+{
+  "generated_at": "2026-10-22T19:02:57.431071+00:00",
+  "task": "inconsistent_oracle_contradiction",
+  "seed": 24301,
+  "n_boot": 10000,
+  "inconsistent_oracle_subset": {
+    "n_rows": 30,
+    "n_inconsistent": 10,
+    "fraction": 0.333333,
+    "seeded_uids": [
+      "a_clean_02",
+      "a_clean_06",
+      "a_clean_18",
+      "a_clean_28",
+      "a_clean_34",
+      "a_clean_38",
+      "a_clean_46",
+      "a_clean_50",
+      "a_clean_52",
+      "a_clean_60"
+    ]
+  },
+  "combined_utterance_rematerialization": {
+    "summary": {
+      "n_episodes": 225,
+      "detected": 68,
+      "rate": 0.302222,
+      "ci95": [
+        0.244444,
+        0.364444
+      ]
+    },
+    "per_slot": {
+      "cadence": {
+        "n": 30,
+        "detected": 0,
+        "rate": 0.0,
+        "ci95": [
+          0.0,
+          0.0
+        ]
+      },
+      "cooldown": {
+        "n": 30,
+        "detected": 0,
+        "rate": 0.0,
+        "ci95": [
+          0.0,
+          0.0
+        ]
+      },
+      "event": {
+        "n": 30,
+        "detected": 2,
+        "rate": 0.066667,
+        "ci95": [
+          0.0,
+          0.166667
+        ]
+      },
+      "object": {
+        "n": 30,
+        "detected": 3,
+        "rate": 0.1,
+        "ci95": [
+          0.0,
+          0.233333
+        ]
+      },
+      "severity": {
+        "n": 30,
+        "detected": 0,
+        "rate": 0.0,
+        "ci95": [
+          0.0,
+          0.0
+        ]
+      },
+      "threshold": {
+        "n": 30,
+        "detected": 18,
+        "rate": 0.6,
+        "ci95": [
+          0.433333,
+          0.766667
+        ]
+      },
+      "time": {
+        "n": 15,
+        "detected": 15,
+        "rate": 1.0,
+        "ci95": [
+          1.0,
+          1.0
+        ]
+      },
+      "zone": {
+        "n": 30,
+        "detected": 30,
+        "rate": 1.0,
+        "ci95": [
+          1.0,
+          1.0
+        ]
+      }
+    }
+  },
+  "dialogue_level": {
+    "shipped_policy": {
+      "policy": "shipped_minimal_questions (original utterance only)",
+      "n_episodes": 225,
+      "detected": 0,
+      "rate": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ],
+      "silent_overwrite_rate": 1.0
+    },
+    "consistency_check_variant": {
+      "policy": "consistency_check (answer vs. stored rule slot)",
+      "n_episodes": 225,
+      "detected": 225,
+      "rate": 1.0,
+      "ci95": [
+        1.0,
+        1.0
+      ],
+      "silent_overwrite_rate": 0.0
+    }
+  },
+  "episodes": [
+    {
+      "uid": "a_clean_02",
+      "slot": "zone",
+      "inconsistent_oracle": true,
+      "combined_text": "notify me if at least ten people crowd into Zone B between 9 and 11 PM in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_02",
+      "slot": "threshold",
+      "inconsistent_oracle": true,
+      "combined_text": "notify me if at least ten people crowd into Zone B between 9 and 11 PM but fewer than 1 people",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_02",
+      "slot": "time",
+      "inconsistent_oracle": true,
+      "combined_text": "notify me if at least ten people crowd into Zone B between 9 and 11 PM between 9 and 10 PM between 11 PM and 12 AM",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_02",
+      "slot": "event",
+      "inconsistent_oracle": true,
+      "combined_text": "notify me if at least ten people crowd into Zone B between 9 and 11 PM loiter",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_02",
+      "slot": "object",
+      "inconsistent_oracle": true,
+      "combined_text": "notify me if at least ten people crowd into Zone B between 9 and 11 PM car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_02",
+      "slot": "severity",
+      "inconsistent_oracle": true,
+      "combined_text": "notify me if at least ten people crowd into Zone B between 9 and 11 PM critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_02",
+      "slot": "cooldown",
+      "inconsistent_oracle": true,
+      "combined_text": "notify me if at least ten people crowd into Zone B between 9 and 11 PM cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_02",
+      "slot": "cadence",
+      "inconsistent_oracle": true,
+      "combined_text": "notify me if at least ten people crowd into Zone B between 9 and 11 PM at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_04",
+      "slot": "zone",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when over twelve people congregate in the Parking lot during the day in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_04",
+      "slot": "threshold",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when over twelve people congregate in the Parking lot during the day but fewer than 1 people",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_04",
+      "slot": "time",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when over twelve people congregate in the Parking lot during the day between 9 and 10 PM between 11 PM and 12 AM",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_04",
+      "slot": "event",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when over twelve people congregate in the Parking lot during the day loiter",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_04",
+      "slot": "object",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when over twelve people congregate in the Parking lot during the day car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_04",
+      "slot": "severity",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when over twelve people congregate in the Parking lot during the day critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_04",
+      "slot": "cooldown",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when over twelve people congregate in the Parking lot during the day cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_04",
+      "slot": "cadence",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when over twelve people congregate in the Parking lot during the day at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_06",
+      "slot": "zone",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when fifteen or more people assemble in the front entrance in Gate",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_06",
+      "slot": "threshold",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when fifteen or more people assemble in the front entrance but fewer than 1 people",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_06",
+      "slot": "event",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when fifteen or more people assemble in the front entrance loiter",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_06",
+      "slot": "object",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when fifteen or more people assemble in the front entrance car",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_06",
+      "slot": "severity",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when fifteen or more people assemble in the front entrance critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_06",
+      "slot": "cooldown",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when fifteen or more people assemble in the front entrance cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_06",
+      "slot": "cadence",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when fifteen or more people assemble in the front entrance at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_08",
+      "slot": "zone",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when at least seven people gather in Zone B after 11 PM with critical severity in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_08",
+      "slot": "threshold",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when at least seven people gather in Zone B after 11 PM with critical severity but fewer than 1 people",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_08",
+      "slot": "time",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when at least seven people gather in Zone B after 11 PM with critical severity between 9 and 10 PM between 11 PM and 12 AM",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_08",
+      "slot": "event",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when at least seven people gather in Zone B after 11 PM with critical severity loiter",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_08",
+      "slot": "object",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when at least seven people gather in Zone B after 11 PM with critical severity car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_08",
+      "slot": "severity",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when at least seven people gather in Zone B after 11 PM with critical severity low severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_08",
+      "slot": "cooldown",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when at least seven people gather in Zone B after 11 PM with critical severity cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_08",
+      "slot": "cadence",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when at least seven people gather in Zone B after 11 PM with critical severity at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_10",
+      "slot": "zone",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when five or more people gather in the Parking lot every 30 seconds in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_10",
+      "slot": "threshold",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when five or more people gather in the Parking lot every 30 seconds but fewer than 1 people",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_10",
+      "slot": "event",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when five or more people gather in the Parking lot every 30 seconds loiter",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_10",
+      "slot": "object",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when five or more people gather in the Parking lot every 30 seconds car",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_10",
+      "slot": "severity",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when five or more people gather in the Parking lot every 30 seconds critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_10",
+      "slot": "cooldown",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when five or more people gather in the Parking lot every 30 seconds cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_10",
+      "slot": "cadence",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when five or more people gather in the Parking lot every 30 seconds at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_12",
+      "slot": "zone",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when at least nine people gather in Zone A, notification only in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_12",
+      "slot": "threshold",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when at least nine people gather in Zone A, notification only but fewer than 1 people",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_12",
+      "slot": "event",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when at least nine people gather in Zone A, notification only loiter",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_12",
+      "slot": "object",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when at least nine people gather in Zone A, notification only car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_12",
+      "slot": "severity",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when at least nine people gather in Zone A, notification only critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_12",
+      "slot": "cooldown",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when at least nine people gather in Zone A, notification only cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_12",
+      "slot": "cadence",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when at least nine people gather in Zone A, notification only at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_14",
+      "slot": "zone",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a person loiters near the Gate for at least 2 minutes in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_14",
+      "slot": "threshold",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a person loiters near the Gate for at least 2 minutes but fewer than 1 second",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_14",
+      "slot": "event",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a person loiters near the Gate for at least 2 minutes crowd",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_14",
+      "slot": "object",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a person loiters near the Gate for at least 2 minutes car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_14",
+      "slot": "severity",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a person loiters near the Gate for at least 2 minutes critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_14",
+      "slot": "cooldown",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a person loiters near the Gate for at least 2 minutes cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_14",
+      "slot": "cadence",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a person loiters near the Gate for at least 2 minutes at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_16",
+      "slot": "zone",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a person loiters in the front entrance for more than five minutes at night in Gate",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_16",
+      "slot": "threshold",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a person loiters in the front entrance for more than five minutes at night but fewer than 1 second",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_16",
+      "slot": "time",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a person loiters in the front entrance for more than five minutes at night between 9 and 10 PM between 11 PM and 12 AM",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_16",
+      "slot": "event",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a person loiters in the front entrance for more than five minutes at night crowd",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_16",
+      "slot": "object",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a person loiters in the front entrance for more than five minutes at night car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_16",
+      "slot": "severity",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a person loiters in the front entrance for more than five minutes at night critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_16",
+      "slot": "cooldown",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a person loiters in the front entrance for more than five minutes at night cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_16",
+      "slot": "cadence",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a person loiters in the front entrance for more than five minutes at night at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_18",
+      "slot": "zone",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if a person loiters in Zone A for at least one minute, cooldown 5 minutes in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_18",
+      "slot": "threshold",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if a person loiters in Zone A for at least one minute, cooldown 5 minutes but fewer than 1 second",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_18",
+      "slot": "event",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if a person loiters in Zone A for at least one minute, cooldown 5 minutes crowd",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_18",
+      "slot": "object",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if a person loiters in Zone A for at least one minute, cooldown 5 minutes car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_18",
+      "slot": "severity",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if a person loiters in Zone A for at least one minute, cooldown 5 minutes critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_18",
+      "slot": "cooldown",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if a person loiters in Zone A for at least one minute, cooldown 5 minutes cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_18",
+      "slot": "cadence",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if a person loiters in Zone A for at least one minute, cooldown 5 minutes at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_20",
+      "slot": "zone",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if a person loiters in Zone B for over 45 seconds, save a clip in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_20",
+      "slot": "threshold",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if a person loiters in Zone B for over 45 seconds, save a clip but fewer than 1 second",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_20",
+      "slot": "event",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if a person loiters in Zone B for over 45 seconds, save a clip crowd",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_20",
+      "slot": "object",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if a person loiters in Zone B for over 45 seconds, save a clip car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_20",
+      "slot": "severity",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if a person loiters in Zone B for over 45 seconds, save a clip critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_20",
+      "slot": "cooldown",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if a person loiters in Zone B for over 45 seconds, save a clip cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_20",
+      "slot": "cadence",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if a person loiters in Zone B for over 45 seconds, save a clip at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_22",
+      "slot": "zone",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if a person loiters in the Parking lot for over two minutes, warning severity in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_22",
+      "slot": "threshold",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if a person loiters in the Parking lot for over two minutes, warning severity but fewer than 1 second",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_22",
+      "slot": "event",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if a person loiters in the Parking lot for over two minutes, warning severity crowd",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_22",
+      "slot": "object",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if a person loiters in the Parking lot for over two minutes, warning severity car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_22",
+      "slot": "severity",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if a person loiters in the Parking lot for over two minutes, warning severity critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_22",
+      "slot": "cooldown",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if a person loiters in the Parking lot for over two minutes, warning severity cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_22",
+      "slot": "cadence",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if a person loiters in the Parking lot for over two minutes, warning severity at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_24",
+      "slot": "zone",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if two or more people fight in Zone A in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_24",
+      "slot": "threshold",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if two or more people fight in Zone A but fewer than 1 people",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_24",
+      "slot": "event",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if two or more people fight in Zone A loiter",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_24",
+      "slot": "object",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if two or more people fight in Zone A car",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_24",
+      "slot": "severity",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if two or more people fight in Zone A critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_24",
+      "slot": "cooldown",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if two or more people fight in Zone A cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_24",
+      "slot": "cadence",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if two or more people fight in Zone A at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_26",
+      "slot": "zone",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me on a fight in Zone C with critical severity in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_26",
+      "slot": "threshold",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me on a fight in Zone C with critical severity but fewer than 1 people",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_26",
+      "slot": "event",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me on a fight in Zone C with critical severity loiter",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_26",
+      "slot": "object",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me on a fight in Zone C with critical severity car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_26",
+      "slot": "severity",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me on a fight in Zone C with critical severity low severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_26",
+      "slot": "cooldown",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me on a fight in Zone C with critical severity cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_26",
+      "slot": "cadence",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me on a fight in Zone C with critical severity at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_28",
+      "slot": "zone",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when a fight occurs in the Parking lot during the day, save a clip in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_28",
+      "slot": "threshold",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when a fight occurs in the Parking lot during the day, save a clip but fewer than 1 people",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_28",
+      "slot": "time",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when a fight occurs in the Parking lot during the day, save a clip between 9 and 10 PM between 11 PM and 12 AM",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_28",
+      "slot": "event",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when a fight occurs in the Parking lot during the day, save a clip loiter",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_28",
+      "slot": "object",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when a fight occurs in the Parking lot during the day, save a clip car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_28",
+      "slot": "severity",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when a fight occurs in the Parking lot during the day, save a clip critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_28",
+      "slot": "cooldown",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when a fight occurs in the Parking lot during the day, save a clip cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_28",
+      "slot": "cadence",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when a fight occurs in the Parking lot during the day, save a clip at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_30",
+      "slot": "zone",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me on a fight in Zone A between 9 and 11 PM, high priority in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_30",
+      "slot": "threshold",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me on a fight in Zone A between 9 and 11 PM, high priority but fewer than 1 people",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_30",
+      "slot": "time",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me on a fight in Zone A between 9 and 11 PM, high priority between 9 and 10 PM between 11 PM and 12 AM",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_30",
+      "slot": "event",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me on a fight in Zone A between 9 and 11 PM, high priority loiter",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_30",
+      "slot": "object",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me on a fight in Zone A between 9 and 11 PM, high priority car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_30",
+      "slot": "severity",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me on a fight in Zone A between 9 and 11 PM, high priority critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_30",
+      "slot": "cooldown",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me on a fight in Zone A between 9 and 11 PM, high priority cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_30",
+      "slot": "cadence",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me on a fight in Zone A between 9 and 11 PM, high priority at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_32",
+      "slot": "zone",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me if someone enters Zone B after 11 PM in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_32",
+      "slot": "threshold",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me if someone enters Zone B after 11 PM but fewer than 1 people",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_32",
+      "slot": "time",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me if someone enters Zone B after 11 PM between 9 and 10 PM between 11 PM and 12 AM",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_32",
+      "slot": "event",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me if someone enters Zone B after 11 PM zone",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_32",
+      "slot": "object",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me if someone enters Zone B after 11 PM car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_32",
+      "slot": "severity",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me if someone enters Zone B after 11 PM critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_32",
+      "slot": "cooldown",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me if someone enters Zone B after 11 PM cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_32",
+      "slot": "cadence",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me if someone enters Zone B after 11 PM at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_34",
+      "slot": "zone",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if a truck enters the Parking lot during the day in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_34",
+      "slot": "threshold",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if a truck enters the Parking lot during the day but fewer than 1 vehicle",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_34",
+      "slot": "time",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if a truck enters the Parking lot during the day between 9 and 10 PM between 11 PM and 12 AM",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_34",
+      "slot": "event",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if a truck enters the Parking lot during the day zone",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_34",
+      "slot": "object",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if a truck enters the Parking lot during the day person",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_34",
+      "slot": "severity",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if a truck enters the Parking lot during the day critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_34",
+      "slot": "cooldown",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if a truck enters the Parking lot during the day cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_34",
+      "slot": "cadence",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if a truck enters the Parking lot during the day at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_36",
+      "slot": "zone",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if exactly one person enters Zone C in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_36",
+      "slot": "threshold",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if exactly one person enters Zone C but exactly 999 people",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_36",
+      "slot": "event",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if exactly one person enters Zone C zone",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_36",
+      "slot": "object",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if exactly one person enters Zone C car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_36",
+      "slot": "severity",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if exactly one person enters Zone C critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_36",
+      "slot": "cooldown",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if exactly one person enters Zone C cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_36",
+      "slot": "cadence",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if exactly one person enters Zone C at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_38",
+      "slot": "zone",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when more than three cars enter Zone A between 22:00 and 23:00 in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_38",
+      "slot": "threshold",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when more than three cars enter Zone A between 22:00 and 23:00 but fewer than 1 vehicle",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_38",
+      "slot": "time",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when more than three cars enter Zone A between 22:00 and 23:00 between 9 and 10 PM between 11 PM and 12 AM",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_38",
+      "slot": "event",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when more than three cars enter Zone A between 22:00 and 23:00 zone",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_38",
+      "slot": "object",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when more than three cars enter Zone A between 22:00 and 23:00 person",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_38",
+      "slot": "severity",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when more than three cars enter Zone A between 22:00 and 23:00 critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_38",
+      "slot": "cooldown",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when more than three cars enter Zone A between 22:00 and 23:00 cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_38",
+      "slot": "cadence",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when more than three cars enter Zone A between 22:00 and 23:00 at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_40",
+      "slot": "zone",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a bus enters the Gate with warning severity in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_40",
+      "slot": "threshold",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a bus enters the Gate with warning severity but fewer than 1 vehicle",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_40",
+      "slot": "event",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a bus enters the Gate with warning severity zone",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_40",
+      "slot": "object",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a bus enters the Gate with warning severity person",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_40",
+      "slot": "severity",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a bus enters the Gate with warning severity critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_40",
+      "slot": "cooldown",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a bus enters the Gate with warning severity cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_40",
+      "slot": "cadence",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when a bus enters the Gate with warning severity at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_42",
+      "slot": "zone",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me when Zone C is occupied by more than eight people in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_42",
+      "slot": "threshold",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me when Zone C is occupied by more than eight people but fewer than 1 people",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_42",
+      "slot": "event",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me when Zone C is occupied by more than eight people enter",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_42",
+      "slot": "object",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me when Zone C is occupied by more than eight people car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_42",
+      "slot": "severity",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me when Zone C is occupied by more than eight people critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_42",
+      "slot": "cooldown",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me when Zone C is occupied by more than eight people cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_42",
+      "slot": "cadence",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me when Zone C is occupied by more than eight people at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_44",
+      "slot": "zone",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when the Parking lot is occupied during the day in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_44",
+      "slot": "threshold",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when the Parking lot is occupied during the day but fewer than 1 people",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_44",
+      "slot": "time",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when the Parking lot is occupied during the day between 9 and 10 PM between 11 PM and 12 AM",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_44",
+      "slot": "event",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when the Parking lot is occupied during the day enter",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_44",
+      "slot": "object",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when the Parking lot is occupied during the day car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_44",
+      "slot": "severity",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when the Parking lot is occupied during the day critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_44",
+      "slot": "cooldown",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when the Parking lot is occupied during the day cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_44",
+      "slot": "cadence",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me when the Parking lot is occupied during the day at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_46",
+      "slot": "zone",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if someone is in Zone A at night, critical severity in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_46",
+      "slot": "threshold",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if someone is in Zone A at night, critical severity but fewer than 1 people",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_46",
+      "slot": "time",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if someone is in Zone A at night, critical severity between 9 and 10 PM between 11 PM and 12 AM",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_46",
+      "slot": "event",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if someone is in Zone A at night, critical severity enter",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_46",
+      "slot": "object",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if someone is in Zone A at night, critical severity car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_46",
+      "slot": "severity",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if someone is in Zone A at night, critical severity low severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_46",
+      "slot": "cooldown",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if someone is in Zone A at night, critical severity cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_46",
+      "slot": "cadence",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me if someone is in Zone A at night, critical severity at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_48",
+      "slot": "zone",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if the front entrance is occupied by at least four people every 10 seconds in Gate",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_48",
+      "slot": "threshold",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if the front entrance is occupied by at least four people every 10 seconds but fewer than 1 people",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_48",
+      "slot": "event",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if the front entrance is occupied by at least four people every 10 seconds enter",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_48",
+      "slot": "object",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if the front entrance is occupied by at least four people every 10 seconds car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_48",
+      "slot": "severity",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if the front entrance is occupied by at least four people every 10 seconds critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_48",
+      "slot": "cooldown",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if the front entrance is occupied by at least four people every 10 seconds cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_48",
+      "slot": "cadence",
+      "inconsistent_oracle": false,
+      "combined_text": "alert me if the front entrance is occupied by at least four people every 10 seconds at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_50",
+      "slot": "zone",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when the count of people in Zone A exceeds 10 in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_50",
+      "slot": "threshold",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when the count of people in Zone A exceeds 10 but fewer than 1 people",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_50",
+      "slot": "event",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when the count of people in Zone A exceeds 10 crowd",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_50",
+      "slot": "object",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when the count of people in Zone A exceeds 10 car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_50",
+      "slot": "severity",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when the count of people in Zone A exceeds 10 critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_50",
+      "slot": "cooldown",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when the count of people in Zone A exceeds 10 cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_50",
+      "slot": "cadence",
+      "inconsistent_oracle": true,
+      "combined_text": "alert me when the count of people in Zone A exceeds 10 at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_52",
+      "slot": "zone",
+      "inconsistent_oracle": true,
+      "combined_text": "warn me when the number of people in Zone B is fewer than three in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_52",
+      "slot": "threshold",
+      "inconsistent_oracle": true,
+      "combined_text": "warn me when the number of people in Zone B is fewer than three but more than 1000 people",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_52",
+      "slot": "event",
+      "inconsistent_oracle": true,
+      "combined_text": "warn me when the number of people in Zone B is fewer than three crowd",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_52",
+      "slot": "object",
+      "inconsistent_oracle": true,
+      "combined_text": "warn me when the number of people in Zone B is fewer than three car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_52",
+      "slot": "severity",
+      "inconsistent_oracle": true,
+      "combined_text": "warn me when the number of people in Zone B is fewer than three critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_52",
+      "slot": "cooldown",
+      "inconsistent_oracle": true,
+      "combined_text": "warn me when the number of people in Zone B is fewer than three cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_52",
+      "slot": "cadence",
+      "inconsistent_oracle": true,
+      "combined_text": "warn me when the number of people in Zone B is fewer than three at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_54",
+      "slot": "zone",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me when the vehicle count at the Gate is between six and ten from 8 PM to 10 PM in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_54",
+      "slot": "threshold",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me when the vehicle count at the Gate is between six and ten from 8 PM to 10 PM but more than 1000 vehicle",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_54",
+      "slot": "time",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me when the vehicle count at the Gate is between six and ten from 8 PM to 10 PM between 9 and 10 PM between 11 PM and 12 AM",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_54",
+      "slot": "event",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me when the vehicle count at the Gate is between six and ten from 8 PM to 10 PM crowd",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_54",
+      "slot": "object",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me when the vehicle count at the Gate is between six and ten from 8 PM to 10 PM person",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_54",
+      "slot": "severity",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me when the vehicle count at the Gate is between six and ten from 8 PM to 10 PM critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_54",
+      "slot": "cooldown",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me when the vehicle count at the Gate is between six and ten from 8 PM to 10 PM cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_54",
+      "slot": "cadence",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me when the vehicle count at the Gate is between six and ten from 8 PM to 10 PM at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_56",
+      "slot": "zone",
+      "inconsistent_oracle": false,
+      "combined_text": "warn me if the number of people in Zone A is at most two at night in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_56",
+      "slot": "threshold",
+      "inconsistent_oracle": false,
+      "combined_text": "warn me if the number of people in Zone A is at most two at night but more than 1000 people",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_56",
+      "slot": "time",
+      "inconsistent_oracle": false,
+      "combined_text": "warn me if the number of people in Zone A is at most two at night between 9 and 10 PM between 11 PM and 12 AM",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_56",
+      "slot": "event",
+      "inconsistent_oracle": false,
+      "combined_text": "warn me if the number of people in Zone A is at most two at night crowd",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_56",
+      "slot": "object",
+      "inconsistent_oracle": false,
+      "combined_text": "warn me if the number of people in Zone A is at most two at night car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_56",
+      "slot": "severity",
+      "inconsistent_oracle": false,
+      "combined_text": "warn me if the number of people in Zone A is at most two at night critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_56",
+      "slot": "cooldown",
+      "inconsistent_oracle": false,
+      "combined_text": "warn me if the number of people in Zone A is at most two at night cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_56",
+      "slot": "cadence",
+      "inconsistent_oracle": false,
+      "combined_text": "warn me if the number of people in Zone A is at most two at night at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_58",
+      "slot": "zone",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me during the day in the Parking lot in Entrance",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_58",
+      "slot": "threshold",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me during the day in the Parking lot but fewer than 1 people",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_58",
+      "slot": "time",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me during the day in the Parking lot between 9 and 10 PM between 11 PM and 12 AM",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_58",
+      "slot": "event",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me during the day in the Parking lot crowd",
+      "materialized_kind": "missing",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_58",
+      "slot": "object",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me during the day in the Parking lot car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_58",
+      "slot": "severity",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me during the day in the Parking lot critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_58",
+      "slot": "cooldown",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me during the day in the Parking lot cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_58",
+      "slot": "cadence",
+      "inconsistent_oracle": false,
+      "combined_text": "notify me during the day in the Parking lot at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_60",
+      "slot": "zone",
+      "inconsistent_oracle": true,
+      "combined_text": "warn me after 10 PM in the front entrance with high severity in Gate",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_60",
+      "slot": "threshold",
+      "inconsistent_oracle": true,
+      "combined_text": "warn me after 10 PM in the front entrance with high severity but fewer than 1 people",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_60",
+      "slot": "time",
+      "inconsistent_oracle": true,
+      "combined_text": "warn me after 10 PM in the front entrance with high severity between 9 and 10 PM between 11 PM and 12 AM",
+      "materialized_kind": "conflicting",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_60",
+      "slot": "event",
+      "inconsistent_oracle": true,
+      "combined_text": "warn me after 10 PM in the front entrance with high severity crowd",
+      "materialized_kind": "missing",
+      "detected": true,
+      "silent_overwrite": false
+    },
+    {
+      "uid": "a_clean_60",
+      "slot": "object",
+      "inconsistent_oracle": true,
+      "combined_text": "warn me after 10 PM in the front entrance with high severity car",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_60",
+      "slot": "severity",
+      "inconsistent_oracle": true,
+      "combined_text": "warn me after 10 PM in the front entrance with high severity critical severity",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_60",
+      "slot": "cooldown",
+      "inconsistent_oracle": true,
+      "combined_text": "warn me after 10 PM in the front entrance with high severity cooldown 10 seconds",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    },
+    {
+      "uid": "a_clean_60",
+      "slot": "cadence",
+      "inconsistent_oracle": true,
+      "combined_text": "warn me after 10 PM in the front entrance with high severity at 2 Hz",
+      "materialized_kind": "clean",
+      "detected": false,
+      "silent_overwrite": true
+    }
+  ]
+}

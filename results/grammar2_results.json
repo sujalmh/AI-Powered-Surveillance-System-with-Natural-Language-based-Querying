@@ -1,0 +1,184 @@
+{
+  "generated_at": "2026-10-22T16:09:20.402139+00:00",
+  "adversarial": {
+    "seed": 659918,
+    "n": 215,
+    "before": {
+      "inputs_with_silent_drop": 173,
+      "silent_drop_rate": 0.804651,
+      "total_drop_instances": 173
+    },
+    "after": {
+      "inputs_with_silent_drop": 0,
+      "silent_drop_rate": 0.0,
+      "total_drop_instances": 0
+    },
+    "by_category": {
+      "two_zone": {
+        "n": 70,
+        "before_drops": 53,
+        "after_drops": 0
+      },
+      "until": {
+        "n": 67,
+        "before_drops": 54,
+        "after_drops": 0
+      },
+      "invalid_clock": {
+        "n": 78,
+        "before_drops": 66,
+        "after_drops": 0
+      }
+    },
+    "before_examples": [
+      {
+        "text": "alert me if more than 10 people gather in Gate and Entrance",
+        "drops": [
+          "zone_conjunction"
+        ]
+      },
+      {
+        "text": "warn if more than 3 persons enter Zone A and Zone C",
+        "drops": [
+          "zone_conjunction"
+        ]
+      },
+      {
+        "text": "warn if more than 3 persons enter Gate and Zone B",
+        "drops": [
+          "zone_conjunction"
+        ]
+      },
+      {
+        "text": "detect loitering of more than 5 people in Zone A and Zone C",
+        "drops": [
+          "zone_conjunction"
+        ]
+      },
+      {
+        "text": "if more than 5 people gather in Zone B and Gate after 8 PM",
+        "drops": [
+          "zone_conjunction"
+        ]
+      },
+      {
+        "text": "if more than 12 people gather in Parking and Entrance after 8 PM",
+        "drops": [
+          "zone_conjunction"
+        ]
+      },
+      {
+        "text": "warn if more than 12 persons enter Gate and Zone A",
+        "drops": [
+          "zone_conjunction"
+        ]
+      },
+      {
+        "text": "alert me if more than 12 people gather in Zone A and Gate",
+        "drops": [
+          "zone_conjunction"
+        ]
+      },
+      {
+        "text": "alert me if more than 3 people gather in Entrance and Zone B",
+        "drops": [
+          "zone_conjunction"
+        ]
+      },
+      {
+        "text": "if more than 10 people gather in Entrance and Zone B after 8 PM",
+        "drops": [
+          "zone_conjunction"
+        ]
+      }
+    ],
+    "after_examples": []
+  },
+  "seeded_cases": [
+    {
+      "text": "more than 5 people gather in Zone A and Zone B",
+      "before": {
+        "needs_clarification": false,
+        "clarification_kind": "clean",
+        "zone": "Zone A",
+        "time_of_day": {},
+        "silent_drops": [
+          "zone_conjunction"
+        ]
+      },
+      "after": {
+        "needs_clarification": true,
+        "clarification_kind": "conflicting",
+        "zone": "Zone A",
+        "time_of_day": {},
+        "silent_drops": [],
+        "clarification": "Conflicting conditions (multiple zones specified (Zone A, Zone B)). Please give one consistent zone, object set, numeric threshold, and time window."
+      }
+    },
+    {
+      "text": "more than 5 people in Zone A until 10 PM",
+      "before": {
+        "needs_clarification": true,
+        "clarification_kind": "missing",
+        "zone": "Zone A",
+        "time_of_day": {},
+        "silent_drops": []
+      },
+      "after": {
+        "needs_clarification": false,
+        "clarification_kind": "clean",
+        "zone": "Zone A",
+        "time_of_day": {
+          "start": "00:00",
+          "end": "22:00"
+        },
+        "silent_drops": [],
+        "clarification": null
+      }
+    },
+    {
+      "text": "more than 5 people in Zone A between 10:70 and 12:00",
+      "before": {
+        "needs_clarification": true,
+        "clarification_kind": "missing",
+        "zone": "Zone A",
+        "time_of_day": {},
+        "silent_drops": []
+      },
+      "after": {
+        "needs_clarification": true,
+        "clarification_kind": "conflicting",
+        "zone": "Zone A",
+        "time_of_day": {},
+        "silent_drops": [],
+        "clarification": "Conflicting conditions (invalid clock time). Please give one consistent zone, object set, numeric threshold, and time window."
+      }
+    }
+  ],
+  "benchmark": {
+    "rows": 120,
+    "mismatches": 0,
+    "mismatch_details": [],
+    "test_clean_rule_correctness": 1.0,
+    "test_clean_n": 30,
+    "test_stress_clarified": 30,
+    "test_stress_n": 30,
+    "test_stress_false_materializations": 0,
+    "test_clarify_precision": 1.0,
+    "test_clarify_recall": 1.0,
+    "test_clarify_f1": 1.0
+  },
+  "fuzz": {
+    "crashes": 0,
+    "n_soundness_violations": 0,
+    "n_targeted_false": 0,
+    "clarified_noise": 1601,
+    "materialized_noise": 399
+  },
+  "eval_alerts_test": {
+    "clean_rule_correct": 30,
+    "clean_n": 30,
+    "stress_clarified": 30,
+    "stress_n": 30
+  }
+}

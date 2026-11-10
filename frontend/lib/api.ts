@@ -33,6 +33,7 @@ export type ChatSendResponse = {
     answer: string;
     metadata?: Record<string, any>;
     alert_created?: Record<string, any>;
+    alert_clarification?: Record<string, any>;
     processing_steps?: ProcessingStep[];
     // Additional fields for hybrid/semantic search
     semantic_results?: Array<{

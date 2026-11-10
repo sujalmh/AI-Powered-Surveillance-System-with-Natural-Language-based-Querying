@@ -1,0 +1,546 @@
+{
+  "frozen_variant": "max_fusion",
+  "frozen_params": {},
+  "frozen_config": "max_fusion",
+  "n_test_queries": 100,
+  "n_boot": 3000,
+  "arms": {
+    "minmax": {
+      "baseline_prior_only": {
+        "macro": {
+          "p5": {
+            "macro": 0.538,
+            "per_category": {
+              "count": 0.39,
+              "find": 0.9199999999999999,
+              "track": 0.8099999999999999,
+              "action": 0.09,
+              "filter": 0.48
+            }
+          },
+          "r10": {
+            "macro": 0.7967351667939904,
+            "per_category": {
+              "count": 1.0,
+              "find": 0.8931331168831169,
+              "track": 0.9567927170868348,
+              "action": 0.13375,
+              "filter": 1.0
+            }
+          },
+          "f1": {
+            "macro": 0.4471577363698107,
+            "per_category": {
+              "count": 0.3127039627039627,
+              "find": 0.8012680886365097,
+              "track": 0.6327105027182427,
+              "action": 0.09888888888888889,
+              "filter": 0.39021723890144944
+            }
+          },
+          "f1_paper": {
+            "macro": 0.5877532194900617,
+            "per_category": {
+              "count": 0.5273809523809524,
+              "find": 0.88324337942759,
+              "track": 0.843404280904281,
+              "action": 0.08076923076923079,
+              "filter": 0.6039682539682539
+            }
+          },
+          "mrr": {
+            "macro": 0.852705938697318,
+            "per_category": {
+              "count": 1.0,
+              "find": 1.0,
+              "track": 1.0,
+              "action": 0.26352969348659006,
+              "filter": 1.0
+            }
+          },
+          "count_em": null,
+          "count_mae": null
+        },
+        "tune_macro_p5": null
+      },
+      "variant": {
+        "macro": {
+          "p5": {
+            "macro": 0.538,
+            "per_category": {
+              "count": 0.39,
+              "find": 0.9199999999999999,
+              "track": 0.8099999999999999,
+              "action": 0.09,
+              "filter": 0.48
+            }
+          },
+          "r10": {
+            "macro": 0.7977351667939903,
+            "per_category": {
+              "count": 1.0,
+              "find": 0.8981331168831168,
+              "track": 0.9567927170868348,
+              "action": 0.13375,
+              "filter": 1.0
+            }
+          },
+          "f1": {
+            "macro": 0.4481577363698107,
+            "per_category": {
+              "count": 0.3127039627039627,
+              "find": 0.8062680886365097,
+              "track": 0.6327105027182427,
+              "action": 0.09888888888888889,
+              "filter": 0.39021723890144944
+            }
+          },
+          "f1_paper": {
+            "macro": 0.5882795352795352,
+            "per_category": {
+              "count": 0.5273809523809524,
+              "find": 0.8858749583749583,
+              "track": 0.843404280904281,
+              "action": 0.08076923076923079,
+              "filter": 0.6039682539682539
+            }
+          },
+          "mrr": {
+            "macro": 0.852705938697318,
+            "per_category": {
+              "count": 1.0,
+              "find": 1.0,
+              "track": 1.0,
+              "action": 0.26352969348659006,
+              "filter": 1.0
+            }
+          },
+          "count_em": null,
+          "count_mae": null
+        }
+      },
+      "delta_macro_p5": 0.0,
+      "delta_macro_r10": 0.0009999999999998899,
+      "delta_macro_f1_paper": 0.000526315789473597,
+      "delta_macro_mrr": 0.0,
+      "per_category_p5": {
+        "variant": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        },
+        "prior": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        }
+      },
+      "primary_paired_macro_bootstrap": {
+        "delta": 0.0,
+        "lo": 0.0,
+        "hi": 0.0,
+        "p": 1.0,
+        "n_boot": 3000
+      },
+      "grouped_cluster_macro_bootstrap": {
+        "delta": 0.0,
+        "lo": 0.0,
+        "hi": 0.0,
+        "p": 1.0,
+        "n_boot": 3000
+      },
+      "sign_flip_randomisation": {
+        "delta": 0.0,
+        "p": 1.0,
+        "n_boot": 3000
+      },
+      "pooled_per_query_paired_bootstrap": {
+        "delta": 0.0,
+        "lo": 0.0,
+        "hi": 0.0,
+        "p": 1.0
+      },
+      "pooled_per_query_grouped_bootstrap": {
+        "delta": 0.0,
+        "lo": 0.0,
+        "hi": 0.0,
+        "p": 1.0
+      },
+      "wilcoxon_signed_rank_p": 1.0,
+      "per_category_paired_bootstrap": {
+        "count": {
+          "delta_p5": 0.0,
+          "lo": 0.0,
+          "hi": 0.0,
+          "p": 1.0,
+          "variant_macro_p5": 0.39,
+          "prior_macro_p5": 0.39
+        },
+        "find": {
+          "delta_p5": 0.0,
+          "lo": 0.0,
+          "hi": 0.0,
+          "p": 1.0,
+          "variant_macro_p5": 0.9199999999999999,
+          "prior_macro_p5": 0.9199999999999999
+        },
+        "track": {
+          "delta_p5": 0.0,
+          "lo": 0.0,
+          "hi": 0.0,
+          "p": 1.0,
+          "variant_macro_p5": 0.8099999999999999,
+          "prior_macro_p5": 0.8099999999999999
+        },
+        "action": {
+          "delta_p5": 0.0,
+          "lo": 0.0,
+          "hi": 0.0,
+          "p": 1.0,
+          "variant_macro_p5": 0.09,
+          "prior_macro_p5": 0.09
+        },
+        "filter": {
+          "delta_p5": 0.0,
+          "lo": 0.0,
+          "hi": 0.0,
+          "p": 1.0,
+          "variant_macro_p5": 0.48,
+          "prior_macro_p5": 0.48
+        }
+      },
+      "per_category_holm_reject": {
+        "count": false,
+        "find": false,
+        "track": false,
+        "action": false,
+        "filter": false
+      },
+      "per_category_holm_adjusted_p": {
+        "count": 1.0,
+        "find": 1.0,
+        "track": 1.0,
+        "action": 1.0,
+        "filter": 1.0
+      },
+      "n_queries_changed": 0,
+      "n_queries_better": 0,
+      "n_queries_worse": 0,
+      "changed_queries": []
+    },
+    "zscore": {
+      "baseline_prior_only": {
+        "macro": {
+          "p5": {
+            "macro": 0.524,
+            "per_category": {
+              "count": 0.39,
+              "find": 0.9099999999999999,
+              "track": 0.8,
+              "action": 0.09,
+              "filter": 0.43
+            }
+          },
+          "r10": {
+            "macro": 0.7834018334606571,
+            "per_category": {
+              "count": 1.0,
+              "find": 0.8931331168831169,
+              "track": 0.9567927170868348,
+              "action": 0.13375,
+              "filter": 0.9333333333333333
+            }
+          },
+          "f1": {
+            "macro": 0.44380109301316734,
+            "per_category": {
+              "count": 0.3127039627039627,
+              "find": 0.8012680886365097,
+              "track": 0.6327105027182427,
+              "action": 0.09888888888888889,
+              "filter": 0.3734340221182326
+            }
+          },
+          "f1_paper": {
+            "macro": 0.5739723457370516,
+            "per_category": {
+              "count": 0.5273809523809524,
+              "find": 0.878227899551429,
+              "track": 0.8378487253487255,
+              "action": 0.08076923076923079,
+              "filter": 0.5456349206349207
+            }
+          },
+          "mrr": {
+            "macro": 0.8003170498084291,
+            "per_category": {
+              "count": 1.0,
+              "find": 0.9416666666666667,
+              "track": 1.0,
+              "action": 0.26352969348659006,
+              "filter": 0.7963888888888888
+            }
+          },
+          "count_em": null,
+          "count_mae": null
+        },
+        "tune_macro_p5": null
+      },
+      "variant": {
+        "macro": {
+          "p5": {
+            "macro": 0.538,
+            "per_category": {
+              "count": 0.39,
+              "find": 0.9199999999999999,
+              "track": 0.8099999999999999,
+              "action": 0.09,
+              "filter": 0.48
+            }
+          },
+          "r10": {
+            "macro": 0.7977351667939903,
+            "per_category": {
+              "count": 1.0,
+              "find": 0.8981331168831168,
+              "track": 0.9567927170868348,
+              "action": 0.13375,
+              "filter": 1.0
+            }
+          },
+          "f1": {
+            "macro": 0.4481577363698107,
+            "per_category": {
+              "count": 0.3127039627039627,
+              "find": 0.8062680886365097,
+              "track": 0.6327105027182427,
+              "action": 0.09888888888888889,
+              "filter": 0.39021723890144944
+            }
+          },
+          "f1_paper": {
+            "macro": 0.5882795352795352,
+            "per_category": {
+              "count": 0.5273809523809524,
+              "find": 0.8858749583749583,
+              "track": 0.843404280904281,
+              "action": 0.08076923076923079,
+              "filter": 0.6039682539682539
+            }
+          },
+          "mrr": {
+            "macro": 0.852705938697318,
+            "per_category": {
+              "count": 1.0,
+              "find": 1.0,
+              "track": 1.0,
+              "action": 0.26352969348659006,
+              "filter": 1.0
+            }
+          },
+          "count_em": null,
+          "count_mae": null
+        }
+      },
+      "delta_macro_p5": 0.014000000000000012,
+      "delta_macro_r10": 0.014333333333333198,
+      "delta_macro_f1_paper": 0.014307189542483667,
+      "delta_macro_mrr": 0.05238888888888893,
+      "per_category_p5": {
+        "variant": {
+          "count": 0.39,
+          "find": 0.9199999999999999,
+          "track": 0.8099999999999999,
+          "action": 0.09,
+          "filter": 0.48
+        },
+        "prior": {
+          "count": 0.39,
+          "find": 0.9099999999999999,
+          "track": 0.8,
+          "action": 0.09,
+          "filter": 0.43
+        }
+      },
+      "primary_paired_macro_bootstrap": {
+        "delta": 0.014000000000000035,
+        "lo": 0.005999999999999972,
+        "hi": 0.024,
+        "p": 0.0006666666666666666,
+        "n_boot": 3000
+      },
+      "grouped_cluster_macro_bootstrap": {
+        "delta": 0.013999999999999967,
+        "lo": 0.0064000000000000055,
+        "hi": 0.024380952380952357,
+        "p": 0.002,
+        "n_boot": 3000
+      },
+      "sign_flip_randomisation": {
+        "delta": 0.013999999999999999,
+        "p": 0.014,
+        "n_boot": 3000
+      },
+      "pooled_per_query_paired_bootstrap": {
+        "delta": 0.013999999999999999,
+        "lo": 0.004000000000000001,
+        "hi": 0.024,
+        "p": 0.0026666666666666666
+      },
+      "pooled_per_query_grouped_bootstrap": {
+        "delta": 0.013999999999999999,
+        "lo": 0.006451612903225805,
+        "hi": 0.022916666666666665,
+        "p": 0.0
+      },
+      "wilcoxon_signed_rank_p": 0.017960477526078655,
+      "per_category_paired_bootstrap": {
+        "count": {
+          "delta_p5": 0.0,
+          "lo": 0.0,
+          "hi": 0.0,
+          "p": 1.0,
+          "variant_macro_p5": 0.39,
+          "prior_macro_p5": 0.39
+        },
+        "find": {
+          "delta_p5": 0.009999999999999998,
+          "lo": 0.0,
+          "hi": 0.029999999999999992,
+          "p": 0.7166666666666667,
+          "variant_macro_p5": 0.9199999999999999,
+          "prior_macro_p5": 0.9099999999999999
+        },
+        "track": {
+          "delta_p5": 0.009999999999999998,
+          "lo": 0.0,
+          "hi": 0.029999999999999992,
+          "p": 0.708,
+          "variant_macro_p5": 0.8099999999999999,
+          "prior_macro_p5": 0.8
+        },
+        "action": {
+          "delta_p5": 0.0,
+          "lo": 0.0,
+          "hi": 0.0,
+          "p": 1.0,
+          "variant_macro_p5": 0.09,
+          "prior_macro_p5": 0.09
+        },
+        "filter": {
+          "delta_p5": 0.05,
+          "lo": 0.019999999999999997,
+          "hi": 0.09,
+          "p": 0.006666666666666667,
+          "variant_macro_p5": 0.48,
+          "prior_macro_p5": 0.43
+        }
+      },
+      "per_category_holm_reject": {
+        "filter": true,
+        "track": false,
+        "find": false,
+        "count": false,
+        "action": false
+      },
+      "per_category_holm_adjusted_p": {
+        "filter": 0.03333333333333333,
+        "track": 1.0,
+        "find": 1.0,
+        "count": 1.0,
+        "action": 1.0
+      },
+      "n_queries_changed": 7,
+      "n_queries_better": 7,
+      "n_queries_worse": 0,
+      "changed_queries": [
+        {
+          "qid": "q_find_13",
+          "category": "find",
+          "group": "2026-03-01T18:10",
+          "prior_p5": 0.8,
+          "variant_p5": 1.0,
+          "delta": 0.19999999999999996
+        },
+        {
+          "qid": "q_track_30",
+          "category": "track",
+          "group": "2026-03-01T18:20",
+          "prior_p5": 0.8,
+          "variant_p5": 1.0,
+          "delta": 0.19999999999999996
+        },
+        {
+          "qid": "q_filter_01",
+          "category": "filter",
+          "group": "2026-03-01T17:00",
+          "prior_p5": 0.0,
+          "variant_p5": 0.2,
+          "delta": 0.2
+        },
+        {
+          "qid": "q_filter_03",
+          "category": "filter",
+          "group": "2026-03-01T17:05",
+          "prior_p5": 0.0,
+          "variant_p5": 0.2,
+          "delta": 0.2
+        },
+        {
+          "qid": "q_filter_09",
+          "category": "filter",
+          "group": "2026-03-01T18:05",
+          "prior_p5": 0.6,
+          "variant_p5": 0.8,
+          "delta": 0.20000000000000007
+        },
+        {
+          "qid": "q_filter_15",
+          "category": "filter",
+          "group": "2026-03-01T18:10",
+          "prior_p5": 0.4,
+          "variant_p5": 0.6,
+          "delta": 0.19999999999999996
+        },
+        {
+          "qid": "q_filter_19",
+          "category": "filter",
+          "group": "2026-03-01T18:15",
+          "prior_p5": 0.8,
+          "variant_p5": 1.0,
+          "delta": 0.19999999999999996
+        }
+      ]
+    }
+  },
+  "primary_family": {
+    "family": [
+      "zscore",
+      "minmax"
+    ],
+    "description": "arm-level macro-P@5 paired bootstrap, variant vs prior-only",
+    "raw_p": {
+      "minmax": 1.0,
+      "zscore": 0.0006666666666666666
+    },
+    "holm_adjusted_p": {
+      "zscore": 0.0013333333333333333,
+      "minmax": 1.0
+    },
+    "holm_reject": {
+      "zscore": true,
+      "minmax": false
+    }
+  },
+  "success_criteria": {
+    "a_zscore_holm_significant_gain": true,
+    "b_minmax_non_negative": true,
+    "c_grouped_direction_positive": true,
+    "verdict": "IMPROVED",
+    "verdict_strict_cluster_significance": "IMPROVED"
+  }
+}

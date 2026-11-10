@@ -17,15 +17,15 @@ from loguru import logger
 # ---------------------------------------------------------------------------
 # Semantic score thresholds & penalty factors
 # ---------------------------------------------------------------------------
-SEM_RAW_THRESH_LOW = 0.30
-SEM_RAW_THRESH_MED = 0.40
-SEM_RAW_THRESH_HIGH = 0.50
-SEM_NO_STRUCTURED_THRESH = 0.42
+SEM_RAW_THRESH_LOW = 0.22
+SEM_RAW_THRESH_MED = 0.30
+SEM_RAW_THRESH_HIGH = 0.40
+SEM_NO_STRUCTURED_THRESH = 0.35
 
-SEM_PENALTY_STRONG = 0.2
-SEM_PENALTY_MED = 0.4
-SEM_PENALTY_LIGHT = 0.7
-SEM_PENALTY_NO_STRUCTURED = 0.5
+SEM_PENALTY_STRONG = 0.3
+SEM_PENALTY_MED = 0.6
+SEM_PENALTY_LIGHT = 0.8
+SEM_PENALTY_NO_STRUCTURED = 0.7
 
 
 # ---------------------------------------------------------------------------
@@ -59,39 +59,71 @@ def parse_ts(ts: str) -> datetime:
 # ---------------------------------------------------------------------------
 # Score normalization
 # ---------------------------------------------------------------------------
-def normalize_scores(scores: List[float], min_val: float = 0.0) -> List[float]:
+_NORM_EPS = 1e-12
+
+
+def finite_score(value: Any, default: float = 0.0) -> float:
+    """Coerce *value* to a finite float (NaN/inf/None -> *default*).
+
+    A single corrupt score (NaN from a broken FAISS index, ``None`` from a
+    partially-populated record) must never be able to zero out or NaN-poison
+    an entire branch.
     """
-    Normalize *scores* to [0, 1] using min-max scaling, consistent with the
-    semantic normalization in sem_search._norm_scores so that the alpha
-    blending in result_merger operates on comparable scales.
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return float(default)
+    if f != f or f in (float("inf"), float("-inf")):
+        return float(default)
+    return f
 
-    When all scores are identical (or a single result) returns 0.5 — the
-    same neutral convention used on the semantic side.
 
-    A quality-penalty *scale* is applied when the absolute maximum is low,
-    preventing weak evidence from inflating to 1.0.
+def normalize_scores(
+    scores: List[float],
+    min_val: float = 0.0,
+    mode: str = "minmax",
+) -> List[float]:
+    """
+    Normalize one query's *scores* into [min_val, 1].
+
+    Robustness contract (see results/robust_proposal.md):
+
+    * non-finite inputs are coerced to 0.0 (see :func:`finite_score`);
+    * a *degenerate* branch (two or more candidates, all scores equal)
+      carries no discrimination information and is mapped to ``min_val``
+      (0.0).  The scikit-learn convention for a constant feature is the
+      same; reporting it as 1.0 would claim confidence the branch does
+      not have.
+    * a *single-candidate* branch is mapped to 1.0 -- that candidate is
+      trivially the best of its branch -- but the value must not depend on
+      the unit of the score.  The "this branch cannot discriminate" signal
+      is carried by the branch *confidence* (margin/concentration are 0 for
+      a 1-item branch), not by the score.
+    * negative scores are *shifted*, never divided by a negative maximum,
+      so the within-branch order is preserved and the output stays in
+      [min_val, 1].
+    * the historical "absolute maximum" rescaling (0.25 / 0.40) is removed:
+      those thresholds are only meaningful for scores in [0, 1] and are
+      meaningless for the track durations (seconds) they are applied to.
+
+    ``mode="minmax"`` (default) matches the normalisation used by the
+    evaluation harness; ``mode="max"`` reproduces max-normalisation
+    *without* the unit-dependent rescaling, for A/B against old numbers.
     """
     if not scores:
         return []
-
-    mn = min(scores)
-    mx = max(scores)
-
-    if mx == 0:
-        return [min_val] * len(scores)
-
-    if mx - mn < 1e-9:
-        # All scores identical — return neutral 0.5 (same as sem_search)
-        return [0.5 for _ in scores]
-
-    # Scale penalty for weak maximums
-    scale = 1.0
-    if mx < 0.25:
-        scale = 0.5
-    elif mx < 0.4:
-        scale = 0.8
-
-    return [max(min_val, ((s - mn) / (mx - mn)) * scale) for s in scores]
+    vals = [finite_score(s) for s in scores]
+    if len(vals) == 1:
+        return [1.0]
+    lo, hi = min(vals), max(vals)
+    if hi - lo <= _NORM_EPS:
+        # Degenerate (constant) branch: no information, no confidence.
+        return [min_val] * len(vals)
+    if mode == "max":
+        if hi <= _NORM_EPS:
+            return [min_val] * len(vals)
+        return [max(min_val, min(1.0, (v - lo) / hi)) for v in vals]
+    return [max(min_val, min(1.0, (v - lo) / (hi - lo))) for v in vals]
 
 
 # ---------------------------------------------------------------------------
